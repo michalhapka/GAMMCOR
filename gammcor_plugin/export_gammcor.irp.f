@@ -472,7 +472,7 @@ subroutine run
       write(6,'(2X,''Number of orbitals and the NChol/mo_num ratio:'',I4,F8.2)')mo_num,float(rank)/float(mo_num)
  
 
-      rc = trexio_write_rdm_chol_num(f, rank)
+      rc = trexio_write_rdm_2e_cholesky_num(f, rank)
       call trexio_assert(rc, TREXIO_SUCCESS)
 
       icount = 0_8
