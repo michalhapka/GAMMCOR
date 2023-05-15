@@ -506,10 +506,18 @@ subroutine run
 
       icount = 0_8
       offset = 0_8
-      do l=1,mo_num
-        do k=1,mo_num
-          do j=1,mo_num
-            do i=1,mo_num
+      write(6,'(1x,a,i4)') 'mo_num =',mo_num
+      write(6,'(1x,a,i4)') 'n_core_inact_act_orb =',n_core_inact_act_orb
+
+      !do l=1,mo_num
+      !  do k=1,mo_num
+      !    do j=1,mo_num
+      !      do i=1,mo_num
+      do l=1,n_core_inact_act_orb
+        do k=1,n_core_inact_act_orb
+          do j=1,n_core_inact_act_orb
+            do i=1,n_core_inact_act_orb
+
               integral = two_e_dm_mo(i,j,k,l)
               if (integral == 0.d0) cycle
               icount += 1_8
