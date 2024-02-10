@@ -139,8 +139,18 @@ double precision :: Tcpu,Twall
 end subroutine sapt_driver
 
 subroutine sapt_driver_red(Flags,SAPT)
+!
 ! sapt driver with reduced virt space
 ! Flags%IRedVirt==1
+!
+! 1) SAPT0 calculation in full space
+! 2) truncate virt space (PerVirt = percentage of virt orbs to be removed)
+!    a) NDimX is changed, 4-indx transformation is performed
+!    b) ...
+! 3) SAPT calculation in reduced space: E2dispR, E2exch-dispR + unc
+! 4) Scaling: E2disp = E2dispR * E2disp(unc)/E2dispR(unc)
+!             E2exd  = E2exdR  * E2exd(unc)/E2exdR(unc)
+!
 implicit none
 
 type(FlagsData)  :: Flags
@@ -185,13 +195,25 @@ logical          :: onlyDisp
  write(LOUT,'(/,1x,a)') 'SAPT COMPONENTS'
  write(LOUT,'(8a10)') ('**********',i=1,6)
 
- call e1elst(SAPT%monA,SAPT%monB,SAPT)
- !call e1exchs2(Flags,SAPT%monA,SAPT%monB,SAPT)
- call e2disp_unc(Flags,SAPT%monA,SAPT%monB,SAPT)
- if(onlyDisp.eqv..false.) call e2exdisp(Flags,SAPT%monA,SAPT%monB,SAPT)
+if (Flags%ICholesky==0) then
 
- e2d_unc   = SAPT%e2disp_unc*1000d0
- if(onlyDisp.eqv..false.) e2exd_unc = SAPT%e2exdisp_unc*1000d0
+   call e1elst(SAPT%monA,SAPT%monB,SAPT)
+   !call e1exchs2(Flags,SAPT%monA,SAPT%monB,SAPT)
+   call e2disp_unc(Flags,SAPT%monA,SAPT%monB,SAPT)
+   if(onlyDisp.eqv..false.) call e2exdisp(Flags,SAPT%monA,SAPT%monB,SAPT)
+
+   e2d_unc   = SAPT%e2disp_unc*1000d0
+   if(onlyDisp.eqv..false.) e2exd_unc = SAPT%e2exdisp_unc*1000d0
+
+elseif (Flags%ICholeskyOTF==1) then
+
+    call e1elst_Chol(SAPT%monA,SAPT%monB,SAPT)
+    call e2disp_CAlphaTilde_unc(Flags,SAPT%monA,SAPT%monB,SAPT)
+    if(onlyDisp.eqv..false.) call e2exdisp(Flags,SAPT%monA,SAPT%monB,SAPT)
+
+elseif (Flags%ICholeskyBIN==1) then
+    stop "CholeskyBIN+RedVirt not tested!"
+endif
 
  call clock('SAPT(FULL SPACE)',Tcpu,Twall)
 
@@ -1285,6 +1307,11 @@ if(allocated(Mon%RDM2)) deallocate(Mon%RDM2)
 end subroutine prepare_RDM2val
 
 subroutine reduce_virt(Flags,Mon,NBas)
+!
+! 1) NDimX, IndN, IndX change!
+! 2) we need to perform AO-->NO(new)
+!    transformation (in full NBasis)
+!
  implicit none
 
  type(SystemBlock)  :: Mon
@@ -1364,7 +1391,8 @@ subroutine reduce_virt(Flags,Mon,NBas)
     call MP2RDM_FOFO(Mon%PerVirt,Eps,Mon%Occ,URe,workSq,XOne,&
                      Mon%IndN,Mon%IndX,Mon%IndAux,Mon%IGem,  &
                      Mon%NAct,Mon%INAct,Mon%NDimX,Mon%NDim,NBas,NInte1,&
-                     twojfile,twokfile,Mon%ThrVirt,Mon%NVZero,Mon%IPrint)
+                     twojfile,twokfile,Flags%ICholesky,&
+                     Mon%ThrVirt,Mon%NVZero,Mon%IPrint)
 
  case(TWOMO_FFFF)
 
