@@ -4595,3 +4595,21 @@ C     print*, 'NASHT_G',NASHT_G
 
       End
 
+      Subroutine get_den(nbasis,MO,Occ,Fac,Den)
+      implicit none
+
+      integer,intent(in) :: nbasis
+      double precision, intent(in) :: MO(nbasis,nbasis)
+      double precision, intent(in) :: Occ(nbasis)
+      double precision, intent(in) :: Fac
+      double precision, intent(out) :: Den(nbasis,nbasis)
+      integer :: i
+
+      Den = 0d0
+      Do i=1,nbasis
+         call dger(nbasis,nbasis,Fac*Occ(i),MO(:,i),1,MO(:,i),1,
+     &             Den,nbasis)
+      EndDo
+
+      End
+

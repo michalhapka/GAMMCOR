@@ -41,6 +41,9 @@ double precision :: Tcpu,Twall
  write(LOUT,'(1x,a)') 'STARTING SAPT CALCULATIONS'
  write(LOUT,'(8a10)') ('**********',i=1,8)
 
+ ! jump to SAPT(UKS)  framework
+ if(Flags%IUKS==1) call sapt_driver_uks(Flags,SAPT)
+
  ! jump to reduceVirt framework
  if(Flags%IRedVirt==1) call sapt_driver_red(Flags,SAPT)
 
@@ -137,6 +140,44 @@ double precision :: Tcpu,Twall
  stop
 
 end subroutine sapt_driver
+
+subroutine sapt_driver_uks(Flags,SAPT)
+!
+! attempt at SAPT(UKS)/SAPT(UHF) interface
+!
+implicit none
+
+type(FlagsData)  :: Flags
+type(SaptData)   :: SAPT
+type(TAOBasis)   :: AOBasis
+type(TCholeskyVecsOTF) :: CholeskyVecsOTF
+
+integer :: NBasis
+double precision :: Tcpu,Twall
+
+call clock('START',Tcpu,Twall)
+
+print*, 'Experimental SAPT(UKS) implementation...'
+
+call sapt_basinfo(SAPT,NBasis)
+call saptuks_interface(Flags,SAPT,NBasis,AOBasis,CholeskyVecsOTF)
+
+call saptuks_ab_ints(Flags,SAPT%monA,SAPT%monB,NBasis,AOBasis,CholeskyVecsOTF)
+
+print*, 'Skipping monomer integrals...'
+print*, 'Skipping response ...'
+
+call e1elst_o(SAPT%monA,SAPT%monB,SAPT)
+call e1exchs2_sq_o(SAPT%monA,SAPT%monB,SAPT)
+
+call summary_saptuks(SAPT)
+call free_saptuks(Flags,SAPT)
+
+call clock('SAPT',Tcpu,Twall)
+
+stop
+
+end subroutine sapt_driver_uks
 
 subroutine sapt_driver_red(Flags,SAPT)
 !
@@ -1120,6 +1161,40 @@ endif
 
 end subroutine sapt_ab_ints
 
+subroutine saptuks_ab_ints(Flags,A,B,NBasis,AOBasis,CholeskyVecsOTF)
+!
+! calculate : (OV|OV) alpha/beta
+!
+implicit none
+
+type(FlagsData)    :: Flags
+type(SystemBlock)  :: A,B
+type(AOReaderData) :: reader
+type(TAOBasis)     :: AOBasis
+type(TCholeskyVecsOTF) :: CholeskyVecsOTF
+
+integer,intent(in) :: NBasis
+
+if(Flags%ICholesky/=0) stop "Cholesky not ready in saptuks_ab_ints"
+
+
+! (OV|OV) alpha
+call tran4_gen(NBasis,&
+               B%NOa,B%UMO(:,:,1),&
+               B%NVa,B%UMO(1:NBasis,B%NOa+1:NBasis,1),&
+               A%NOa,A%UMO(:,:,1),&
+               A%NVa,A%UMO(1:NBasis,A%NOa+1:NBasis,1),&
+               'OVOVABa','AOTWOSORT')
+! (OV|OV) beta
+call tran4_gen(NBasis,&
+               B%NOb,B%UMO(:,:,2),&
+               B%NVb,B%UMO(1:NBasis,B%NOb+1:NBasis,2),&
+               A%NOb,A%UMO(:,:,2),&
+               A%NVb,A%UMO(1:NBasis,A%NOb+1:NBasis,2),&
+               'OVOVABb','AOTWOSORT')
+
+end subroutine saptuks_ab_ints
+
 subroutine sapt_ab_ints_red(Flags,A,B,iPINO,NBasis,NBasisRed)
 implicit none
 
@@ -1713,6 +1788,42 @@ write(LOUT,'()')
 
 end subroutine summary_rspt
 
+subroutine summary_saptuks(SAPT)
+!
+! print results for unrestricted SAPT (UHF, UKS)
+!
+implicit none
+
+type(SaptData) :: SAPT
+
+integer          :: i,j
+double precision :: esapt2
+
+SAPT%esapt2 = SAPT%elst + SAPT%exchs2 + SAPT%e2ind &
+              + SAPT%e2exind + SAPT%e2disp + SAPT%e2exdisp
+
+SAPT%esapt0 = SAPT%elst + SAPT%exchs2 + SAPT%e2ind_unc &
+              + SAPT%e2exind_unc + SAPT%e2disp_unc + SAPT%e2exdisp_unc
+
+write(LOUT,'(/,8a10)') ('**********',i=1,4)
+write(LOUT,'(1x,a)') 'OS-SAPT SUMMARY / milliHartree'
+write(LOUT,'(8a10)') ('**********',i=1,4)
+
+write(LOUT,'(1x,a,i3)') 'SAPT level  =', SAPT%SaptLevel
+
+write(LOUT,'(1x,a,t19,a,f16.8)') 'E1elst',    '=', SAPT%elst*1.d03
+write(LOUT,'(1x,a,t19,a,f16.8)') 'E1exch(S2)','=', SAPT%exchs2*1.d03
+write(LOUT,'(1x,a,t19,a,f16.8)') 'E1exch    ','=', SAPT%e1exch*1.d03
+
+!if(SAPT%SaptLevel==2) then
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2ind',      '=', SAPT%e2ind*1.d03
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2exch-ind', '=', SAPT%e2exind*1.0d3
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2disp',     '=', SAPT%e2disp*1.d03
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2exch-disp','=', SAPT%e2exdisp*1.0d3
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'Eint(SAPT2)','=', SAPT%esapt2*1.0d3
+
+end subroutine summary_saptuks
+
 subroutine free_sapt(Flags,SAPT)
 implicit none
 
@@ -1990,6 +2101,26 @@ if(SAPT%SemiCoupled) call delfile('PROP_A1')
 if(SAPT%SemiCoupled) call delfile('PROP_B1')
 
 end subroutine free_sapt
+
+subroutine free_saptuks(Flags,SAPT)
+implicit none
+
+type(FlagsData) :: Flags
+type(SaptData)  :: SAPT
+
+! orbitals, occupations, energies
+deallocate(SAPT%monA%UMO,SAPT%monB%UMO)
+deallocate(SAPT%monA%UOcc,SAPT%monB%UOcc)
+deallocate(SAPT%monA%UOrbE,SAPT%monB%UOrbE)
+! electrostatic potential
+deallocate(SAPT%monA%WPot,SAPT%monB%WPot)
+
+if(Flags%ICholesky==0) call delfile('AOTWOSORT')
+
+call delfile('OVOVABb')
+call delfile('OVOVABa')
+
+end subroutine free_saptuks
 
 end module sapt_main
 

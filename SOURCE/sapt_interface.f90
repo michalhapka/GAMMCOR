@@ -7,26 +7,11 @@ use sorter
 !use Cholesky_old
 
 use gammcor_integrals
-!use Auto2eInterface
-!use Cholesky, only : chol_CoulombMatrix, TCholeskyVecs, &
-!                     chol_Rkab_ExternalBinary, chol_MOTransf_TwoStep
-!use basis_sets
-!use sys_definitions
-!use CholeskyOTF_interface
-!use CholeskyOTF, only : TCholeskyVecsOTF
-!use Cholesky_driver, only : chol_Rkab_OTF
-!
-!use BeckeGrid
-!use GridFunctions
-!use grid_definitions
 
 use abmat
 use read_external
 
 implicit none
-!private
-
-!public TCholeskyVecs,TCholeskyVecsOTF
 
 contains
 
@@ -112,8 +97,8 @@ SAPT%monB%NDim = NBasis*(NBasis-1)/2
     call onel_dalton(SAPT%monA%Monomer,NBasis,NSq,NInte1,SAPT%monA,SAPT)
     call onel_dalton(SAPT%monB%Monomer,NBasis,NSq,NInte1,SAPT%monB,SAPT)
  elseif(SAPT%InterfaceType==2) then
-    call onel_molpro(SAPT%monA%Monomer,NBasis,NSq,NInte1,SAPT%monA,SAPT)
-    call onel_molpro(SAPT%monB%Monomer,NBasis,NSq,NInte1,SAPT%monB,SAPT)
+    call onel_molpro(SAPT%monA%Monomer,NBasis,SAPT%monA,SAPT)
+    call onel_molpro(SAPT%monB%Monomer,NBasis,SAPT%monB,SAPT)
  endif
 
  if(SAPT%InterfaceType==1) then
@@ -505,6 +490,113 @@ SAPT%monB%NDim = NBasis*(NBasis-1)/2
 
 end subroutine sapt_interface
 
+subroutine saptuks_interface(Flags,SAPT,NBasis,AOBasis,CholeskyVecsOTF)
+!
+! SAPT(UKS) interface :
+!     -- works only with MOLPRO
+!     -- reads 1-, 2-el integrals (AO)
+!     -- reads C_alpha, C_beta (AO,MO) orbs
+!     -- reads orbital energies and occupation numbers
+!
+implicit none
+
+type(FlagsData)        :: Flags
+type(SaptData)         :: SAPT
+type(TCholeskyVecs)    :: CholeskyVecs
+type(TCholeskyVecsOTF) :: CholeskyVecsOTF
+type(TAOBasis)         :: AOBasis
+type(TSystem)          :: System
+
+integer,intent(in)     :: NBasis
+
+integer(8) :: MemSrtSize
+
+character(:),allocatable :: XYZPath
+character(:),allocatable :: BasisSetPath
+character(:),allocatable :: BasisSet
+
+double precision :: Tcpu,Twall
+
+! check interface
+if (SAPT%InterfaceType/=2) stop "Unrestricted SAPT only works with Molpro"
+
+! set basis set
+write(LOUT,'(/1x,"Flags:BasisSetPath ",a)') Flags%BasisSetPath
+write(LOUT,'(1x, "Flags:BasisSet ",a)')     Flags%BasisSet
+BasisSet = Flags%BasisSetPath // Flags%BasisSet
+
+! read and dump 1-electron integrals
+call onel_molpro(SAPT%monA%Monomer,NBasis,SAPT%monA,SAPT)
+call onel_molpro(SAPT%monB%Monomer,NBasis,SAPT%monB,SAPT)
+
+! read unrestricted orbitals
+allocate(SAPT%monA%UMO(NBasis,NBasis,2),SAPT%monB%UMO(NBasis,NBasis,2))
+call read_umo_molpro(SAPT%monA%UMO,NBasis,'UKSORB  ','MOLPRO_A.MOPUN')
+call read_umo_molpro(SAPT%monB%UMO,NBasis,'UKSORB  ','MOLPRO_B.MOPUN')
+
+! read unrestricted occupation numbers
+allocate(SAPT%monA%UOcc(NBasis,2),SAPT%monB%UOcc(NBasis,2))
+call read_uocc_molpro(SAPT%monA%UOcc,NBasis,'UKSORB  ','MOLPRO_A.MOPUN')
+call read_uocc_molpro(SAPT%monB%UOcc,NBasis,'UKSORB  ','MOLPRO_B.MOPUN')
+
+! read unrestricted orbital energies
+allocate(SAPT%monA%UOrbE(NBasis,2),SAPT%monB%UOrbE(NBasis,2))
+call read_uorbe_molpro(SAPT%monA%UOrbE,NBasis,'UKSORB  ','MOLPRO_A.MOPUN')
+call read_uorbe_molpro(SAPT%monB%UOrbE,NBasis,'UKSORB  ','MOLPRO_B.MOPUN')
+
+! look-up tables
+! set unrestricted occ, virt, ov, IndN, ...
+call select_uactive(SAPT%monA,SAPT%monB,NBasis)
+
+call print_uocc(NBasis,SAPT)
+
+! read 2-el integrals
+call clock('START',Tcpu,Twall)
+
+! memory allocation for sorter
+MemSrtSize = Flags%MemVal*1024_8**Flags%MemType
+
+! Cholesky decomposition
+if(Flags%ICholeskyBIN==1.or.Flags%ICholeskyOTF==1) then
+   stop "SAPT(UKS) with Cholesky not ready yet..."
+else
+   call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
+endif
+
+!! no need for canonicalization...
+!! set iPINO
+!SAPT%iPINO = 0
+
+print*, 'saptuks_interface: Skipping K[PB] at this point...'
+
+!! calculate exchange K[PB] matrix in AO
+!if(.not.allocated(SAPT%monB%Kmat)) allocate(SAPT%monB%Kmat(NBasis,NBasis))
+!allocate(work(NBasis,NBasis))
+!!get PB density in AO
+!work = 0
+!do i=1,NBasis
+!   call dger(NBasis,NBasis,SAPT%monB%Occ(i),SAPT%monB%CMO(:,i),1,SAPT%monB%CMO(:,i),1,work,NBasis)
+!enddo
+!
+!if(Flags%ICholesky==0) then
+!   call make_K(NBasis,work,SAPT%monB%Kmat)
+!else
+!  stop "SAPT(UKS) with Cholesky not ready yet..."
+!endif
+
+! ABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB
+
+! calculate electrostatic potential: W = V + J (in AO)
+call calc_uks_elpot(SAPT%monA,CholeskyVecs,&
+                    Flags%ICholesky,Flags%ICholeskyBIN,Flags%ICholeskyOTF,NBasis)
+call calc_uks_elpot(SAPT%monB,CholeskyVecs,&
+                    Flags%ICholesky,Flags%ICholeskyBIN,Flags%ICholeskyOTF,NBasis)
+!
+! calc intermolecular repulsion
+SAPT%Vnn = calc_vnn(SAPT%monA,SAPT%monB)
+
+end subroutine saptuks_interface
+
 subroutine sapt_erfint_OTF(Flags,MON,NBasis,AOBasis,CholErfVecsOTF)
 !
 ! generate Long-Range Cholesky vectors in AO
@@ -642,19 +734,24 @@ print*, 'OrbGrid',norm2(OrbGrid)
 
 end subroutine internal_tran_orbgrid
 
-subroutine onel_molpro(mon,NBasis,NSq,NInte1,MonBlock,SAPT)
+subroutine onel_molpro(mon,NBasis,MonBlock,SAPT)
 implicit none
 
 type(SaptData)     :: SAPT
 type(SystemBlock)  :: MonBlock
-integer,intent(in) :: mon,NBasis,NSq,NInte1
+integer,intent(in) :: mon,NBasis
 
+integer :: NSq,NInte1
 integer                       :: ione,ios,NSym,NBas(8),ncen
 double precision, allocatable :: Hmat(:),Vmat(:),Smat(:)
 double precision, allocatable :: Kmat(:)
 double precision, allocatable :: work1(:),work2(:)
 character(8)                  :: label
 character(:),allocatable      :: infile,outfile
+
+!set dimensions
+NSq = NBasis*NBasis
+NInte1 = NBasis*(NBasis+1)/2
 
 if(mon==1) then
   infile  = 'AOONEINT_A'
@@ -2145,6 +2242,7 @@ close(iunit)
 end subroutine prepare_rdm2_approx
 
 subroutine select_active(mon,nbas,Flags)
+!
 ! set dimensions: NDimX,num0,num1,num2
 ! set matrices  : IndN,IndX,IPair,IndAux
 !
@@ -2483,6 +2581,107 @@ end function FindGem
 
 end subroutine select_active
 
+subroutine select_uactive(A,B,NBasis)
+!
+! set : occupied_sigma, virtual_sigma,
+!       ov_sigma (=NDimX_sigma)
+!       IndN_sigma
+!       IGem
+!
+implicit none
+type(SystemBlock)   :: A, B
+integer,intent(in)  :: NBasis
+
+integer :: ip,iq,ipq,ir,is,irs
+
+! unrestricted: set active, inactive
+A%NAct = 0
+B%NAct = 0
+A%NActOrb = 0
+B%NActOrb = 0
+A%INAct = int(sum(A%UOcc))
+B%INAct = int(sum(B%UOcc))
+A%SumOcc = sum(A%UOcc)
+B%SumOcc = sum(B%UOcc)
+
+! unresticed : set occ_sigma, virt_sigma
+A%NOa = int(sum(A%UOcc(:,1)))
+A%NOb = int(sum(A%UOcc(:,2)))
+B%NOa = int(sum(B%UOcc(:,1)))
+B%NOb = int(sum(B%UOcc(:,2)))
+
+A%NVa = NBasis - A%NOa
+A%NVb = NBasis - A%NOb
+B%NVa = NBasis - B%NOa
+B%NVb = NBasis - B%NOb
+
+! unrestricted : set NDimX_sigma
+A%NOVa = A%NOa*A%NVa
+A%NOVb = A%NOb*A%NVb
+B%NOVa = B%NOa*B%NVa
+B%NOVb = B%NOb*B%NVb
+
+! unrestricted : set IndN_sigma
+! alpha
+allocate(A%IndNa(2,A%NOVa),B%IndNa(2,B%NOVa))
+ipq = 0
+do iq=1,A%NOa
+   do ip=1,A%NVa
+      ipq = ipq + 1
+      A%IndNa(1,ipq) = A%NOa + ip
+      A%IndNa(2,ipq) = iq
+   enddo
+enddo
+irs = 0
+do is=1,B%NOa
+   do ir=1,B%NVa
+      irs = irs + 1
+      B%IndNa(1,irs) = B%NOa + ir
+      B%IndNa(2,irs) = is
+   enddo
+enddo
+! beta
+allocate(A%IndNb(2,A%NOVb),B%IndNb(2,B%NOVb))
+ipq = 0
+do iq=1,A%NOb
+   do ip=1,A%NVb
+      ipq = ipq + 1
+      A%IndNb(1,ipq) = A%NOb + ip
+      A%IndNb(2,ipq) = iq
+   enddo
+enddo
+irs = 0
+do is=1,B%NOb
+   do ir=1,B%NVb
+      irs = irs + 1
+      B%IndNb(1,irs) = B%NOb + ir
+      B%IndNb(2,irs) = is
+   enddo
+enddo
+
+!print*, 'A: OCCUP_alpha = ', A%NOa
+!print*, 'A: VIRT_alpha  = ', A%NVa
+!print*, 'A: OCCUP_beta  = ', A%NOb
+!print*, 'A: OCCUP_beta  = ', A%NVb
+
+!print*, 'B: OCCUP_alpha = ', B%NOa
+!print*, 'B: VIRT_alpha  = ', B%NVa
+!print*, 'B: OCCUP_beta  = ', B%NOb
+!print*, 'B: OCCUP_beta  = ', B%NVb
+
+! unrestricted: set IGem
+allocate(A%IGem(NBasis),B%IGem(NBasis))
+
+A%NGem = 2
+A%IGem(1:A%NAct+A%INAct) = 1
+A%IGem(A%NAct+A%INAct+1:NBasis) = 2
+
+B%NGem = 2
+B%IGem(1:B%NAct+B%INAct) = 1
+B%IGem(B%NAct+B%INAct+1:NBasis) = 2
+
+end subroutine select_uactive
+
 subroutine calc_elpot(A,B,CholeskyVecs,ICholesky,ICholeskyBIN,ICholeskyOTF,NBas)
 implicit none
 
@@ -2563,6 +2762,78 @@ character(8)                 :: label
  deallocate(Jb,Ja,Vb,Va,Pb,Pa)
 
 end subroutine calc_elpot
+
+subroutine calc_uks_elpot(M,CholeskyVecs,ICholesky,ICholeskyBIN,ICholeskyOTF,NBas)
+!
+! calculate open-shell W = V + Ja + Jb (in AO)
+!
+! CAREFUL, HERE: Pa(b) = P_alpha(beta)
+!                Ja(b) = J_alpha(beta)
+!
+implicit none
+
+type(SystemBlock)   :: M
+type(TCholeskyVecs) :: CholeskyVecs
+
+integer,intent(in) :: ICholesky,NBas
+integer,intent(in) :: ICholeskyBIN,ICholeskyOTF
+
+integer :: i,iunit
+
+double precision,allocatable :: V(:,:)
+double precision,allocatable :: Pa(:,:),Pb(:,:)
+double precision,allocatable :: Ja(:,:),Jb(:,:)
+
+logical :: valid
+character(8)             :: label
+character(:),allocatable :: onefile
+
+if(ICholesky==1) stop "Cholesky not ready in calc_uks_elpot"
+
+if (M%Monomer == 1 ) then
+  onefile = "ONEEL_A"
+elseif (M%Monomer == 2) then
+  onefile = "ONEEL_B"
+endif
+
+allocate(Pa(NBas,NBas),Pb(NBas,NBas),&
+         V(NBas,NBas),Ja(NBas,NBas),Jb(NBas,NBas))
+
+! alpha dens
+Pa = 0d0
+do i=1,NBas
+   call dger(NBas,NBas,M%UOcc(i,1),M%UMO(:,i,1),1,M%UMO(:,i,1),1,Pa,NBas)
+enddo
+! beta dens
+Pb = 0d0
+do i=1,NBas
+   call dger(NBas,NBas,M%UOcc(i,2),M%UMO(:,i,2),1,M%UMO(:,i,2),1,Pb,NBas)
+enddo
+
+valid=.false.
+V = 0d0
+open(newunit=iunit,file=onefile,access='sequential',&
+     form='unformatted',status='old')
+read(iunit)
+read(iunit) label,V
+if(label=='POTENTAL') valid=.true.
+close(iunit)
+if(.not.valid) then
+   write(LOUT,'(1x,a)') 'V not found in calc_elpot!'
+endif
+
+call make_J2(NBas,Pa,Pb,Ja,Jb)
+
+allocate(M%WPot(NBas,NBas))
+
+M%WPot = V + Ja + Jb
+
+!allocate(M%Jos(NBas,NBas,2))
+
+deallocate(Pb,Pa)
+deallocate(Jb,Ja,V)
+
+end subroutine calc_uks_elpot
 
 subroutine CholeskyOTF_elpot_AO(Mon,NBasis)
 !
@@ -3818,6 +4089,30 @@ integer :: i
  end associate
 
 end subroutine print_occ
+
+subroutine print_uocc(nbas,SAPT)
+!
+implicit none
+
+type(SaptData)     :: SAPT
+integer,intent(in) :: nbas
+
+integer :: i
+
+ associate(A => SAPT%monA, B => SAPT%monB)
+   write(LOUT,'(/1x,a,11x,a,5x,a)')   'UKS ORBITALS','Monomer A',  'Monomer B'
+   write(LOUT,'(1x,a,11x,i3,11x,i3)') 'OCCUPIED ALPHA', A%NOa,   B%NOa
+   write(LOUT,'(1x,a,11x,i3,11x,i3)') 'OCCUPIED BETA ', A%NOb,   B%NOb
+   write(LOUT,'(1x,a,13x,i3,11x,i3)') 'OCCUPIED TOT',   A%INAct, B%INAct
+   write(LOUT,'(/1x,a)') 'ORBITAL OCCUPANCIES'
+   write(LOUT,'(1x,a,3x,a,4x,a,8x,a,6x,a)') 'UKS', 'Occ-A(alpha)', 'Occ-A(beta)', 'Occ-B(alpha)','Occ-B(beta)'
+   do i=1,nbas
+      write(6,'(x,i3,f10.6,f10.6,4x,f10.6,f10.6)') i,A%UOcc(i,1),A%UOcc(i,2),B%UOcc(i,1),B%UOcc(i,2)
+   enddo
+   write(LOUT,'(2x,a,f8.4,18x,f8.4/)') 'SUM OF OCCUPANCIES: ', A%SumOcc, B%SumOcc
+ end associate
+
+end subroutine print_uocc
 
 subroutine print_active(SAPT, nbas)
 implicit none

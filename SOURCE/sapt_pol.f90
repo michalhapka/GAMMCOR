@@ -29,7 +29,7 @@ double precision,parameter :: Half=0.5d0
 double precision,external  :: trace
 
 ! set dimensions
- NBas = A%NBasis 
+ NBas = A%NBasis
 
  allocate(PA(NBas,NBas),PB(NBas,NBas),&
           Va(NBas,NBas),Vb(NBas,NBas),Ja(NBas,NBas))
@@ -100,6 +100,62 @@ double precision,external  :: trace
  deallocate(Ja,Vb,Va,PB,PA) 
 
 end subroutine e1elst
+
+subroutine e1elst_o(A,B,SAPT)
+!
+! unrestricted open-shelle electrostatic energy
+! see Eq. (7) in https://doi.org/10.1063/1.4758455
+!
+implicit none
+
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
+
+integer :: i, j
+integer :: NBas
+
+double precision :: ea,eb,elst
+double precision,allocatable :: work(:,:)
+double precision,allocatable :: Vb(:,:)
+double precision,allocatable :: PA(:,:),PB(:,:)
+double precision,external  :: trace
+
+! set dimensions
+NBas = A%NBasis
+
+allocate(PA(NBas,NBas),PB(NBas,NBas),Vb(NBas,NBas))
+allocate(work(NBas,NBas))
+
+call get_den(NBas,A%UMO(:,:,1),A%UOcc(:,1),1d0,PA)
+call get_den(NBas,A%UMO(:,:,2),A%UOcc(:,2),1d0,work)
+PA = PA + work
+
+call get_den(NBas,B%UMO(:,:,1),B%UOcc(:,1),1d0,PB)
+call get_den(NBas,B%UMO(:,:,2),B%UOcc(:,2),1d0,work)
+PB = PB + work
+
+call get_one_mat('V',Vb,B%Monomer,NBas)
+
+! Tr[PA.Vb + PB.WA] + Vnn
+call dgemm('N','N',NBas,NBas,NBas,1d0,PA,NBas,Vb,NBas,0d0,work,NBas)
+ea = trace(work,NBas)
+
+call dgemm('N','N',NBas,NBas,NBas,1d0,PB,NBas,A%WPot,NBas,0d0,work,NBas)
+eb = trace(work,NBas)
+
+elst = ea + eb + SAPT%Vnn
+
+call print_en('PA.Vb',ea,.false.)
+call print_en('PB.Wa',eb,.false.)
+call print_en('V_nn',SAPT%Vnn,.false.)
+call print_en('Eelst',elst*1000,.true.)
+
+SAPT%elst = elst
+
+deallocate(work)
+deallocate(Vb,PB,PA)
+
+end subroutine e1elst_o
 
 subroutine e2ind_icerpa(Flags,A,B,SAPT)
 use timing

@@ -51,6 +51,7 @@ integer, parameter :: RDM_TYPE_APSG = 2
 integer, parameter :: RDM_TYPE_CAS  = 3
 integer, parameter :: RDM_TYPE_DMRG = 4
 integer, parameter :: RDM_TYPE_HF   = 5
+integer, parameter :: RDM_TYPE_UKS  = 6
 
 integer, parameter :: TWOMO_INCORE = 1
 integer, parameter :: TWOMO_FFFF   = 2
@@ -99,9 +100,9 @@ character(*),parameter :: PossibleJobType(17) = &
 'AC', 'AC0', 'ERPA', 'EERPA', 'SAPT', 'PDFT', 'CASPiDFT','CASPiDFTOpt','EERPA-1', & 
 'AC0D', 'AC0DNOSYMM', 'NLOCCORR', 'AC0DP', 'ACFREQ','ACFREQNTH','AC1FREQNTH','RESPONSE']
 
-character(*),parameter :: PossibleRDMType(5) = &
+character(*),parameter :: PossibleRDMType(6) = &
 [character(8) :: &
-'GVB', 'APSG', 'CASSCF', 'DMRG', 'HF']
+'GVB', 'APSG', 'CASSCF', 'DMRG', 'HF', 'UKS']
 
 character(*),parameter :: PossibleDFAType(3) = &
 [character(8) :: &
@@ -190,6 +191,11 @@ type SystemBlock
       integer :: NAct, INAct
       integer :: ISwitchAct = 0
       integer :: NActS(8), INActS(8)
+
+      ! unterstricted
+      integer :: NOa, NOb, NVa, NVb
+      integer :: NOVa, NOVb
+
       integer :: NDim, NDimX
       integer :: NDimN, DimEx
       integer :: NGrid
@@ -245,6 +251,8 @@ type SystemBlock
       integer,allocatable :: IndXh(:)
       integer,allocatable :: NumOSym(:),IndInt(:)
       integer,allocatable :: IndNx(:,:)
+      !
+      integer,allocatable :: IndNa(:,:), IndNb(:,:)
       ! TEST ONLY
       integer,allocatable :: IndNT(:,:)
       integer,allocatable :: Ind2(:)
@@ -254,6 +262,8 @@ type SystemBlock
       ! SAO = symmetrized atomic orbitals
       ! CMO = C(SAO,NO); CAONO = C(AO,NO); CMONO = C(MO,NO)
       double precision,allocatable :: CMO(:,:),CAONO(:,:)
+      double precision,allocatable :: UMO(:,:,:),UOcc(:,:),UOrbE(:,:)
+      double precision,allocatable :: Jos(:,:,:),Kos(:,:,:)
       double precision,allocatable :: OV(:,:),OO(:,:), &
                                       FO(:,:),FF(:,:), &
                                       FOErf(:,:),FFErf(:,:), &
@@ -344,6 +354,7 @@ type FlagsData
      integer :: ISERPA  = 0
      integer :: ITrpl   = 0
      integer :: ISAPT   = 0
+     integer :: IUKS    = 0
      integer :: SaptLevel = 0
      integer :: ISHF      = 0
      character(:), allocatable :: JobTitle
@@ -390,6 +401,7 @@ type SaptData
 
   type(SystemBlock) :: monA,monB
      double precision  :: Vnn,elst,exchs2,e2ind,e2disp
+     double precision  :: e1exch
      double precision  :: e2disp_sc,e2disp_sp
      double precision  :: e2ind_unc,e2disp_unc
      double precision  :: e2dispR_unc,e2dispR

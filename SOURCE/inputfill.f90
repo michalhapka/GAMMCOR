@@ -401,6 +401,9 @@ subroutine read_block_calculation(CalcParams, line)
               CalcParams%RDMType = RDM_TYPE_HF
            elseif (uppercase(val) == "DMRG" ) then
               CalcParams%RDMType = RDM_TYPE_DMRG
+           elseif (uppercase(val) == "UKS".or.    &
+                 & uppercase(val) == "UNRESTRICTED") then
+              CalcParams%RDMType = RDM_TYPE_UKS
            endif
 
       case ("UNITS")

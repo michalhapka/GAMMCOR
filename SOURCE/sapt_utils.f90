@@ -5,22 +5,22 @@ use diis
 
 contains
 
-subroutine get_den(nbas,MO,Occ,Fac,Den)
-implicit none
-
-integer,intent(in) :: nbas
-double precision, intent(in) :: MO(nbas,nbas)
-double precision, intent(in) :: Occ(nbas)
-double precision, intent(in) :: Fac
-double precision, intent(out) :: Den(nbas,nbas)
-integer :: i
-
-Den = 0
-do i=1,nbas
-   call dger(nbas, nbas, Fac*Occ(i), MO(:, i), 1, MO(:, i), 1, Den, nbas)
-enddo
-
-end subroutine get_den
+!subroutine get_den(nbas,MO,Occ,Fac,Den)
+!implicit none
+!
+!integer,intent(in) :: nbas
+!double precision, intent(in) :: MO(nbas,nbas)
+!double precision, intent(in) :: Occ(nbas)
+!double precision, intent(in) :: Fac
+!double precision, intent(out) :: Den(nbas,nbas)
+!integer :: i
+!
+!Den = 0
+!do i=1,nbas
+!   call dger(nbas, nbas, Fac*Occ(i), MO(:, i), 1, MO(:, i), 1, Den, nbas)
+!enddo
+!
+!end subroutine get_den
 
 subroutine get_one_mat(var,mat,mono,nbas)
 !

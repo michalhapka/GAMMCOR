@@ -222,6 +222,13 @@ else
      FLags%IGVB = 0
      Flags%ICASSCF = 1
      Flags%ISHF = 1
+
+  case(RDM_TYPE_UKS)
+     Flags%IUKS = 1
+     Flags%ISHF = 1
+     Flags%IGVB = 0
+     Flags%ICASSCF = 1
+
   case default
      write(LOUT,'(1x,a)') 'RDMType not declared! Assuming ICASSCF=1!'
      FLags%IGVB    = 0

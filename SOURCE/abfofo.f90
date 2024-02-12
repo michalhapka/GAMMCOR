@@ -346,6 +346,10 @@ double precision,allocatable :: AuxI(:,:),Aux2(:,:)
 double precision,allocatable :: ints_J(:,:),ints_K(:,:),   &
                                 ints_bi(:,:),ints_bk(:,:), &
                                 work(:),workTr(:),workSq(:,:)
+!
+integer :: NCholesky
+double precision, allocatable :: MatFF(:,:)
+!
 integer          :: EndVirt,NBasisNew
 character(100)   :: num1char
 !double precision :: xnum1,PerThr
@@ -487,11 +491,10 @@ elseif (ICholesky == 1) then
 
    ! read cholesky (FF|K) vectors
    open(newunit=iunit1,file='cholvecs',form='unformatted')
-   read(iunit) NCholesky
+   read(iunit1) NCholesky
    allocate(MatFF(NCholesky,NBasis**2))
-   read(iunit) MatFF
+   read(iunit1) MatFF
    close(iunit1)
-
 
 endif
 
