@@ -847,19 +847,21 @@ double precision :: e2tmp, tmp
 
 end subroutine e2ind_apsg
 
-subroutine e2ind_o(A,B,SAPT)
+subroutine e2ind_o(Flags,A,B,SAPT)
 !
 ! calculate uncoupled and coupled e2ind
 ! c.f. Eq (17) in https://doi.org/10.1063/1.4758455
 !
 implicit none
 
+type(FlagsData)   :: Flags
 type(SystemBlock) :: A, B
 type(SaptData)    :: SAPT
 
 integer :: Nbasis
 double precision :: e2iBAa,e2iBAb,e2iABa,e2iABb
 double precision :: e2ab_unc,e2ba_unc,e2ind_unc
+double precision :: e2ab,e2ba,e2ind
 double precision, allocatable :: Waa(:,:),Wab(:,:)
 double precision, allocatable :: Wba(:,:),Wbb(:,:)
 
@@ -874,26 +876,36 @@ call tran2MO(A%WPot,B%UMO(:,:,2),B%UMO(:,:,2),Wab,NBasis)
 call tran2MO(B%WPot,A%UMO(:,:,1),A%UMO(:,:,1),Wba,NBasis)
 call tran2MO(B%WPot,A%UMO(:,:,2),A%UMO(:,:,2),Wbb,NBasis)
 
-! uncoupled
-e2iBAa = e2ind_unc_o(Wba,A%UOrbE(:,1),A%NOa,A%NVa,NBasis)
-e2iBAb = e2ind_unc_o(Wbb,A%UOrbE(:,2),A%NOb,A%NVb,NBasis)
-!print*, 'e2ind(A<-B)-a = ', e2iBAa*1000
-!print*, 'e2ind(A<-B)-b = ', e2iBAb*1000
-e2ba_unc = e2iBAa + e2iBAb
+!! uncoupled
+!e2iBAa = e2ind_unc_o(Wba,A%UOrbE(:,1),A%NOa,A%NVa,NBasis)
+!e2iBAb = e2ind_unc_o(Wbb,A%UOrbE(:,2),A%NOb,A%NVb,NBasis)
+!!print*, 'e2ind(A<-B)-a = ', e2iBAa*1000
+!!print*, 'e2ind(A<-B)-b = ', e2iBAb*1000
+!e2ba_unc = e2iBAa + e2iBAb
+!
+!e2iABa = e2ind_unc_o(Waa,B%UOrbE(:,1),B%NOa,B%NVa,NBasis)
+!e2iABb = e2ind_unc_o(Wab,B%UOrbE(:,2),B%NOb,B%NVb,NBasis)
+!!print*, 'e2ind(A->B)-a = ', e2iABa*1000
+!!print*, 'e2ind(A->B)-b = ', e2iABb*1000
+!e2ab_unc = e2iABa + e2iABb
+!
+!e2ind_unc = e2ba_unc + e2ab_unc
+!
+!call print_en('Ind(B<--A,unc)',e2ab_unc*1000d0,.true.)
+!call print_en('Ind(A<--B,unc)',e2ba_unc*1000d0,.false.)
+!call print_en('E2ind(unc)',e2ind_unc*1000d0,.false.)
 
-e2iABa = e2ind_unc_o(Waa,B%UOrbE(:,1),B%NOa,B%NVa,NBasis)
-e2iABb = e2ind_unc_o(Wab,B%UOrbE(:,2),B%NOb,B%NVb,NBasis)
-!print*, 'e2ind(A->B)-a = ', e2iABa*1000
-!print*, 'e2ind(A->B)-b = ', e2iABb*1000
-e2ab_unc = e2iABa + e2iABb
+! uncoupled + coupled
+call solve_ucphf(A,B%WPot,e2ba_unc,e2ba,Flags,NBasis)
+call solve_ucphf(B,A%WPot,e2ba_unc,e2ab,Flags,NBasis)
 
 e2ind_unc = e2ba_unc + e2ab_unc
+e2ind     = e2ba + e2ab
 
 call print_en('Ind(B<--A,unc)',e2ab_unc*1000d0,.true.)
 call print_en('Ind(A<--B,unc)',e2ba_unc*1000d0,.false.)
 call print_en('E2ind(unc)',e2ind_unc*1000d0,.false.)
 
-! coupled
 
 deallocate(Wbb,Wba)
 deallocate(Wab,Waa)

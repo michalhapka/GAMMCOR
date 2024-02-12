@@ -530,6 +530,121 @@ double precision,allocatable :: ABMin(:,:),Work(:)
 
 end subroutine solve_cphf
 
+subroutine solve_ucphf(M,WPot,e2ind_unc,e2ind,Flags,NBas)
+!
+!
+!
+implicit none
+
+type(SystemBlock) :: M
+type(FlagsData)   :: Flags
+
+integer,intent(in)           :: NBas
+double precision,intent(in)  :: WPot(NBas,NBas)
+double precision,intent(out) :: e2ind_unc,e2ind
+
+type(DIISData)                 :: DIISBlock
+
+integer :: ip,iq,ipq
+integer :: NDimX
+
+double precision,allocatable :: WxYY(:,:)
+double precision,allocatable :: wVecxYY(:)
+double precision,allocatable :: amps(:),vecR(:),delta(:)
+double precision,allocatable :: work(:,:)
+
+NDimX = M%NOVa + M%NOVb
+
+call init_DIIS(DIISBlock,NDimX,NDimX,Flags%DIISN)
+
+allocate(wVecxYY(NDimX))
+allocate(work(NBas,NBas))
+
+! Arrange w(alpha;beta)
+call tran2MO(WPot,M%UMO(:,:,1),M%UMO(:,:,1),work,NBas)
+ipq = 0
+do iq=1,M%NOa
+   do ip=1,M%NVa
+      ipq = ipq + 1
+      wVecxYY(ipq) = work(iq,M%NOa+ip)
+   enddo
+enddo
+call tran2MO(WPot,M%UMO(:,:,2),M%UMO(:,:,2),work,NBas)
+do iq=1,M%NOb
+   do ip=1,M%NVb
+      ipq = ipq + 1
+      wVecxYY(ipq) = work(iq,M%NOb+ip)
+   enddo
+enddo
+
+allocate(vecR(NDimX),amps(NDimX),delta(NDimX))
+
+! uncoupled denominators
+delta = 0d0
+ipq = 0
+do iq=1,M%NOa
+   do ip=1,M%NVa
+      ipq = ipq + 1
+      delta(ipq) = M%UOrbE(iq,1) - M%UOrbE(M%NOa+ip,1)
+   enddo
+enddo
+do iq=1,M%NOb
+   do ip=1,M%NVb
+      ipq = ipq + 1
+      delta(ipq) = M%UOrbE(iq,2) - M%UOrbE(M%NOb+ip,2)
+   enddo
+enddo
+
+call amplitudes_T1_cphf(delta,wVecxYY,amps,NDimX)
+
+e2ind_unc = 0d0
+do ipq=1,NDimX
+   e2ind_unc = e2ind_unc - amps(ipq)*wVecxYY(ipq)
+enddo
+!if(Flags%SaptLevel/=0) print*, 'E2ind(unc)',e2indxy
+
+if(Flags%SaptLevel==0) return
+
+e2ind = 0d0
+print*, 'E2ind coupled not ready in solve_ucphf!'
+
+!write(LOUT,'(1x,a,5x,a)') 'ITER', 'ERROR'
+!iter = 0
+!do
+!
+!vecR = wVecxYY
+!call dgemv('N',M%NDimX,M%NDimX,1.d0,ABMin,M%NDimX,amps,1,1d0,vecR,1)
+!
+!error = norm2(vecR)
+!conv=error.le.ThrDIIS
+!
+!write(LOUT,'(1x,i3,f11.6)') iter,error
+!
+!if(conv) then
+!   exit
+!elseif(.not.conv.and.iter.le.MaxIt) then
+!   iter = iter + 1
+!elseif(.not.conv.and.iter.gt.MaxIt) then
+!  write(*,*) 'Error!!! E2ind DIIS not converged!'
+!  exit
+!endif
+!
+!! HF test
+!call amplitudes_T1_cphf(OmM0,vecR,delta,NDimX)
+!amps = amps + delta
+!if(iter>Flags%DIISOn) call use_DIIS(DIISBlock,amps,vecR)
+!
+!enddo
+
+call free_DIIS(DIISBlock)
+
+deallocate(delta,amps,vecR)
+
+deallocate(wVecxYY)
+deallocate(work)
+
+end subroutine solve_ucphf
+
 subroutine amplitudes_T1_cphf(deps,ints,res,NDimX)
 implicit none
 
