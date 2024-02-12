@@ -169,6 +169,7 @@ print*, 'Skipping response ...'
 
 call e1elst_o(SAPT%monA,SAPT%monB,SAPT)
 call e1exchs2_sq_o(SAPT%monA,SAPT%monB,SAPT)
+call e2ind_o(SAPT%monA,SAPT%monB,SAPT)
 
 call summary_saptuks(SAPT)
 call free_saptuks(Flags,SAPT)

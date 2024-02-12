@@ -103,7 +103,7 @@ end subroutine e1elst
 
 subroutine e1elst_o(A,B,SAPT)
 !
-! unrestricted open-shelle electrostatic energy
+! unrestricted open-shell electrostatic energy (AO)
 ! see Eq. (7) in https://doi.org/10.1063/1.4758455
 !
 implicit none
@@ -846,6 +846,80 @@ double precision :: e2tmp, tmp
  deallocate(AlphaA,AlphaB,WaBB,WbAA)
 
 end subroutine e2ind_apsg
+
+subroutine e2ind_o(A,B,SAPT)
+!
+! calculate uncoupled and coupled e2ind
+! c.f. Eq (17) in https://doi.org/10.1063/1.4758455
+!
+implicit none
+
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
+
+integer :: Nbasis
+double precision :: e2iBAa,e2iBAb,e2iABa,e2iABb
+double precision :: e2ab_unc,e2ba_unc,e2ind_unc
+double precision, allocatable :: Waa(:,:),Wab(:,:)
+double precision, allocatable :: Wba(:,:),Wbb(:,:)
+
+NBasis = A%NBasis
+
+allocate(Waa(NBasis,NBasis),Wab(NBasis,NBasis))
+allocate(Wba(NBasis,NBasis),Wbb(NBasis,NBasis))
+
+call tran2MO(A%WPot,B%UMO(:,:,1),B%UMO(:,:,1),Waa,NBasis)
+call tran2MO(A%WPot,B%UMO(:,:,2),B%UMO(:,:,2),Wab,NBasis)
+
+call tran2MO(B%WPot,A%UMO(:,:,1),A%UMO(:,:,1),Wba,NBasis)
+call tran2MO(B%WPot,A%UMO(:,:,2),A%UMO(:,:,2),Wbb,NBasis)
+
+! uncoupled
+e2iBAa = e2ind_unc_o(Wba,A%UOrbE(:,1),A%NOa,A%NVa,NBasis)
+e2iBAb = e2ind_unc_o(Wbb,A%UOrbE(:,2),A%NOb,A%NVb,NBasis)
+!print*, 'e2ind(A<-B)-a = ', e2iBAa*1000
+!print*, 'e2ind(A<-B)-b = ', e2iBAb*1000
+e2ba_unc = e2iBAa + e2iBAb
+
+e2iABa = e2ind_unc_o(Waa,B%UOrbE(:,1),B%NOa,B%NVa,NBasis)
+e2iABb = e2ind_unc_o(Wab,B%UOrbE(:,2),B%NOb,B%NVb,NBasis)
+!print*, 'e2ind(A->B)-a = ', e2iABa*1000
+!print*, 'e2ind(A->B)-b = ', e2iABb*1000
+e2ab_unc = e2iABa + e2iABb
+
+e2ind_unc = e2ba_unc + e2ab_unc
+
+call print_en('Ind(B<--A,unc)',e2ab_unc*1000d0,.true.)
+call print_en('Ind(A<--B,unc)',e2ba_unc*1000d0,.false.)
+call print_en('E2ind(unc)',e2ind_unc*1000d0,.false.)
+
+! coupled
+
+deallocate(Wbb,Wba)
+deallocate(Wab,Waa)
+
+contains
+
+function e2ind_unc_o(Wmat,OrbE,no,nv,n) result(res)
+implicit none
+
+integer :: no,nv,n
+double precision :: Wmat(n,n), OrbE(n)
+double precision :: delta_e, res
+
+integer :: ip, iq
+
+res = 0d0
+do iq=1,no
+   do ip=1,nv
+      delta_e = OrbE(iq) - OrbE(no+ip)
+      res = res + Wmat(iq,no+ip)*Wmat(no+ip,iq)/delta_e
+   enddo
+enddo
+
+end function e2ind_unc_o
+
+end subroutine e2ind_o
 
 subroutine e2disp_unc(Flags,A,B,SAPT)
 ! calculate uncoupled and semi-coupled e2disp
