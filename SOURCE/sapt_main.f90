@@ -170,6 +170,7 @@ print*, 'Skipping response ...'
 call e1elst_o(SAPT%monA,SAPT%monB,SAPT)
 call e1exchs2_sq_o(SAPT%monA,SAPT%monB,SAPT)
 call e2ind_o(Flags,SAPT%monA,SAPT%monB,SAPT)
+call e2disp_o(SAPT%monA,SAPT%monB,SAPT)
 
 call summary_saptuks(SAPT)
 call free_saptuks(Flags,SAPT)
@@ -1179,20 +1180,34 @@ integer,intent(in) :: NBasis
 if(Flags%ICholesky/=0) stop "Cholesky not ready in saptuks_ab_ints"
 
 
-! (OV|OV) alpha
+! (OV|OV) alpha-alpha
 call tran4_gen(NBasis,&
                B%NOa,B%UMO(:,:,1),&
                B%NVa,B%UMO(1:NBasis,B%NOa+1:NBasis,1),&
                A%NOa,A%UMO(:,:,1),&
                A%NVa,A%UMO(1:NBasis,A%NOa+1:NBasis,1),&
-               'OVOVABa','AOTWOSORT')
-! (OV|OV) beta
+               'OVOVABaa','AOTWOSORT')
+! (OV|OV) beta-beta
 call tran4_gen(NBasis,&
                B%NOb,B%UMO(:,:,2),&
                B%NVb,B%UMO(1:NBasis,B%NOb+1:NBasis,2),&
                A%NOb,A%UMO(:,:,2),&
                A%NVb,A%UMO(1:NBasis,A%NOb+1:NBasis,2),&
-               'OVOVABb','AOTWOSORT')
+               'OVOVABbb','AOTWOSORT')
+! (OV|OV) alpha-beta
+call tran4_gen(NBasis,&
+               B%NOb,B%UMO(:,:,2),&
+               B%NVb,B%UMO(1:NBasis,B%NOa+1:NBasis,2),&
+               A%NOa,A%UMO(:,:,1),&
+               A%NVa,A%UMO(1:NBasis,A%NOa+1:NBasis,1),&
+               'OVOVABab','AOTWOSORT')
+! (OV|OV) beta-alpha
+call tran4_gen(NBasis,&
+               B%NOa,B%UMO(:,:,1),&
+               B%NVa,B%UMO(1:NBasis,B%NOa+1:NBasis,1),&
+               A%NOb,A%UMO(:,:,2),&
+               A%NVb,A%UMO(1:NBasis,A%NOb+1:NBasis,2),&
+               'OVOVABba','AOTWOSORT')
 
 end subroutine saptuks_ab_ints
 
@@ -1816,12 +1831,16 @@ write(LOUT,'(1x,a,t19,a,f16.8)') 'E1elst',    '=', SAPT%elst*1.d03
 write(LOUT,'(1x,a,t19,a,f16.8)') 'E1exch(S2)','=', SAPT%exchs2*1.d03
 write(LOUT,'(1x,a,t19,a,f16.8)') 'E1exch    ','=', SAPT%e1exch*1.d03
 
-!if(SAPT%SaptLevel==2) then
+if(SAPT%SaptLevel==0) then
+   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2ind(unc)',   '=', SAPT%e2ind_unc*1.d03
+   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2disp(unc)',  '=', SAPT%e2disp_unc*1.d03
+elseif(SAPT%SaptLevel==2) then
 !   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2ind',      '=', SAPT%e2ind*1.d03
 !   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2exch-ind', '=', SAPT%e2exind*1.0d3
 !   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2disp',     '=', SAPT%e2disp*1.d03
 !   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2exch-disp','=', SAPT%e2exdisp*1.0d3
 !   write(LOUT,'(1x,a,t19,a,f16.8)') 'Eint(SAPT2)','=', SAPT%esapt2*1.0d3
+endif
 
 end subroutine summary_saptuks
 
@@ -2118,8 +2137,10 @@ deallocate(SAPT%monA%WPot,SAPT%monB%WPot)
 
 if(Flags%ICholesky==0) call delfile('AOTWOSORT')
 
-call delfile('OVOVABb')
-call delfile('OVOVABa')
+call delfile('OVOVABbb')
+call delfile('OVOVABaa')
+call delfile('OVOVABab')
+call delfile('OVOVABba')
 
 end subroutine free_saptuks
 

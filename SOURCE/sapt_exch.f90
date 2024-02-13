@@ -1392,7 +1392,7 @@ if(SAPT%IPrint>=10) write(LOUT,'(1x,a,f16.8)') 'ExchS2(T2-b ) = ', ex2(2)*1000d0
 
 ! alpha-alpha (pq|rs).S(q,r).S(p,s)
 allocate(Aux(A%NOVa),ints(A%NVa,A%NOa))
-open(newunit=iunit,file='OVOVABa',status='OLD',&
+open(newunit=iunit,file='OVOVABaa',status='OLD',&
      access='DIRECT',form='UNFORMATTED',recl=8*A%NOVa)
 
 ints = 0d0
@@ -1427,7 +1427,7 @@ deallocate(ints,Aux)
 if(SAPT%IPrint>=10) write(LOUT,'(1x,a,f16.8)') 'ExchS2(T3-a ) = ', ex3(1)*1000d0
 
 allocate(Aux(A%NOVb),ints(A%NVb,A%NOb))
-open(newunit=iunit,file='OVOVABb',status='OLD',&
+open(newunit=iunit,file='OVOVABbb',status='OLD',&
      access='DIRECT',form='UNFORMATTED',recl=8*A%NOVb)
 
 do rs=1,B%NOVb
