@@ -498,6 +498,7 @@ integer :: i
     endif
 
    if (SAPT%Visual) call dump_visual(Flags,SAPT%monA,SAPT%monB,SAPT)
+   if (SAPT%Visual) call dump_elect(Flags,SAPT%monA,SAPT%monB,SAPT)
    if (SAPT%Visual) call test_saptvis()
 
     call summary_rspt(SAPT)

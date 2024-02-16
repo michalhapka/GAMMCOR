@@ -20,6 +20,10 @@ double precision,allocatable :: Va(:,:),Vb(:,:)
 double precision,allocatable :: Vabb(:,:),Vbaa(:,:)
 double precision :: ea,eb,eab,elst
 double precision,external  :: ddot
+! for Visualize
+integer :: NOccupA,NOccupB
+double precision,allocatable :: QelA(:),QelB(:)
+double precision :: E_elst, E_elstA, E_elstB
 
 ! set dimensions
 NBas = A%NBasis
@@ -69,31 +73,103 @@ call print_en('V_nn',SAPT%Vnn,.false.)
 call print_en('Eelst',elst*1000,.false.)
 SAPT%elst = elst
 
-deallocate(Vb,Va,Vbaa,Vabb)
-
 ! Visualize (can be moved to a separate subroutine)
 if (SAPT%Visual) then
 
-   print*, 'VISUAL not finished for E1elst...'
+   NOccupA = A%num0+A%num1
+   NOccupB = B%num0+B%num1
 
-!   NOccupA = A%num0+A%num1
-!   NOccupB = B%num0+B%num1
-!
-!   allocate(QelA(NOccupA),QelB(NOccupB))
-!
-!   ! Eq (30) in the note
-!   do i=1,NOccupA
-!      QelA(i) = 2d0*A%Occ(i)*Vbaa(i,i)
-!   enddo
-!   ! ... and the remaining pieces from Eq (30)
-!
-!   ! allocate(SAPT%QelA(NOccupA,SAPT%QelB(NOccupB))
-!   ! SAPT%QelA = QelA
-!   ! SAPT%QelB = QelB
-!
-!   deallocate(QelB,QelA)
+   allocate(QelA(NOccupA),QelB(NOccupB))
+
+   ! Eq (30) in the note
+   do i=1,NOccupA
+      
+      ! ii = ( i - 1 ) * NOccupA + i
+      ii = (i-1)*(A%num0+A%num1)+i
+
+      ! write(*,*) i
+      ! write(*,*) A%Occ(i) 
+      ! write(*,*) Vbaa(i,i)
+
+      QelA(i) = A%Occ(i)*Vbaa(i,i)
+      
+      do j=1,NOccupB
+      
+         ! jj = ( j - 1 ) * NOccupB + j
+         jj = (j-1)*(B%num0+B%num1)+j
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * <pq|pq>
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * (pp|qq)
+         
+                     !  eab = eab + A%Occ(i)*B%Occ(j)*ddot(NCholesky,A%OO(:,ii),1,B%OO(:,jj),1)
+
+         QelA(i) = QelA(i) + A%Occ(i) * B%Occ(j) * ddot(NCholesky, A%OO(:,ii), 1, B%OO(:,jj), 1)
+      
+      enddo
+      
+      QelA(i) = 2d0 * QelA(i)
+
+   enddo
+
+   do i=1,NOccupB
+      
+      ! ii = ( i - 1 ) * NOccupB + i
+      ii = (i-1)*(B%num0+B%num1)+i
+
+      QelB(i) = B%Occ(i)*Vabb(i,i)
+      
+      do j=1,NOccupA
+      
+         ! jj = ( j - 1 ) * NOccupA + j
+         jj = (j-1)*(A%num0+A%num1)+j
+
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * <pq|pq>
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * (pp|qq)
+         QelB(i) = QelB(i) + B%Occ(i) * A%Occ(j) * ddot(NCholesky, B%OO(:,ii), 1, A%OO(:,jj), 1)
+      
+      enddo
+      
+      QelB(i) = 2d0 * QelB(i)
+
+   enddo
+
+   E_elst = 0.0d0 
+   E_elstA = 0.0d0 
+   E_elstB = 0.0d0 
+
+   do i=1,NOccupA
+      E_elstA = E_elstA + QelA(i)
+   enddo
+
+   do i=1,NOccupB
+      E_elstB = E_elstB + QelB(i)
+   enddo
+
+   E_elst = E_elstA + E_elstB + SAPT%Vnn
+  
+  ! write(*,*) "E_elst,  E_elstA,  E_elstB", E_elst, E_elstA, E_elstB
+  ! write(*,*) "E_elst-V_nn *1000", (E_elst-SAPT%Vnn ) * 1000
+  ! write(*,*) "E_elst+V_nn *1000", (E_elst+SAPT%Vnn ) * 1000
+  call print_en('Eelst(Visual)',E_elst*1000,.false.)
+
+! do j=1,NOccupB
+!    jj = ( j - 1 ) * NOccupB + j   ! wybieramy indeks diagonalny z kwadratu NOccupB*NOccupB
+!    do i=1,NOccupA
+!         ii = ( i - 1 ) * NOccupA + i   ! wybieramy indeks diagonalny z kwadratu NOccupA*NOccupA
+!         QelA = QelA + A%Occ(i) * B%Occ(j) * ddot(NCholesky, A%OO(:,ii), 1, B%OO(:,jj), 1)
+!     enddo
+! enddo
+
+   ! ... and the remaining pieces from Eq (30)
+
+   allocate(SAPT%QelA(NOccupA),SAPT%QelB(NOccupB))
+   SAPT%QelA = QelA
+   SAPT%QelB = QelB
+
+   deallocate(QelB,QelA)
 
 endif
+
+deallocate(Vb,Va,Vbaa,Vabb)
 
 end subroutine e1elst_Chol
 

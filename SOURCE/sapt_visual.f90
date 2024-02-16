@@ -49,6 +49,50 @@ print*, 'Qmat:  ',norm2(SAPT%Qmat)
 
 end subroutine dump_visual
 
+subroutine dump_elect(Flags,A,B,SAPT)
+!
+! dump visualization data:
+! -- QelA, QelB (E1elst)
+!
+implicit none
+
+type(FlagsData)   :: Flags
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
+
+integer :: iunit,i
+integer :: NOccupA,NOccupB
+character(:),allocatable :: dumpvis
+
+dumpvis = 'SAPT_ELECT'
+
+! get dimensions
+NOccupA = A%num0 + A%num1
+NOccupB = B%num0 + B%num1
+
+open(newunit=iunit,file=dumpvis,form="UNFORMATTED")
+
+write(iunit) A%NBasis,B%NBasis
+write(iunit) NOccupA,NOccupB
+write(iunit)(1.d0,i=1,NOccupA),(0.d0,i=NOccupA+1,A%NBasis),(1.d0,i=1,NOccupB),(0.d0,i=NOccupB+1,B%NBasis)
+!write(iunit) A%Occ(1:A%NBasis),B%Occ(1:B%NBasis)
+!write(iunit) A%CMO(1:A%NBasis,1:A%NBasis)
+!write(iunit) B%CMO(1:B%NBasis,1:B%NBasis)
+write(iunit) SAPT%ALOC(1:A%NBasis,1:A%NBasis)
+write(iunit) SAPT%BLOC(1:B%NBasis,1:B%NBasis)
+write(iunit) SAPT%Qmat(1:NOccupA,1:NOccupB)
+write(iunit) SAPT%QelA(1:NOccupA)
+write(iunit) SAPT%QelB(1:NOccupB)
+
+close(iunit)
+!print*, 'A%CMO: ',norm2(A%CMO)
+!print*, 'B%CMO: ',norm2(B%CMO)
+print*, 'A%CMO: ',norm2(SAPT%ALOC)
+print*, 'B%CMO: ',norm2(SAPT%BLOC)
+print*, 'Qmat:  ',norm2(SAPT%Qmat)
+
+end subroutine dump_elect
+
 subroutine test_saptvis()
 implicit none
 

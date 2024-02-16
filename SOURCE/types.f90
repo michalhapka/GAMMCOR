@@ -422,6 +422,7 @@ type SaptData
      double precision,allocatable :: CholVecs(:,:)
      ! Visualize
      double precision,allocatable :: Qmat(:,:),ALOC(:,:),BLOC(:,:)
+     double precision,allocatable :: QelA(:),QelB(:)
      integer :: InterfaceType = INTER_TYPE_DAL
      integer :: SaptLevel = SAPTLEVEL2
      integer :: SaptExch  = 0
