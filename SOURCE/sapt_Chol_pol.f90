@@ -71,6 +71,30 @@ SAPT%elst = elst
 
 deallocate(Vb,Va,Vbaa,Vabb)
 
+! Visualize (can be moved to a separate subroutine)
+if (SAPT%Visual) then
+
+   print*, 'VISUAL not finished for E1elst...'
+
+!   NOccupA = A%num0+A%num1
+!   NOccupB = B%num0+B%num1
+!
+!   allocate(QelA(NOccupA),QelB(NOccupB))
+!
+!   ! Eq (30) in the note
+!   do i=1,NOccupA
+!      QelA(i) = 2d0*A%Occ(i)*Vbaa(i,i)
+!   enddo
+!   ! ... and the remaining pieces from Eq (30)
+!
+!   ! allocate(SAPT%QelA(NOccupA,SAPT%QelB(NOccupB))
+!   ! SAPT%QelA = QelA
+!   ! SAPT%QelB = QelB
+!
+!   deallocate(QelB,QelA)
+
+endif
+
 end subroutine e1elst_Chol
 
 subroutine test_Chol_ints(Flags,A,B,SAPT)
@@ -1544,6 +1568,19 @@ type(EBlockData),allocatable :: A0BlkA(:),A0BlkB(:)
 
 type(EBlockData)             :: LambdaIVA,LambdaIVB
 type(EBlockData),allocatable :: LambdaA(:),LambdaB(:)
+
+! for Visualize
+integer          :: dimOA, dimOB
+double precision :: e2dv
+integer,allocatable          :: posA(:,:),posB(:,:)
+double precision,allocatable :: Qmat(:,:),CAB(:,:),DAB(:,:)
+! for Visualize with local
+character*60 line
+integer :: iip,ILoc
+double precision,allocatable :: ALOC(:,:),BLOC(:,:)
+double precision,allocatable :: ALOAO(:,:),BLOAO(:,:)
+double precision,allocatable :: QAux1(:,:,:),QAuxC(:,:,:,:),QAuxD(:,:,:,:)
+
 ! test
 double precision :: ErrMax
 double precision :: Tcpu,Twall
@@ -1569,6 +1606,72 @@ if(A%NBasis.ne.B%NBasis) then
    stop
 else
    NBas = A%NBasis
+endif
+
+! for Visualize
+ILoc=0
+if (SAPT%Visual) then
+
+   dimOA = A%num0 + A%num1
+   allocate(posA(NBas,NBas))
+   posA = 0
+   do i=1,A%NDimX
+      posA(A%IndN(1,i),A%IndN(2,i)) = A%IndX(i)
+   enddo
+
+   dimOB = B%num0 + B%num1
+   allocate(posB(NBas,NBas))
+   posB = 0
+   do i=1,B%NDimX
+      posB(B%IndN(1,i),B%IndN(2,i)) = B%IndX(i)
+   enddo
+      allocate(ALOC(A%NBasis,A%NBasis),BLOC(B%NBasis,B%NBasis), &
+              ALOAO(A%NBasis,A%NBasis),BLOAO(B%NBasis,B%NBasis))
+      ALOAO=A%CMO
+      BLOAO=B%CMO 
+! for Q_AB in localized orbitals
+  if(ILoc==1) then
+      allocate(CA(A%NBasis,A%NBasis),CB(B%NBasis,B%NBasis))
+      allocate(A1A(A%NBasis,A%NBasis))
+      allocate(A1B(A%NBasis,A%NBasis))
+
+      open(10,file="loc_a.dat",status='OLD')
+      read(10,'(A10)')line
+      read(10,'(A10)')line
+      do i=1,A%NBasis
+          read(10,*) (CA(j,i),j=1,A%NBasis)
+      enddo
+      close(10)
+      open(10,file="loc_b.dat",status='OLD')
+      read(10,'(A10)')line
+      read(10,'(A10)')line
+      do i=1,B%NBasis
+          read(10,*) (CB(j,i),j=1,B%NBasis)
+      enddo
+      close(10)
+
+      ALOAO=CA
+      BLOAO=CB
+
+      call CpyM(A1A,A%CMO,A%NBasis)
+      A1A=transpose(A1A)
+      call minvr(A1A,1.0d-7,val,i,A%NBasis)
+      if (i.ne.0) then
+         Write(6,'(/,'' ERROR : transformation from ao to mo basis is singular'')')
+         Stop
+      endif
+      call CpyM(A1B,B%CMO,A%NBasis)
+      A1B=transpose(A1B)
+      call minvr(A1B,1.0d-7,val,i,B%NBasis)
+      if (i.ne.0) then
+         Write(6,'(/,'' ERROR : transformation from ao to mo basis is singular'')')
+         Stop
+      endif
+      call dgemm('N','N',A%NBasis,A%NBasis,A%NBasis,1.d0,CA,A%NBasis,A1A,A%NBasis,0.0d0,ALOC,A%NBasis)
+      call dgemm('N','N',B%NBasis,B%NBasis,B%NBasis,1.d0,CB,B%NBasis,A1B,B%NBasis,0.0d0,BLOC,B%NBasis)
+      deallocate(CA,CB,A1A,A1B)
+  endif 
+
 endif
 
 !! get Dmat
@@ -1707,6 +1810,10 @@ allocate(CTildeA(A%NDimX,NCholesky),CTildeB(B%NDimX,NCholesky))
 allocate(WorkA(A%NDimX,NCholesky),WorkB(B%NDimX,NCholesky))
 allocate(CA(NCholesky,NCholesky),CB(NCholesky,NCholesky))
 
+if (SAPT%Visual.and.ILoc.eq.0) allocate(Qmat(dimOA,dimOB),CAB(A%NDimX,B%NDimX),DAB(A%NDimX,B%NDimX))
+if (SAPT%Visual.and.ILoc.eq.1) allocate(Qmat(dimOA,dimOB))
+if (SAPT%Visual) Qmat = 0d0
+
 call FreqGrid(XFreq,WFreq,NFreq)
 
 ! read ABPLUS0.ABMIN0 blocks
@@ -1715,6 +1822,7 @@ call read_ABPM0Block(A0BlkB,A0BlkIVB,nblkB,'A0BLK_B')
 
 e2d  = 0
 e2du = 0
+e2dv = 0d0
 ErrMax = 0d0
 do ifreq=1,NFreq
 
@@ -1741,6 +1849,129 @@ do ifreq=1,NFreq
       enddo
 
       e2d = e2d + WFreq(ifreq)*val
+
+!  for Q_AB in localized orbitals
+   if(SAPT%Visual.and.ILoc.eq.1) then
+
+      allocate(CAB(A%NDimX,B%NDimX))
+      call dgemm('N','T',A%NDimX,B%NDimX,NCholesky,1d0,CTildeA,A%NDimX,CTildeB,B%NDimX,0d0,CAB,A%NDimX)
+
+      allocate(QAux1(dimOA,NBas,B%NDimX))
+      do i=1,dimOA
+       do is=1,dimOB
+         do ir=1,NBas
+            if(posB(ir,is)/=0) then
+               irs = posB(ir,is)
+               do ip=1,NBas
+                 QAux1(i,ip,irs)=0.0
+                  do iq=1,dimOA
+                     if(posA(ip,iq)/=0) then
+                        ipq = posA(ip,iq)
+                        QAux1(i,ip,irs)= QAux1(i,ip,irs)+ ALOC(i,iq)*CAB(ipq,irs)
+                     endif
+                  enddo
+               enddo
+            endif
+         enddo
+       enddo
+      enddo
+
+      deallocate(CAB)
+      allocate(QAuxC(dimOA,NBas,dimOB,NBas))
+     
+      do j=1,dimOB
+       do i=1,dimOA
+         do ip=1,NBas
+               do ir=1,NBas
+                 QAuxC(i,ip,j,ir)=0.0
+                  do is=1,dimOB
+                     if(posB(ir,is)/=0) then
+                        irs = posB(ir,is)
+                        QAuxC(i,ip,j,ir)= QAuxC(i,ip,j,ir)+ BLOC(j,is)*QAux1(i,ip,irs)
+                     endif
+                  enddo
+               enddo
+         enddo
+       enddo
+      enddo
+    
+      allocate(DAB(A%NDimX,B%NDimX))
+      call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,A%DChol,NCholesky,B%DChol,NCholesky,0d0,DAB,A%NDimX)
+ 
+      do i=1,dimOA
+       do is=1,dimOB
+         do ir=1,NBas
+            if(posB(ir,is)/=0) then
+               irs = posB(ir,is)
+               do ip=1,NBas
+                 QAux1(i,ip,irs)=0.0
+                  do iq=1,dimOA
+                     if(posA(ip,iq)/=0) then
+                        ipq = posA(ip,iq)
+                        QAux1(i,ip,irs)= QAux1(i,ip,irs)+ ALOC(i,iq)*DAB(ipq,irs)
+                     endif
+                  enddo
+               enddo
+            endif
+         enddo
+       enddo
+      enddo 
+      deallocate(DAB)
+
+      allocate(QAuxD(dimOA,NBas,dimOB,NBas))
+
+      do j=1,dimOB
+       do i=1,dimOA
+         do ip=1,NBas
+               do ir=1,NBas
+                 QAuxD(i,ip,j,ir)=0.0
+                  do is=1,dimOB
+                     if(posB(ir,is)/=0) then
+                        irs = posB(ir,is)
+                        QAuxD(i,ip,j,ir)= QAuxD(i,ip,j,ir)+ BLOC(j,is)*QAux1(i,ip,irs)
+                     endif
+                  enddo
+               enddo
+         enddo
+       enddo
+      enddo
+      deallocate(QAux1)
+
+      do j=1,dimOB
+         do ir=1,NBas
+               do i=1,dimOA
+                  do ip=1,NBas
+                        Qmat(i,j) = Qmat(i,j) + WFreq(ifreq)*QAuxC(i,ip,j,ir)*QAuxD(i,ip,j,ir)
+                  enddo
+               enddo
+         enddo
+      enddo
+     deallocate(QAuxC,QAuxD)
+
+   endif
+
+   if(SAPT%Visual.and.ILoc.eq.0) then
+
+      call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,A%DChol,NCholesky,B%DChol,NCholesky,0d0,DAB,A%NDimX)
+      call dgemm('N','T',A%NDimX,B%NDimX,NCholesky,1d0,CTildeA,A%NDimX,CTildeB,B%NDimX,0d0,CAB,A%NDimX)
+      do is=1,dimOB
+         do ir=1,NBas
+            if(posB(ir,is)/=0) then
+               irs = posB(ir,is)
+               do iq=1,dimOA
+                  do ip=1,NBas
+                     if(posA(ip,iq)/=0) then
+                        ipq = posA(ip,iq)
+                        Qmat(iq,is) = Qmat(iq,is) + WFreq(ifreq)*CAB(ipq,irs)*DAB(ipq,irs)
+                     endif
+                  enddo
+               enddo
+            endif
+         enddo
+      enddo
+
+   endif
+
    !endif
 
    !! uncoupled
@@ -1776,6 +2007,31 @@ enddo
    !print*, 'e2d = ',e2d
    call print_en('E2disp(CAlpha)',e2d,.false.)
 !endif
+
+! test Visualize
+if (SAPT%Visual) then
+
+   Qmat = -32d0/Pi * Qmat
+   e2dv = 0
+   do ir=1,dimOB
+      do ip=1,dimOA
+         !print*, 'Qmat(p,r)',ip,ir,Qmat(ip,ir)
+         e2dv = e2dv + Qmat(ip,ir)
+      enddo
+   enddo
+
+   !e2dv = -32d0/Pi*e2dv*1d3
+   !call print_en('E2disp(Visual)',e2dv,.false.)
+   e2dv = e2dv*1d3
+   call print_en('E2disp(Visual)',e2dv,.false.)
+   if(abs(e2d-e2dv).gt.1.d-8) write(6,*)'!!! warning: wrong disp_en from Q_AB !!!',e2dv-e2d
+
+   allocate(SAPT%Qmat(NBas,NBas),SAPT%ALOC(NBas,NBas),SAPT%BLOC(NBas,NBas))
+   SAPT%Qmat = Qmat
+   SAPT%ALOC = transpose(ALOAO)
+   SAPT%BLOC = transpose(BLOAO)
+   
+endif
 
 call clock('E2disp(CAlpha)',Tcpu,Twall)
 

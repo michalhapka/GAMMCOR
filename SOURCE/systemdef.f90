@@ -500,7 +500,11 @@ elseif(Flags%ISAPT.Eq.1) then
  SAPT%ic6 = Input%CalcParams%vdWCoef
  SAPT%Max_Cn = Input%CalcParams%Max_Cn
  SAPT%CAlpha = Input%CalcParams%CAlpha
+
+ SAPT%Visual = Input%CalcParams%Visual
+
  SAPT%IPrint = Input%CalcParams%IPrint
+
  if(SAPT%InterfaceType==2) SAPT%HFCheck = .false.
  ! temporary RSH
  if(Flags%IFunSR<3.and.Flags%IFunSR>0) then

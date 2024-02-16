@@ -8,6 +8,7 @@ use sapt_pol
 use sapt_Chol_pol
 use sapt_Chol_exch
 use sapt_exch
+use sapt_visual
 use exd_pino
 use omp_lib
 
@@ -495,6 +496,9 @@ integer :: i
     else if(SAPT%CAlpha) then
       call e2disp_CAlphaTilde_block(Flags,SAPT%monA,SAPT%monB,SAPT)
     endif
+
+   if (SAPT%Visual) call dump_visual(Flags,SAPT%monA,SAPT%monB,SAPT)
+   if (SAPT%Visual) call test_saptvis()
 
     call summary_rspt(SAPT)
 

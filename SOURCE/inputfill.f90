@@ -564,6 +564,13 @@ subroutine read_block_calculation(CalcParams, line)
                CalcParams%SaptExch = 1
            endif
 
+      case("VISUALIZE")
+           if (uppercase(val) == "TRUE".or.  &
+               uppercase(val) == ".TRUE.".or.&
+               uppercase(val) == "T") then
+               CalcParams%Visual = .TRUE.
+           endif
+
       case("RESTART")
            if (uppercase(val) == "TRUE".or.  &
                uppercase(val) == ".TRUE.".or.&

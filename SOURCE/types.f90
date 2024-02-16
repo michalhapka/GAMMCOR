@@ -38,6 +38,7 @@ integer, parameter :: SAPTLEVEL2 = 2
 integer, parameter :: FLAG_CORE = 1
 integer, parameter :: FLAG_NOBASIS  = 0
 integer, parameter :: FLAG_REDVIRT  = 0
+logical, parameter :: FLAG_VISUAL  = .FALSE.
 integer, parameter :: FLAG_RDM2TYP  = 0
 integer, parameter :: FLAG_ORBRELAX = 1
 integer, parameter :: FLAG_ORBINCL  = 0
@@ -148,6 +149,7 @@ character(*),parameter :: PossibleUnits(2) = &
          integer :: OrbRelax  = FLAG_ORBRELAX
          integer :: OrbIncl   = FLAG_ORBINCL
          integer :: MemVal = 2, MemType = 3 ! default: use 2 GB for 3-ind_tran (Cholesky)
+         logical :: Visual     = FLAG_VISUAL
          logical :: Restart    = FLAG_RESTART
          logical :: Triplet    = FLAG_TRIPLET
          logical :: PostCAS    = FLAG_POSTCAS
@@ -418,6 +420,8 @@ type SaptData
      double precision,allocatable :: Wind(:),Wdisp(:)
      ! test Pmat
      double precision,allocatable :: CholVecs(:,:)
+     ! Visualize
+     double precision,allocatable :: Qmat(:,:),ALOC(:,:),BLOC(:,:)
      integer :: InterfaceType = INTER_TYPE_DAL
      integer :: SaptLevel = SAPTLEVEL2
      integer :: SaptExch  = 0
@@ -432,6 +436,7 @@ type SaptData
      logical :: iCpld  = .true.
      logical :: Cubic  = .false.
      logical :: CAlpha = .false.
+     logical :: Visual  = .false.
      ! MH : add keyword!
      logical :: SemiCoupled = .true.
      logical :: Wexcit  = .false.
