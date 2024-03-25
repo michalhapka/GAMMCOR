@@ -280,8 +280,6 @@ CC     on-the-fly
 C      use basis_sets
 C      use sys_definitions
 C      use CholeskyOTF_interface
-C      use CholeskyOTF, only : TCholeskyVecsOTF
-C      use Cholesky_driver, only : chol_Rkab_OTF
 
       use tran
       use abmat
@@ -304,15 +302,19 @@ C
 C     LOCAL ARRAYS
 C
       Real*8, Allocatable :: RDM2(:),RDMAB2(:)
-C     binary
+C     binary Cholesky
       Type(TCholeskyVecs) :: CholeskyVecs
       Real*8, Allocatable :: MatFF(:,:)
-C     on-the-fly
+C     on-the-fly Cholesky
       type(TCholeskyVecsOTF) :: CholeskyVecsOTF
       type(TSystem)          :: System
       type(TAOBasis)         :: AOBasis
       integer :: NA, NB, a0, a1, b0, b1
       logical :: SortAngularMomenta
+C     THC
+      integer :: NCholeskyTHC, NGridTHC
+      double precision, allocatable :: Xgp(:,:), Zgk(:,:)
+
 
       Dimension Gamma(NInte1),Work(NBasis),PC(NBasis),
      $ AUXM(NBasis,NBasis),AUXM1(NBasis,NBasis),
@@ -701,9 +703,13 @@ C
 C
         CAOMO = transpose(CMOAO) 
 C
+C       temp solution
+        if(ICholeskyTHC==1) stop "Error! THC not ready in ReadDMRG!"
+C
          Call CholeskyOTF_Fock_MO_v2(WorkSq,CholeskyVecsOTF,
      $                         AOBasis,System,Monomer,'ORCA  ',
      $                         CAOMO,CAOMO,XKin,GammaAB,
+     $                         Xgp,Zgk,NGridTHC,NCholeskyTHC,
      $                         MemType,MemVal,NInte1,NBasis,
      $                         IH0Test)
 C        unpack Fock in MO (WorkSq) to triangle
@@ -965,7 +971,7 @@ C
       a1 = NBasis
       b0 = 1
       b1 = NBasis
-      NCholesky = CholeskyVecsOTF%NVecs
+      NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
       allocate(MatFF(NCholesky,NA*NB))
 C
 CC     test print MO orbitals (this is transposed):
@@ -988,7 +994,7 @@ C      write(LOUT,'()')
      $           UAux,NBasis,0d0,UAONO,NBasis)
 
 c     CMOAO=transpose(CMOAO)
-      call chol_Rkab_OTF(MatFF, UAONO, a0, a1, UAONO, b0, b1,
+      call chol_gammcor_Rkab(MatFF, UAONO, a0, a1, UAONO, b0, b1,
      $                   MemMOTransfMB, CholeskyVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_ORCA)
 
@@ -1342,27 +1348,15 @@ C
      $ TwoEl,UAOMO,NInte1,NBasis,NInte2,NGem)
 C
 C     READ/WRITE THE ONE- AND TWO-ELECTRON INTEGRALS
-C     INTERFACED WITH MOLPRO (INTEGRALS ARE READ FROM FCIDUMP FILES)
+C     INTERFACED WITH MOLPRO
 C
       use types
       use sorter
       use tran
 C
-C     Cholesky modules
+C     Cholesky and THC modules
       use gammcor_integrals
 C
-Cc     use Cholesky_old  ! requires AOTWOSORT
-CC     Cholesky binary
-C      use Auto2eInterface
-C      use Cholesky, only : chol_CoulombMatrix, TCholeskyVecs,
-C     $              chol_Rkab_ExternalBinary, chol_MOTransf_TwoStep
-CC     Cholesky on-the-fly (OTF)
-C      use basis_sets
-C      use sys_definitions
-C      use CholeskyOTF_interface
-C      use CholeskyOTF, only : TCholeskyVecsOTF
-C      use Cholesky_driver, only : chol_Rkab_OTF, chol_F
-
       use abmat
       use read_external
       use timing
@@ -1399,11 +1393,17 @@ C     test AO-->NO
      $           JMOsr(NBasis,NBasis)
 C
 C
+C     Cholesky and THC
       integer :: NA, NB, a0, a1, b0, b1
       type(TCholeskyVecsOTF) :: CholeskyVecsOTF
       Type(TCholeskyVecsOTF) :: CholErfVecsOTF
       type(TSystem)  :: System
       type(TAOBasis) :: AOBasis
+C
+C     THC
+      integer :: NCholeskyTHC, NGridTHC
+      double precision, allocatable :: Xgp(:,:), Zgk(:,:)
+      double precision, allocatable :: Xga(:,:)
 C
       character(:),allocatable :: XYZPath
       character(:),allocatable :: BasisSetPath
@@ -1533,7 +1533,7 @@ Cc     Call chol_CoulombMatrix(CholeskyVecs,'AOTWOSORT',ICholeskyAccu)
        NCholesky=CholeskyVecs%NCholesky
 
 C     compute Cholesky vectors OTF
-      ElseIf(ICholeskyOTF==1) Then
+      ElseIf(ICholeskyOTF==1.or.ICholeskyTHC==1) Then
 
       Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
       Write(LOUT,'(1x,a)') 'Cholesky On-The-Fly'
@@ -1547,7 +1547,12 @@ C     compute Cholesky vectors OTF
 
       Call CholeskyOTF_ao_vecs(CholeskyVecsOTF,AOBasis,System,IUnits,
      $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu)
-      NCholesky = CholeskyVecsOTF%NVecs
+      NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
+
+C     set THC for FockOTF subroutine
+      NGridTHC=1
+      NCholeskyTHC=1
+      allocate(Xgp(NGridTHC,1),Zgk(NCholeskyTHC,1))
 
 C     generate LR-Cholesky integrals
 C     Note: full-range vectors are used to construct sr Coulomb
@@ -1562,11 +1567,34 @@ C           and for sr kernel (optional)
       Call CholeskyOTF_ao_vecs(CholErfVecsOTF,AOBasis,System,IUnits,
      $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu,
      $            Alpha)
-      NCholErf = CholErfVecsOTF%NVecs
+      NCholErf = CholErfVecsOTF%Chol2Data%NVecs
 
-      EndIf
+      EndIf ! IFunSR
 C
-      EndIf ! CholeskyBIN .OR. CholeskyOTF
+c      ElseIf(ICholeskyTHC==1) Then
+c
+c     Call auto2e_init()
+c
+c     XYZPath = "./input.inp"
+c     BasisSetPath = BasisSet
+c     SortAngularMomenta = .true.
+
+      if(ICholeskyTHC==1) stop "THC not ready yet in LdInteg!"
+
+      ! pq \in AO; kappa \in NChol; g \in THC
+      ! Rkpq(kappa,pq) = \sum_g X(g,p) X(g,q) Z(g,kappa)
+      Print*, 'ICholeskyBIN  = ', ICholeskyBIN
+      Print*, 'ICholeskyOTF  = ', ICholeskyOTF
+      Print*, 'ICholeskyAccu = ', ICholeskyAccu
+      Print*, 'THC Step1: generate X(g,p) and Z(g,k) in AO'
+      call thc_gammcor_XZ(Xgp, Zgk, AOBasis, System, ICholeskyAccu)
+
+      NGridTHC=size(Zgk,dim=1)
+      NCholeskyTHC=size(Zgk,dim=2)
+      Print*, 'NGridTHC     =',NGridTHC
+      Print*, 'NCholeskyTHC =',NCholeskyTHC
+C
+      EndIf ! CholeskyBIN .OR. CholeskyOTF .OR. CholeskyTHC
 C      EndIf ! IRes
       Call clock('2-electron ints',Tcpu,Twall)
 C
@@ -1856,7 +1884,7 @@ C          enddo
 CC
 C          end block
 
-           ElseIf(ICholeskyOTF==1) Then
+           ElseIf(ICholeskyOTF==1.or.ICholeskyTHC==1) Then
 C
            CSAOMO = transpose(UAux)
 C
@@ -1876,6 +1904,7 @@ C
            Call CholeskyOTF_Fock_MO_v2(work1,CholeskyVecsOTF,
      $                          AOBasis,System,Monomer,'MOLPRO',
      $                          CAOMO,CSAOMO,XKin,GammaF,
+     $                          Xgp,Zgk,NGridTHC,NCholeskyTHC,
      $                          MemType,MemVal,NInte1,NBasis,
      $                          IH0Test)
 C
@@ -1900,6 +1929,7 @@ c
            Call CholeskyOTF_Fock_MO_v2(work1,CholErfVecsOTF,
      $                            AOBasis,System,Monomer,'MOLPRO',
      $                            CAOMO,CSAOMO,XKin,GammaF,
+     $                            Xgp,Zgk,NGridTHC,NCholeskyTHC,
      $                            MemType,MemVal,NInte1,NBasis,
      $                            2,JMOlr)
 c    $                            IH0Test,JMOlr) ! IH0Test=2, use external H0
@@ -1926,9 +1956,10 @@ C         unpack Fock in MO (work1) to triangle
 C
       EndIf ! Fock (IFunSR)
 C
-C      Call FockGen(FockF,GammaAB,XKin,TwoEl,NInte1,NBasis,NInte2)
-C     transform Fock to MO if not CholeskyOTF
-      If(ICholeskyOTF==0) Call MatTr(FockF,UAux,NBasis)
+C     transform Fock to MO for regular and ICholeskyBIN
+      If(ICholesky==0.or.ICholeskyBIN==1) Then
+         Call MatTr(FockF,UAux,NBasis)
+      EndIf
 
       Call clock('generate Fock',Tcpu,Twall)
 CC     test Fock 2
@@ -2047,7 +2078,8 @@ C
       Call MultpM(UAOMO,URe,UAux,NBasis)
       Call MatTr(XKin,UAOMO,NBasis)
 C
-      If(ICholeskyOTF==1) Then
+      If(ICholeskyOTF==1.or.ICholeskyTHC==1) Then
+      print*, 'ICholeskyOTF in GET.AO.NO '
 C
 C     GET AO --> NO matrix
 C     CAOMO = C(AO,MO) ; URe = C(NO,MO)
@@ -2170,15 +2202,31 @@ C     cholesky OTF
       a1 = NBasis
       b0 = 1
       b1 = NBasis
-c     NCholesky = CholeskyVecsOTF%NVecs
       allocate(MatFF(NCholesky,NA*NB))
       UAux = CAONO
 C
-      call chol_Rkab_OTF(MatFF, UAux, a0, a1, UAux, b0, b1,
+      call chol_gammcor_Rkab(MatFF, UAux, a0, a1, UAux, b0, b1,
      $                   MemMOTransfMB, CholeskyVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_MOLPRO)
+      Call clock('chol_gammcor_Rkab',Tcpu,Twall)
+
+C     cholesky THC
+      ElseIf (ICholeskyTHC==1) Then
+      NCholesky = NCholeskyTHC
+      allocate(MatFF(NCholesky,NBasis**2))
+      allocate(Xga(NGridTHC,NBasis))
 C
-      EndIf ! Cholesky BIN / OTF
+      Print*, 'THC Step 2: NO transform Xgp to Xga'
+      Call thc_gammcor_Xga(Xga, Xgp, UAux,
+     $                     AOBasis, ORBITAL_ORDERING_MOLPRO)
+      Print*, 'XGa   = ', norm2(Xga)
+C
+      Print*, 'THC Step 3: assemble Cholesky vecs'
+      Call thc_gammcor_Rkab_2(MatFF, Xga, Xga, Zgk, NBasis, NBasis,
+     $                        NCholeskyTHC, NGridTHC)
+      Call clock('thc_gammcor_Rkab',Tcpu,Twall)
+C
+      EndIf ! Cholesky BIN / OTF / THC
 C
       Call clock('chol_NOTransf',Tcpu,Twall)
 C
@@ -2230,12 +2278,12 @@ C      call tran4_full(NBasis,UAux,UAux,'MO2ERF','AOERFSORT')
 C
       ElseIf (ICholesky==1) Then
 C     cholesky OTF
-      If (ICholeskyOTF==1) Then
+      If (ICholeskyOTF==1.or.ICholeskyTHC==1) Then
       UAux = CAONO
 C
       If (IFunSRKer==1) Then ! assemble FOFO for sr kernel
          Allocate(FOErf(NCholErf,NBasis*(num0+num1)))
-         Call Chol_Rkab_OTF(FOErf,UAux,1,NBasis,UAux,1,num0+num1,
+         Call Chol_gammcor_Rkab(FOErf,UAux,1,NBasis,UAux,1,num0+num1,
      $                      MemMOTransfMB, CholErfVecsOTF,
      $                      AOBasis, ORBITAL_ORDERING_MOLPRO)
 C
@@ -2245,7 +2293,7 @@ C
          Deallocate(FOErf)
 C
          Allocate(FOErf(NCholesky,NBasis*(num0+num1)))
-         Call Chol_Rkab_OTF(FOErf,UAux,1,NBasis,UAux,1,num0+num1,
+         Call Chol_gammcor_Rkab(FOErf,UAux,1,NBasis,UAux,1,num0+num1,
      $                      MemMOTransfMB, CholeskyVecsOTF,
      $                      AOBasis, ORBITAL_ORDERING_MOLPRO)
 C
@@ -2256,11 +2304,11 @@ C
       EndIf ! IFunSRKer
 C
       allocate(FFErf(NCholErf,NBasis**2))
-      Call Chol_Rkab_OTF(FFErf,UAux,1,NBasis,UAux,1,NBasis,
+      Call Chol_gammcor_Rkab(FFErf,UAux,1,NBasis,UAux,1,NBasis,
      $                   MemMOTransfMB, CholErfVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_MOLPRO)
       allocate(OOErf(NCholErf,(num0+num1)**2))
-      Call Chol_Rkab_OTF(OOErf,UAux,1,num0+num1,UAux,1,num0+num1,
+      Call Chol_gammcor_Rkab(OOErf,UAux,1,num0+num1,UAux,1,num0+num1,
      $                   MemMOTransfMB, CholErfVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_MOLPRO)
 C

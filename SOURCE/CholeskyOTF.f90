@@ -5,8 +5,10 @@ use tran
 use basis_sets
 use sys_definitions
 use Auto2eInterface
-use CholeskyOTF, only : TCholeskyVecsOTF
-use Cholesky_driver, only : chol_Rkpq_OTF, chol_Rkab_OTF, chol_F, chol_H0_mo
+use Cholesky_Gammcor, only : TCholeskyVecsOTF, &
+                             chol_gammcor_Rkpq, chol_gammcor_Rkab
+use THC_Gammcor, only : thc_gammcor_XZ, thc_gammcor_Xga, thc_gammcor_Rkab_2
+use OneElectronInts_Gammcor, only : ints1e_gammcor_H0_mo
 
 contains
 
@@ -21,8 +23,6 @@ subroutine CholeskyOTF_ao_vecs(CholeskyVecsOTF, &
 !use Cholesky, only: chol_CoulombMatrix, TCholeskyVecs, &
 !                    chol_Rkab_ExternalBinary, chol_MOTransf_TwoStep
 !use CholeskyOTF, only: chol_CoulombMatrix_OTF, &
-!                       TCholeskyVecsOTF, chol_MOTransf_TwoStep_OTF
-!use Cholesky_driver
 !use basis_sets
 !use sys_definitions
 !use chol_definitions
@@ -60,10 +60,10 @@ subroutine CholeskyOTF_ao_vecs(CholeskyVecsOTF, &
             ! Compute Cholesky vectors in AO basis
             !
             if (present(Omega)) then
-               print*, 'calling chol_Rkpq_OTF with omega = ',Omega
-               call chol_Rkpq_OTF(CholeskyVecsOTF, AOBasis, Accuracy, Omega)
+               print*, 'calling chol_gammcor_Rkpq with omega = ',Omega
+               call chol_gammcor_Rkpq(CholeskyVecsOTF, AOBasis, Accuracy, Omega)
             else
-               call chol_Rkpq_OTF(CholeskyVecsOTF, AOBasis, Accuracy)
+               call chol_gammcor_Rkpq(CholeskyVecsOTF, AOBasis, Accuracy)
             endif
 
 end subroutine CholeskyOTF_ao_vecs
@@ -155,13 +155,14 @@ elseif(MemType == 3) then   !GB
 endif
 
 if(present(J_mo) .and. present(K_mo)) then
-! generate also J_mo and K_mo
-   call chol_F(F_mo,H0_mo,D_mo,Cmat,0.5d0,CholeskyVecsOTF, &
-           AOBasis,System,ORBITAL_ORDERING_MOLPRO,MemMOTransfMB, &
-           J_mo,K_mo)
-else
-   call chol_F(F_mo,H0_mo,D_mo,Cmat,0.5d0,CholeskyVecsOTF, &
-               AOBasis,System,ORBITAL_ORDERING_MOLPRO,MemMOTransfMB)
+   stop "chol_F not available in gammcor-integrals!"
+!! generate also J_mo and K_mo
+!   call chol_F(F_mo,H0_mo,D_mo,Cmat,0.5d0,CholeskyVecsOTF, &
+!           AOBasis,System,ORBITAL_ORDERING_MOLPRO,MemMOTransfMB, &
+!           J_mo,K_mo)
+!else
+!   call chol_F(F_mo,H0_mo,D_mo,Cmat,0.5d0,CholeskyVecsOTF, &
+!               AOBasis,System,ORBITAL_ORDERING_MOLPRO,MemMOTransfMB)
 endif
 
 !print*, 'FockF w bazie MO -- new'
@@ -189,11 +190,12 @@ end subroutine CholeskyOTF_Fock_MO_v1
 subroutine CholeskyOTF_Fock_MO_v2(F_mo,CholeskyVecsOTF, &
                              AOBasis,System,Monomer,Source,&
                              Cmat,CSAO,H0in,GammaF,&
+                             Xgp,Zgk,NGridTHC,NCholeskyTHC,&
                              MemType,MemVal,NInte1,NBasis,&
                              IH0Test,J_mo,K_mo)
 !
 !     Generate Fock matrix (NBasis,NBasis) in MO basis
-!     from Cholesky OTF vectors
+!     from Cholesky OTF vectors in AO basis
 !     optional :: compute J and K matrices in MO basis
 !
 !     CAREFUL! Involves one 3-ind AO --> MO transformation
@@ -209,10 +211,12 @@ type(TSystem), intent(inout)       :: System
 integer,intent(in)          :: Monomer
 character(6),intent(in)     :: Source
 integer,intent(in)          :: NInte1,NBasis
+integer,intent(in)          :: NGridTHC,NCholeskyTHC
 integer,intent(in)          :: MemType,MemVal
 integer,intent(in)          :: IH0Test
 double precision,intent(in) :: H0in(NInte1),GammaF(NInte1)
 double precision,intent(in) :: Cmat(NBasis,NBasis),CSAO(NBasis,NBasis)
+double precision,intent(in) :: Xgp(NGridTHC,NBasis),Zgk(NGridTHC,NCholeskyTHC)
 
 double precision,intent(out)          :: F_mo(NBasis,NBasis)
 double precision,optional,intent(out) :: J_mo(NBasis,NBasis)
@@ -229,6 +233,7 @@ double precision :: H0_int(NBasis,NBasis)
 double precision :: Jtmp(NBasis,NBasis), Ktmp(NBasis,NBasis)
 double precision :: work(NBasis,NBasis)
 double precision, allocatable :: ints(:), matFFMO(:,:)
+double precision, allocatable :: Xga(:,:)
 double precision, parameter :: ThreshH0 = 1.0d-6
 
 integer,external :: IndSym
@@ -238,7 +243,7 @@ write(6,'(/,1x,a,i2)') "Construct Fock ver 2, monomer", Monomer
 !if(present(J_mo)) print*, 'J_mo present?'
 
 ! set dimensions
-NCholesky = CholeskyVecsOTF%NVecs
+NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
 
 ! set orbital ordering
 if(trim(Source)=='MOLPRO') then
@@ -283,7 +288,7 @@ elseif(MemType == 3) then   !GB
 endif
 
 ! obtain H0 and check if they match
-call chol_H0_mo(H0_int,Cmat,AOBasis,System,ORBITAL_ORDERING)
+call ints1e_gammcor_H0_mo(H0_int,Cmat,AOBasis,System,ORBITAL_ORDERING)
 
 if(IH0Test==1) then
    call CholeskyOTF_H0_test(H0_int,H0_mo,NBasis)
@@ -295,13 +300,28 @@ elseif(IH0Test==2) then
    write(6,'(1x,"Skipping H0 Test: use external H0")')
 endif
 
-!transform Cholesky vecs to MO
-allocate(MatFFMO(NCholesky,NBasis**2),ints(NBasis**2))
+!transform Cholesky or THC vecs to MO
+print*, 'NGridTHC     = ',NGridTHC
+print*, 'NCholeskyTHC = ',NCholeskyTHC
+if(NGridTHC .gt. 1) then
 
-call chol_Rkab_OTF(MatFFMO,Cmat,1,NBasis,Cmat,1,NBasis, &
-                   MemMOTransfMB,CholeskyVecsOTF, &
-                   AOBasis,ORBITAL_ORDERING)
+   Print*, 'THC in FockOTF: MO transform Xgp to Xga'
+   NCholesky = NCholeskyTHC
+   allocate(MatFFMO(NCholesky,NBasis**2),Xga(NGridTHC,NBasis))
+   Call thc_gammcor_Xga(Xga,Xgp,Cmat,AOBasis,ORBITAL_ORDERING)
+   Print*, 'THC in FockOTF: assemble Cholesky vecs'
+   Call thc_gammcor_Rkab_2(MatFFMO,Xga,Xga,Zgk,NBasis,NBasis,NCholeskyTHC,NGridTHC)
 
+else
+
+   allocate(MatFFMO(NCholesky,NBasis**2))
+   call chol_gammcor_Rkab(MatFFMO,Cmat,1,NBasis,Cmat,1,NBasis, &
+                      MemMOTransfMB,CholeskyVecsOTF, &
+                      AOBasis,ORBITAL_ORDERING)
+
+endif
+
+allocate(ints(NBasis**2))
 ! construct J and K in MO
 ints = 0d0
 Jtmp = 0d0
@@ -399,7 +419,7 @@ double precision,external :: ddot
 write(6,'(/,1x,a,i2)') "Construct Jmat from OTF Cholesky vectors"
 
 ! set dimensions
-NCholesky = CholeskyVecsOTF%NVecs
+NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
 
 ! set orbital ordering
 if(trim(Source)=='MOLPRO') then
@@ -444,7 +464,7 @@ elseif(MemType == 3) then   !GB
 endif
 
 ! obtain H0 and check if they match
-call chol_H0_mo(H0_int,Cmat,AOBasis,System,ORBITAL_ORDERING)
+call ints1e_gammcor_H0_mo(H0_int,Cmat,AOBasis,System,ORBITAL_ORDERING)
 
 if(IH0Test==1) then
    call CholeskyOTF_H0_test(H0_int,H0_mo,NBasis)
@@ -459,7 +479,7 @@ endif
 !transform Cholesky vecs to MO
 allocate(MatFFMO(NCholesky,NBasis**2),ints(NBasis**2))
 
-call chol_Rkab_OTF(MatFFMO,Cmat,1,NBasis,Cmat,1,NBasis, &
+call chol_gammcor_Rkab(MatFFMO,Cmat,1,NBasis,Cmat,1,NBasis, &
                    MemMOTransfMB,CholeskyVecsOTF, &
                    AOBasis,ORBITAL_ORDERING)
 

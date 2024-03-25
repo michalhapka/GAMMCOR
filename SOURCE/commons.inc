@@ -1,7 +1,8 @@
       Common/MISCFL/ XELE,IFun,IFunSR,IFunSRKer,NELE,IRes,INO,IPrint,
      $ IInteg,IAO,IGVB,IFreeze,ILoc,NInActOrb,NActOrb,NVirtOrb,
      $ ISAPT,IWarn,ITwoEl,ITrpl,
-     $ ICholesky,ICholeskyBIN,ICholeskyOTF,ICholeskyAccu,MemVal,MemType,
+     $ ICholesky,ICholeskyBIN,ICholeskyOTF,ICholeskyTHC,
+     $ ICholeskyAccu,MemVal,MemType,
      $ IH0test,IUnits,InternalGrid,IGridType
       Common/INTF/ IDALTON,IMOLPRO,ITREXIO,
      $ IOrbOrder

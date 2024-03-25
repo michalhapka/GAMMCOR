@@ -59,6 +59,7 @@ integer, parameter :: TWOMO_FFFF   = 2
 integer, parameter :: TWOMO_FOFO   = 3
 
 integer, parameter :: FLAG_CHOLESKY = 0
+integer, parameter :: FLAG_THC      = 0
 integer, parameter :: FLAG_CHOLESKY_BIN   = 0
 integer, parameter :: FLAG_CHOLESKY_OTF   = 0
 integer, parameter :: FLAG_H0TEST         = 1
@@ -294,6 +295,7 @@ end type SystemBlock
 type CholeskyBlock
 
       integer :: Cholesky     = FLAG_CHOLESKY
+      integer :: CholeskyTHC  = FLAG_THC
       integer :: CholeskyBIN  = FLAG_CHOLESKY_BIN
       integer :: CholeskyOTF  = FLAG_CHOLESKY_OTF
       integer :: CholeskyAccu = CHOL_ACCU_DEFAULT
@@ -335,6 +337,7 @@ type FlagsData
      integer :: IOrbRelax = FLAG_ORBRELAX
      integer :: IOrbIncl  = FLAG_ORBINCL
      integer :: ICholesky     = FLAG_CHOLESKY
+     integer :: ICholeskyTHC  = FLAG_THC
      integer :: ICholeskyBIN  = FLAG_CHOLESKY_BIN
      integer :: ICholeskyOTF  = FLAG_CHOLESKY_OTF
      integer :: ICholeskyAccu = CHOL_ACCU_DEFAULT

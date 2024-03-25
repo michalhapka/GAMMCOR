@@ -131,10 +131,11 @@ else
   ! set TwoEl type
    Flags%ITwoEl = Input%CalcParams%TwoMoInt
 
-  ! set Cholesky decomposition
+  ! set Cholesky decomposition and THC (tensor hypercontraction)
    Flags%ICholesky     = Input%CholeskyParams%Cholesky
    Flags%ICholeskyBIN  = Input%CholeskyParams%CholeskyBIN
    Flags%ICholeskyOTF  = Input%CholeskyParams%CholeskyOTF
+   Flags%ICholeskyTHC  = Input%CholeskyParams%CholeskyTHC
    Flags%ICholeskyAccu = Input%CholeskyParams%CholeskyAccu
    Flags%IH0Test       = Input%CholeskyParams%H0Test
 

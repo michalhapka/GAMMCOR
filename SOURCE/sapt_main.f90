@@ -347,10 +347,10 @@ if(Flags%ICholeskyOTF==1) then
 
    if (.not.SAPT%SameOm) then
 
-      deallocate(CholErfVecsOTF%R)
-      deallocate(CholErfVecsOTF%ShellPairs)
-      deallocate(CholErfVecsOTF%ShellPairLoc,CholErfVecsOTF%ShellPairDim)
-      deallocate(CholErfVecsOTF%SubsetDim,CholErfVecsOTF%SubsetBounds)
+      deallocate(CholErfVecsOTF%Rkpq)
+      deallocate(CholErfVecsOTF%Chol2Data%ShellPairs)
+      deallocate(CholErfVecsOTF%Chol2Data%ShellPairLoc,CholErfVecsOTF%Chol2Data%ShellPairDim)
+      deallocate(CholErfVecsOTF%Chol2Data%SubsetDim,CholErfVecsOTF%Chol2Data%SubsetBounds)
 
       call sapt_erfint_OTF(Flags,SAPT%monB,NBasis,AOBasis,CholErfVecsOTF)
    elseif (SAPT%SameOm) then
@@ -360,10 +360,10 @@ if(Flags%ICholeskyOTF==1) then
    call chol_FOERF_AO2NO_OTF(SAPT,SAPT%monB,CholErfVecsOTF,AOBasis,Flags,NBasis)
    call chol_FFERF_AO2NO_OTF(Flags,SAPT%monB,CholErfVecsOTF,AOBasis,NBasis)
  
-   deallocate(CholErfVecsOTF%R)
-   deallocate(CholErfVecsOTF%ShellPairs)
-   deallocate(CholErfVecsOTF%ShellPairLoc,CholErfVecsOTF%ShellPairDim)
-   deallocate(CholErfVecsOTF%SubsetDim,CholErfVecsOTF%SubsetBounds)
+   deallocate(CholErfVecsOTF%Rkpq)
+   deallocate(CholErfVecsOTF%Chol2Data%ShellPairs)
+   deallocate(CholErfVecsOTF%Chol2Data%ShellPairLoc,CholErfVecsOTF%Chol2Data%ShellPairDim)
+   deallocate(CholErfVecsOTF%Chol2Data%SubsetDim,CholErfVecsOTF%Chol2Data%SubsetBounds)
 
    ! temp solution: assemble FOFOERF files
    call chol_fofo_batch(SAPT%monB%num0+SAPT%monB%num1,SAPT%monB%FOErf, &
@@ -851,7 +851,7 @@ if(Flags%ISERPA==0) then
      if(Flags%ICholeskyOTF==1) then
         call chol_FFXY_AB_AO2NO_OTF(Flags,A,B,CholeskyVecsOTF,AOBasis,NBasis,'AB')
         ! deallocate AO cholesky vectors
-        deallocate(CholeskyVecsOTF%R)
+        deallocate(CholeskyVecsOTF%Rkpq)
         !call chol_FFXY_AB_AO2NO_OTF(Flags,A,B,CholeskyVecsOTF,AOBasis,NBasis,'BA')
         ! test prints 
         !if(allocated(A%FF))   print*, 'A%FF   is here!'

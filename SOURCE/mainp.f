@@ -84,6 +84,7 @@ C
       ICholesky     = Flags%ICholesky
       ICholeskyBIN  = Flags%ICholeskyBIN
       ICholeskyOTF  = Flags%ICholeskyOTF
+      ICholeskyTHC  = Flags%ICholeskyTHC
       ICholeskyAccu = Flags%ICholeskyAccu
       IH0test       = Flags%IH0test
 C

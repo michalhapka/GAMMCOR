@@ -282,6 +282,12 @@ subroutine read_block_cholesky(CholeskyParams, line)
               CholeskyParams%Cholesky    = 1
               CholeskyParams%CholeskyBIN = 0
               CholeskyParams%CholeskyOTF = 1
+           elseif (uppercase(val) == "THC".or. &
+                   uppercase(val) == "TENSORHYPERCONTRACTION") then
+              CholeskyParams%CholeskyTHC = 1
+              CholeskyParams%Cholesky    = 1 ! for testing
+              CholeskyParams%CholeskyBIN = 0 ! for testing
+              CholeskyParams%CholeskyOTF = 0 ! for testing
            else
               stop "Unknown keyword for Cholesky!"
            endif
