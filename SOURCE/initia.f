@@ -1533,7 +1533,7 @@ Cc     Call chol_CoulombMatrix(CholeskyVecs,'AOTWOSORT',ICholeskyAccu)
        NCholesky=CholeskyVecs%NCholesky
 
 C     compute Cholesky vectors OTF
-      ElseIf(ICholeskyOTF==1.or.ICholeskyTHC==1) Then
+      ElseIf(ICholeskyOTF==1) Then
 
       Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
       Write(LOUT,'(1x,a)') 'Cholesky On-The-Fly'
@@ -1571,24 +1571,20 @@ C           and for sr kernel (optional)
 
       EndIf ! IFunSR
 C
-c      ElseIf(ICholeskyTHC==1) Then
+      ElseIf(ICholeskyTHC==1) Then
 c
-c     Call auto2e_init()
+      Call auto2e_init()
 c
-c     XYZPath = "./input.inp"
-c     BasisSetPath = BasisSet
-c     SortAngularMomenta = .true.
-
-      if(ICholeskyTHC==1) stop "THC not ready yet in LdInteg!"
+      XYZPath = "./input.inp"
+      BasisSetPath = BasisSet
+      SortAngularMomenta = .true.
 
       ! pq \in AO; kappa \in NChol; g \in THC
       ! Rkpq(kappa,pq) = \sum_g X(g,p) X(g,q) Z(g,kappa)
-      Print*, 'ICholeskyBIN  = ', ICholeskyBIN
-      Print*, 'ICholeskyOTF  = ', ICholeskyOTF
-      Print*, 'ICholeskyAccu = ', ICholeskyAccu
       Print*, 'THC Step1: generate X(g,p) and Z(g,k) in AO'
-      call thc_gammcor_XZ(Xgp, Zgk, AOBasis, System, ICholeskyAccu)
-
+      Call THC_ao_vecs(Xgp,Zgk,AOBasis,System,IUnits,
+     $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu)
+c
       NGridTHC=size(Zgk,dim=1)
       NCholeskyTHC=size(Zgk,dim=2)
       Print*, 'NGridTHC     =',NGridTHC

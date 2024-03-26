@@ -68,6 +68,46 @@ subroutine CholeskyOTF_ao_vecs(CholeskyVecsOTF, &
 
 end subroutine CholeskyOTF_ao_vecs
 
+subroutine THC_ao_vecs(Xgp, Zgk, &
+                       AOBasis,System,Units,XYZPath,BasisSetPath, &
+                       SortAngularMomenta, Accuracy)
+
+            implicit none
+
+            double precision, dimension(:, :), allocatable, intent(out) :: Xgp
+            double precision, dimension(:, :), allocatable, intent(out) :: Zgk
+            type(TAOBasis), intent(out)    :: AOBasis
+            type(TSystem), intent(out)     :: System
+            character(*), intent(in)       :: XYZPath
+            character(*), intent(in)       :: BasisSetPath
+            logical, intent(in)            :: SortAngularMomenta
+            integer, intent(in)            :: Units
+            integer, intent(in)            :: Accuracy
+
+            logical, parameter :: SpherAO = .true.
+
+            ! Initialize the two-electron intergrals library
+            !
+            call auto2e_init()
+            !
+            ! Read the XYZ coordinates and atom types
+            !
+            call sys_Read_XYZ(System, XYZPath,Units)
+            !
+            call sys_Init(System,SYS_TOTAL)
+            !
+            ! Read the basis set parameters from an EMSL text file
+            ! (GAMESS-US format, no need for any edits, just download it straight from the website)
+            !
+            call basis_NewAOBasis(AOBasis, System, &
+                            BasisSetPath, SpherAO, SortAngularMomenta)
+            !
+            ! Compute THC vectors in AO basis
+            !
+            call thc_gammcor_XZ(Xgp, Zgk, AOBasis, System, Accuracy)
+
+end subroutine THC_ao_vecs
+
 subroutine CholeskyOTF_Fock_MO_v1(F_mo,CholeskyVecsOTF, &
                            AOBasis,System,Monomer, & 
                            Cmat,CSAO,H0in,GammaF,  &
