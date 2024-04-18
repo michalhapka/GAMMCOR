@@ -23,7 +23,8 @@ C
       integer :: ione,NBas(8),NSymBas(8),NSymOrb(8),nrhf(8),ioprhf
       integer(8) :: MemSrtSize
       logical :: exione,ex
-      double precision, allocatable :: TMPMO(:,:)
+      double precision, allocatable :: VsrKS(:,:),Jsr(:,:)
+      double precision, allocatable :: Work(:,:),WorkTr(:)
 C
       Character*60 Line
       Character*30 Line1
@@ -54,16 +55,21 @@ C
 C
 C     READ UMOAO FROM SIRIUS.RST
 C
-      inquire(file='SIRIUS.RST',EXIST=ex)
-      if(ex) then
-      open(newunit=iunit,file='SIRIUS.RST',status='OLD',
-     $    access='SEQUENTIAL',form='UNFORMATTED')
-      call readlabel(iunit,'BASINFO ')
-      read (iunit) NSym,NSymBas,NSymOrb,nrhf,ioprhf
-      close(iunit)
-      else
-      stop 'WARNING: SIRIUS.RST NOT FOUND!'
-      endif
+C     mh 18.04.24: replaced with read_sym_dalton
+C
+C      inquire(file='SIRIUS.RST',EXIST=ex)
+C      if(ex) then
+C      open(newunit=iunit,file='SIRIUS.RST',status='OLD',
+C     $    access='SEQUENTIAL',form='UNFORMATTED')
+C      call readlabel(iunit,'BASINFO ')
+C      read (iunit) NSym,NSymBas,NSymOrb,nrhf,ioprhf
+C      close(iunit)
+C      else
+C      stop 'WARNING: SIRIUS.RST NOT FOUND!'
+C      endif
+C
+      Call read_sym_dalton(NSym,NSymBas,NSymOrb,'SIRIUS.RST','BASINFO ')
+      Write(LOUT,'(1x,a,i3/)') 'Point Group = ', NSym
 C
       Call read_mo_dalton(UAux,NBasis,NSym,NSymBas,NSymOrb,
      $            'SIRIUS.RST','DALTON.MOPUN')
@@ -102,6 +108,42 @@ C
       EndDo
       EndDo
 C
+C     Add short-range Kohn-Sham potential
+C       --> this is done in RunACCASLR
+C           with VHsr = VHsr + VKSsr generated
+C           inside GammCor
+C
+C      If (IFunSR.eq.4) Then ! PostCAS
+C       allocate(VsrKS(NBasis,NBasis),Jsr(NBasis,NBasis))
+C       allocate(Work(NBasis,NBasis),WorkTr(NINte1))
+C       Call read_vKS_dalton(VsrKS,'dftSRfile.dat',NBasis)
+C       Call read_Jsr_dalton(Jsr,'dftSRfile.dat',NBasis)
+CC
+CC       Print*, 'VsrKS(AO) Dalton'
+CC       do i=1,NBasis
+CC          write(LOUT,'(*(f13.8))') (VsrKS(i,j),j=1,NBasis)
+CC       enddo
+CC       Print*, 'Jsr(AO) Dalton'
+CC       do i=1,NBasis
+CC          write(LOUT,'(*(f13.8))') (Jsr(i,j),j=1,NBasis)
+CC       enddo
+CC
+C       write(LOUT,'(/1x,a)') 'SR KS potential read from dftSRfile.dat'
+C       write(LOUT,'(1x,a)')  'SR Coulomb ints read from dftSRfile.dat'
+C       VsrKS = VsrKS + Jsr
+C       Call tran2MO(VsrKS,UAux,UAux,work,NBasis)
+C       Print*, 'VHsr (NO) Dalton =',norm2(work)
+C       do i=1,NBasis
+C          write(6,'(*(f13.8))') (work(i,j),j=1,NBasis)
+C       enddo
+C       Call sq_to_triang2(work,WorkTr,NBasis)
+C       XKin = XKin + WorkTr
+C       print*, 'XOne  =', norm2(XKin)
+C       deallocate(WorkTr)
+C       deallocate(Work,Jsr,VsrKS)
+C      EndIf
+C
+C
 C     GET 2-EL NO INTEGRALS AND CICoef
 C
       If(ITwoEl.Eq.1) Then
@@ -109,14 +151,21 @@ C
       Else
 
       If(ICholesky==0) Then
+C     memory allocation for sorter
       MemSrtSize=MemVal*1024_8**MemType
-      Call readtwoint(NBasis,1,'AOTWOINT','AOTWOSORT',MemSrtSize)
-      ElseIf(ICholesky==1) Then
-       Call chol_CoulombMatrix(CholeskyVecs,NBasis,'AOTWOINT',1,
-     &                         ICholeskyAccu)
+      If (IFunSR.Eq.0.Or.IFunSR.Eq.3.Or.IFunSR.Eq.5) Then
+         Call readtwoint(NBasis,1,'AOTWOINT','AOTWOSORT',MemSrtSize)
+      ElseIf(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4) Then
+         Call readtwoint(NBasis,1,'AOERFINT','AOERFSORT',MemSrtSize)
+      EndIf ! IFunSR
+      ElseIf(ICholeskyBIN==1) Then
+         Call chol_CoulombMatrix(CholeskyVecs,NBasis,'AOTWOINT',1,
+     &                           ICholeskyAccu)
       NCholesky=CholeskyVecs%NCholesky
-      EndIf
-      EndIf
+      ElseIf(ICholeskyOTF==1) Then
+         Stop "CholeskyOTF not ready in ReadDAL!"
+      EndIf ! ICholesky
+      EndIf ! ITwoEl
 C
       If(ICASSCF.Eq.0) Then
 C
@@ -193,7 +242,9 @@ C
 C     TRANSFORM J AND K
       UAux=transpose(UMOAO)
 C
+C
       If (ICholesky==0) Then
+      If (IFunSR.Eq.0.Or.IFunSR.Eq.3.Or.IFunSR.Eq.5) Then
 C
       Call tran4_gen(NBasis,
      $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),
@@ -207,6 +258,22 @@ C
      $        NBasis,UAux,
      $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),
      $        'FOFO','AOTWOSORT')
+      Else ! IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4
+C
+      Call tran4_gen(NBasis,
+     $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),
+     $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),
+     $        NBasis,UAux,
+     $        NBasis,UAux,
+     $        'FFOOERF','AOERFSORT')
+      Call tran4_gen(NBasis,
+     $        NBasis,UAux,
+     $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),
+     $        NBasis,UAux,
+     $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),
+     $        'FOFOERF','AOERFSORT')
+C
+      EndIf ! IFunSR for ICholesky=0
 C
       ElseIf (ICholesky==1) Then
 C
@@ -1750,6 +1817,11 @@ C
 C
       Else
 C
+c     Print*, 'UAOMO before reording cl/act/vitr(?)'
+c     do j=1,NBasis
+c        write(LOUT,'(*(f13.8))') (UAOMO(i,j),i=1,NBasis)
+c     enddo
+C
 C     REORDER MOs TO NO SYMMETRY
       Do I=1,NBasis
       Do J=1,NBasis
@@ -1887,6 +1959,18 @@ C
 C          load C(AO,MO) - already w/o symmety in MOs
            Call read_caomo_molpro(CAOMO,SAO,itsoao,jtsoao,
      &                           'MOLPRO.MOPUN','CASORBAO',NBasis)
+C           Do I=1,NBasis
+C              print*, 'i,it,jt',i,itsoao(i),jtsoao(i)
+C           EndDo
+C           Print*, 'CSAOMO w symmetry'
+C           do j=1,NBasis
+C              write(LOUT,'(*(f13.8))') (CSAOMO(i,j),i=1,NBasis)
+C           enddo
+C
+C           Print*, 'CAOMO w/o symmetry'
+C           do j=1,NBasis
+C              write(LOUT,'(*(f13.8))') (CAOMO(i,j),i=1,NBasis)
+C           enddo
 C
 C     V1 uses slow Fock subroutine in OTF module which has to be improved
 C
@@ -1897,6 +1981,8 @@ C     $                          MemType,MemVal,NInte1,NBasis,
 C     $                          JMO,KMO)
 C
            Monomer = 3 ! SYS_TOTAL in System
+c          IH0Test=0
+c          Print*, 'IH0Test =',IH0Test
            Call CholeskyOTF_Fock_MO_v2(work1,CholeskyVecsOTF,
      $                          AOBasis,System,Monomer,'MOLPRO',
      $                          CAOMO,CSAOMO,XKin,GammaF,

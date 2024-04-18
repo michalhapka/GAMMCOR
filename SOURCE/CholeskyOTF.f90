@@ -8,7 +8,7 @@ use Auto2eInterface
 use Cholesky_Gammcor, only : TCholeskyVecsOTF, &
                              chol_gammcor_Rkpq, chol_gammcor_Rkab
 use THC_Gammcor, only : thc_gammcor_XZ, thc_gammcor_Xga, thc_gammcor_Rkab_2
-use OneElectronInts_Gammcor, only : ints1e_gammcor_H0_mo
+use OneElectronInts_Gammcor, only : ints1e_gammcor_H0_mo, ints1e_gammcor_H0_extao
 
 contains
 
@@ -327,6 +327,17 @@ elseif(MemType == 3) then   !GB
    MemMOTransfMB = MemVal * 1024_8
 endif
 
+!block
+!double precision :: H0ao(Nbasis,NBasis)
+!
+!call ints1e_gammcor_H0_extao(H0ao,AOBasis,System,Orbital_Ordering)
+!print*, 'H0 ao symmetry'
+!do i=1,NBasis
+!   write(LOUT,'(*(f13.8))') (H0ao(i,j),j=1,NBasis)
+!enddo
+!
+!end block
+
 ! obtain H0 and check if they match
 call ints1e_gammcor_H0_mo(H0_int,Cmat,AOBasis,System,ORBITAL_ORDERING)
 
@@ -565,12 +576,12 @@ if(abs(val1)-abs(val2).gt.ThreshH0) then
   print*, 'Threshold = ',ThreshH0
   print*, 'Check for errors in geometry / basis set?'
 
-  write(6,*) 'H0/MO (internal)'
+  write(6,*) 'H0/MO (internal)', norm2(H0_int)
   do j=1,NBasis
      write(LOUT,'(*(f13.8))') (H0_int(i,j),i=1,NBasis)
   enddo
 
-  print*, 'H0/MO (external) '
+  print*, 'H0/MO (external) ', norm2(H0_mo)
   do j=1,NBasis
      write(LOUT,'(*(f13.8))') (H0_mo(i,j),i=1,NBasis)
   enddo

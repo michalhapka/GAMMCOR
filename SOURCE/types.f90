@@ -324,7 +324,8 @@ type FlagsData
      integer :: InterfaceType = INTER_TYPE_DAL
      ! mainp.f
      integer :: IDALTON = 1
-     integer :: iORCA   = 0
+     integer :: IMOLPRO = 0
+     integer :: IORCA   = 0
      integer :: IRes    = 0
      integer :: IAO     = 0
      integer :: INO     = 0

@@ -1539,6 +1539,34 @@ endif
 
 end subroutine read_orbinf_dalton
 
+subroutine read_sym_dalton(NSym,NSymBas,NSymOrb,infile,text)
+!
+! Purpose  : read irreps of orbitals (NSymMO)
+!            and how many orbitals in each irrep (nbas)
+! Requires : SIRIUS.RST
+!
+implicit none
+
+character(*),intent(in) :: infile,text
+integer,intent(out) :: nsym
+integer,intent(out) :: NSymBas(8),NSymOrb(8)
+
+integer :: iunit
+integer :: nrhf(8),ioprhf
+logical :: ex
+
+inquire(file='SIRIUS.RST',EXIST=ex)
+if(ex) then
+   open(newunit=iunit,file=infile,status='OLD',access='SEQUENTIAL',form='UNFORMATTED')
+   call readlabel(iunit,text)
+!  call readlabel(iunit,'BASINFO ')
+   read (iunit) NSym,NSymBas,NSymOrb,nrhf,ioprhf
+   close(iunit)
+else
+   stop 'WARNING: SIRIUS.RST NOT FOUND!'
+endif
+
+end subroutine read_sym_dalton
 
 subroutine read_syminf_dalton(ANSym,BNSym,BUcen,ANSymOrb,BNSymOrb,ANMonBas,BNMonBas)
 !

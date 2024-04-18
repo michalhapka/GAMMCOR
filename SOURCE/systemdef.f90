@@ -176,6 +176,7 @@ else
 
   case(INTER_TYPE_MOL)
      Flags%IDALTON = 0
+     Flags%IMOLPRO = 1
      Flags%IAO     = 1
      Flags%INO     = 1
      !Flags%NoSym   = Input%CalcParams%SymType

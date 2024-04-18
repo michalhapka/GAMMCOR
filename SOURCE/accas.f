@@ -675,8 +675,11 @@ C     LOCAL ARRAYS
 C
       Integer(8) :: MemSrtSize
       Integer :: jtsoao(NBasis)
+      Integer :: NSymBas(8),NSymOrb(8)
 C
-      Logical :: doGGA
+      Logical :: doGGA, doGGAdal
+C
+      Character(*),Parameter :: griddalfile='dftgrid.dat'
 C
       Dimension
      $ ABPLUS(NDimX*NDimX),ABMIN(NDimX*NDimX),
@@ -724,10 +727,23 @@ C
 C
       If (InternalGrid==0) then
 C
+      If (IMOLPRO == 1) then
       Write(LOUT,'(/1x,a)') 'MOLPRO GRID '
 C
 C     read no of grid pts
       Call molprogrid0(NGrid,NBasis)
+C
+      Else If (IDALTON == 1) then
+      Write(LOUT,'(/1x,a)') 'DALTON GRID '
+C     read no of grid pts
+      Call daltongrid0(NGrid,griddalfile,doGGAdal,NBasis)
+      if (doGGA/=doGGAdal) then
+         print*, 'doGGA GammCor =', doGGA
+         print*, 'doGGA Dalton  =', doGGAdal
+         stop "error in RunACCASLR!"
+      endif
+C
+      EndIf
 C
       Write(6,'(1X,"The number of Grid Points = ",I8)')
      $ NGrid
@@ -751,8 +767,27 @@ C
          OrbZGrid => PhiLDa
       EndIf
 C
+      If (IMOLPRO == 1) Then
       Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
      $                WGrid,UNOAO,NGrid,NBasis)
+      ElseIf (IDALTON == 1) Then
+      UAux=transpose(UNOAO)
+      If (doGGA) then
+         write(lout,'(/1x,a)') 'GRID TYPE: GGA'
+         call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       WGrid,NGrid,griddalfile,NBasis)
+         call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       UAux,0,NGrid,NBasis,.false.)
+      Else
+         write(lout,'(/1x,a)') 'GRID TYPE: LDA'
+         call daltongrid_lda(OrbGrid,WGrid,NGrid,griddalfile,NBasis)
+         call daltongrid_tran_lda(OrbGrid,UAux,0,NGrid,NBasis,.false.)
+      EndIf ! doGGA
+      print*, 'OrbGrid  =',norm2(OrbGrid)
+      print*, 'OrbXGrid =',norm2(OrbXGrid)
+      print*, 'OrbYGrid =',norm2(OrbYGrid)
+      print*, 'OrbZGrid =',norm2(OrbZGrid)
+      EndIf ! Interface
 C
       ElseIf (InternalGrid==1) then
 
@@ -797,10 +832,23 @@ C      NumOSym(I)=X
 C      EndDo
 C      Close(10)
 C
+      If (IMOLPRO == 1) Then
       Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
+C      Print*, 'NumOSym Molpro'
+C      Do I=1,15
+C         Print*, I,NumOSym(I)
+C      EndDo
+      ElseIf (IDALTON ==1) Then
+      Call read_sym_dalton(NSym,NSymBas,NSymOrb,'SIRIUS.RST','BASINFO ')
+c      Print*, 'NSymBas, NSymOrb Dalton'
+      NumOSym=0
+      NumOSym(1:NSym)=NSymOrb(1:NSym)
+c     If (NSym.gt.1) stop "Dalton with Symmetry in RunACCASLR!"
+      EndIf
       MxSym=NSym
 C
       If (ICholesky==1) Then
+         if (IDALTON==1) stop "Finish Dalton+Chol in RunACCASLR!"
          Call read_aosao_map_molpro(jtsoao,
      $              'MOLPRO.MOPUN','CASORBAO',NBasis)
          If (InternalGrid==0.and.MxSym>1.and.IFunSRKer==1) Then
@@ -864,11 +912,15 @@ C      FName(K:K+10)='.reg.integ'
 C      Call Int2_AO(TwoEl2,NumOSym,MultpC,FName,NInte1,NInte2,NBasis)
       MemSrtSize=MemVal*1024_8**MemType
       If (ICholesky==0) Then
-      Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
+      If (IMOLPRO==1) Then
+         Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
+      ElseIf (IDALTON==1) Then
+         Call readtwoint(NBasis,1,'AOTWOINT','AOTWOSORT',MemSrtSize)
+      EndIf
       If(ITwoEl.Eq.1) Call LoadSaptTwoEl(3,TwoEl2,NBasis,NInte2)
 C
       If(ITwoEl.Eq.1) Then
-      Write(6,'(" Transforming two-electron erf integrals ...")')
+      Write(6,'(" Transforming full two-electron integrals ...")')
       Call TwoNO1(TwoEl2,UNOAO,NBasis,NInte2)
 C
       ElseIf(ITwoEl.Eq.3) Then
@@ -920,14 +972,14 @@ C
 C     calculate short-range Coulomb matrix in AO
       If (ICholesky==0) Then
          Call PotCoul_mithap(VCoul,Work2,.true.,'AOERFSORT',NBasis)
-c         block
-c         double precision :: JMOsr(NBasis,NBasis)
-c         call triang_to_sq2(VCoul,JMOsr,NBasis)
-c         Print*, 'JMOsr in AO basis =',norm2(JMOsr)
-c         do j=1,NBasis
-c            write(6,'(*(f13.8))') (JMOsr(i,j),i=1,NBasis)
-c         enddo
-c         end block
+C         block
+C         double precision :: JMOsr(NBasis,NBasis)
+C         call triang_to_sq2(VCoul,JMOsr,NBasis)
+C         Print*, 'JMOsr in AO basis =',norm2(JMOsr)
+C         do j=1,NBasis
+C            write(6,'(*(f13.8))') (JMOsr(i,j),i=1,NBasis)
+C         enddo
+C         end block
       ElseIf (ICholesky==1) Then
          ! for Cholesky, Jmat(sr) is read from disk
          Allocate(Jmat(NBasis,NBasis))
@@ -943,10 +995,10 @@ c            write(6,'(*(f13.8))') (Jmat(i,j),i=1,NBasis)
 c         enddo
          Deallocate(Jmat)
       EndIf
-      Print*, 'UNOAO =',norm2(UNOAO)
-      do j=1,NBasis
-         write(6,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
-      enddo
+C      Print*, 'UNOAO =',norm2(UNOAO)
+C      do j=1,NBasis
+C         write(6,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
+C      enddo
 C
       Print*, 'VCoul',norm2(VCoul)
       Call EPotSR(EnSR,EnHSR,VSR,Occ,URe,UNOAO,.false.,
@@ -955,6 +1007,18 @@ C
 C     $        NSymNO,VCoul,TwoEl2,TwoNO,Alpha,IFunSR,
      $        NGrid,NInte1,NInte2,NBasis)
 C
+      If (IDALTON==1) Then
+        Print*, 'Dalton: add VHsr[rho] contribution...'
+        XOne = XOne + VSR
+      EndIf
+C      block
+C        double precision :: VHsr(NBasis,NBasis)
+C        call triang_to_sq2(VSR,VHsr,NBasis)
+C        Print*, 'VHsr (NO) GammCor =',norm2(VHsr)
+C        do i=1,NBasis
+C           write(6,'(*(f13.8))') (VHsr(i,j),j=1,NBasis)
+C        enddo
+C      end block
 C      Call EPotSR(EnSR,EnHSR,VSR,Occ,URe,OrbGrid,OrbXGrid,OrbYGrid,
 C     $ OrbZGrid,WGrid,NSymNO,TwoEl2,TwoNO,NGrid,NInte1,NInte2,NBasis)
       Write(6,'(" SR xcH Energy",F15.8)')EnSR
