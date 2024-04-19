@@ -177,6 +177,11 @@ C     IFlRESPONSE = 1 : compute polarizability tensor for a given frequency Freq
 C
       IFlRESPONSE=Flags%IFlRESPONSE
 C
+C     IFlCorrMD = 1 : compute Ecorr,MD for SR-AC0
+C
+      IFlCorrMD = Flags%ICorrMD
+      Print*, 'IFlCorrMD =', IFlCorrMD
+C
 C     *************************************************************************
 C
 C     SELECT A LONG-RANGE DMFT FUNCTIONAL

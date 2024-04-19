@@ -34,7 +34,7 @@ C
 C     START TIMING FOR AC PROCEDURES
 C
       call clock('START',Tcpu,Twall)
-      Print*, 'BasisSet = ', BasisSet
+      If (ICholeskyOTF==1) Write(6,'(1x," BasisSet = ", A)') BasisSet
 C
 C     CONSTRUCT LOOK-UP TABLES
 C
@@ -182,6 +182,14 @@ C
 
       call clock('AC  model',Tcpu,Twall)
 C
+C     Corr,md correlation energy with local mu, only available with Cholesky
+C
+      If (IFlCorrMD.Eq.1) Then
+      If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
+      Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
+      EndIf
+C
       EndIf
 C
       ElseIf(IFunSR.Eq.3) Then
@@ -280,7 +288,7 @@ C
       If (ICholesky .Eq. 0) Then
       Call delfile('FFOO')
       Call delfile('FOFO')
-      ElseIf (ICholesky .Eq. 1) Then
+      ElseIf (ICholesky.Eq.1 .and. IFlCorrMD.Eq.0) Then
       Call delfile('cholvecs')
       EndIf
       EndIf
@@ -2895,6 +2903,656 @@ C
 C
       Return
       End
+
+*Deck LOC_MU_CHOL_v2
+      Subroutine LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+C
+      use timing
+C
+C     DGEMM version
+C     CAREFUL : memory requirements could still be improved...
+C
+C     RETURNS SORT-RANGE CORRELATION ENERGY WITH SR-PBE ONTOP CORRELATION FUNCTIONAL AND LOCAL MU, Giner et al. JCP 152, 174104 (2020)
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
+     $ Four=4.D0)
+C
+      Include 'commons.inc'
+C
+      Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
+C
+      Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:),
+     $ OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),
+     $ Zk(:),RhoGrid(:),Sigma(:),WGrid(:),WorkD(:,:),
+     $ Oa(:,:),Oi(:,:),Oia(:,:),Oai(:,:),Q(:,:)
+      Double Precision, Allocatable :: Oaa(:,:),Oii(:,:)
+      Double Precision, Allocatable :: OOai(:,:),OOia(:,:)
+      Double Precision, Allocatable :: CHVCSAA(:,:),CHVCSII(:,:)
+      Double Precision, Allocatable :: CHVCSAI(:,:),CHVCSIA(:,:)
+      Double Precision, Allocatable :: RDM2Act(:)
+      Double Precision, Allocatable :: RDM2val(:,:,:,:)
+      Double Precision, Allocatable :: Work(:,:)
+      Dimension IAct(NBasis),Ind2(NBasis)
+C     correlation contribution
+      Real*8, Allocatable :: FCorr(:)
+      Double Precision, Allocatable :: RDM2corr(:,:,:,:)
+      Real*8, Allocatable :: QGamII(:,:,:),QGamAA(:,:,:),QGamVV(:,:,:)
+      Real*8, Allocatable :: QGamIV(:,:,:),QGamAV(:,:,:),QGamIA(:,:,:)
+      Real*8, Allocatable :: OGamI(:,:,:),OGamA(:,:,:),OGamV(:,:,:),
+     $                       OnTopCorr(:),XMuLocCorr(:)
+      double precision :: Twall,TCpu
+C
+      call clock('START',Tcpu,Twall)
+C
+C     debug printlevel
+      IIPRINT=-1
+C
+C     set constants
+C
+      Pi = dacos(-1.d0)
+      SPi = SQRT(Pi)
+      Prefac = SQRT(3.1415)/Two ! SPi/Two
+C
+      Write(6,'(/,1X,"************** ",
+     $ " DGEMM Short-Range Correlation Energy with the Local Mu ")')
+C
+      Call molprogrid0(NGrid,NBasis)
+      Write(6,'(/,1X,"The number of Grid Points = ",I8)')
+     $ NGrid
+C
+      Allocate (WGrid(NGrid))
+      Allocate (OrbGrid(NGrid,NBasis))
+      Allocate (OrbXGrid(NGrid,NBasis))
+      Allocate (OrbYGrid(NGrid,NBasis))
+      Allocate (OrbZGrid(NGrid,NBasis))
+C
+C     load orbgrid, gradients, and wgrid
+C
+      Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     $ WGrid,UNOAO,NGrid,NBasis)
+C
+      NAct=NAcCAS
+      INActive=NInAcCAS
+      NOccup=INActive+NAct
+      Ind2(1:NBasis)=0
+      Do I=1,NAct
+      Ind2(INActive+I)=I
+      EndDo
+C
+      NRDM2Act = NAct**2*(NAct**2+1)/2
+      Allocate (RDM2Act(NRDM2Act))
+      RDM2Act(1:NRDM2Act)=Zero
+C
+      Open(10,File="rdm2.dat",Status='Old')
+C
+   10 Read(10,*,End=40)I,J,K,L,X
+C     X IS DEFINED AS: < E(IJ)E(KL) > - DELTA(J,K) < E(IL) > = 2 GAM2(JLIK)
+      RDM2Act(NAddrRDM(J,L,I,K,NAct))=Half*X
+      GoTo 10
+   40 Continue
+      Close(10)
+C
+      Allocate(RDM2val(NOccup,NOccup,NOccup,NOccup))
+      Do L=1,NOccup
+      Do K=1,NOccup
+      Do J=1,NOccup
+      Do I=1,NOccup
+      RDM2val(I,K,J,L)=FRDM2(I,K,J,L,RDM2Act,Occ,Ind2,NAct,NBasis)
+      Enddo
+      Enddo
+      Enddo
+      Enddo
+      If (IIPRINT.GT.1) Print*, 'RDM2val = ', norm2(RDM2val)
+C
+      Do I=1,NBasis
+      IAct(I)=0
+      If(Occ(I).Ne.One.And.Occ(I).Ne.Zero) IAct(I)=1
+      EndDo
+C
+C     LOAD CHOLESKY VECTORS
+C
+      open(newunit=iunit,file='cholvecs',form='unformatted')
+      read(iunit) NCholesky
+      Allocate(WorkD(NCholesky,NBasis**2))
+      read(iunit) WorkD
+      close(iunit)
+      print*,'NCholesky',NCholesky
+C
+C     truncate CHOLVECS
+C
+      Allocate (CHVCSAA(NCholesky,NAct**2))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=INActive+1,NOccup
+            Do I=INActive+1,NOccup
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSAA(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+      Allocate (CHVCSII(NCholesky,INActive**2))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=1,INActive
+            Do I=1,INActive
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSII(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+      Allocate (CHVCSIA(NCholesky,INActive*NAct))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=INActive+1,NOccup
+            Do I=1,INActive
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSIA(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+      Allocate (CHVCSAI(NCholesky,NAct*INactive))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=1,INActive
+            Do I=INActive+1,NOccup
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSAI(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+C
+C     COMPUTE f(r)
+C
+      Allocate (FPsiB(NGrid))
+      Allocate (Q(NAct,NAct))
+      Allocate (Oa(NCholesky,NAct))
+      Allocate (Oi(NCholesky,INActive))
+      Allocate (Oai(NCholesky,NAct))
+      Allocate (Oia(NCholesky,INActive))
+c
+      Allocate (Oaa(NAct,NAct),Oii(INActive,INActive))
+      Allocate (OOai(NAct,INActive))
+
+      Do IG=1,NGrid
+C
+      FPsiB(IG)=Zero
+C
+C     active-active
+C
+      Call dgemv('N',NCholesky*NAct,NAct,1d0,CHVCSAA,NCholesky*NAct,
+     $           OrbGrid(IG,INActive+1:INActive+NAct),1,0d0,Oa,1)
+C
+C     Q(pq) = \sum_rs \Gamma_pqrs phi_r \phi_s
+C
+      Q=Zero
+      Do IS=INactive+1,NOccup
+      Do IR=INactive+1,NOccup
+      Do IQ=INactive+1,NOccup
+      Do IP=INactive+1,NOccup
+      IPP=IP-INActive
+      IQQ=IQ-INActive
+      Q(IPP,IQQ)=Q(IPP,IQQ)
+     &        +RDM2val(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+C
+      Call dgemm('T','N',NAct,NAct,NCholesky,1d0,Oa,NCholesky,
+     $           Oa,NCholesky,0d0,Oaa,NAct)
+      FPsiB(IG)=ddot(NAct*NAct,Oaa,1,Q,1)
+C
+C     inactive-inactive
+C
+      Call dgemv('N',NCholesky*INActive,INActive,1d0,CHVCSII,
+     $          NCholesky*INActive,OrbGrid(IG,1:INActive),1,0d0,Oi,1)
+C
+      Call dgemm('T','N',INActive,INActive,NCholesky,1d0,Oi,NCholesky,
+     $           Oi,NCholesky,0d0,Oii,INActive)
+      Do IP=1,INActive
+      Do IQ=1,INActive
+      FPsiB(IG)=FPsiB(IG)+Oii(IP,IQ)*OrbGrid(IG,IP)*OrbGrid(IG,IQ)
+      EndDo
+      EndDo
+C
+C     active-inactive + inactive-active
+C
+      Call dgemv('N',NCholesky*NAct,INActive,1d0,CHVCSAI,
+     &          NCholesky*NAct,OrbGrid(IG,1:INActive),1,0d0,Oai,1)
+C
+      Call dgemv('N',NCholesky*INActive,NAct,1d0,CHVCSIA,
+     &          NCholesky*INActive,OrbGrid(IG,INactive+1:NOccup),
+     &          1,0d0,Oia,1)
+c
+      Call dgemm('T','N',NAct,INActive,NCholesky,4d0,Oa,NCholesky,
+     &           Oi,NCholesky,0d0,OOai,NAct)
+c
+      Call dgemm('T','N',NAct,INActive,NCholesky,-2d0,Oai,NCholesky,
+     &           Oia,NCholesky,1d0,OOai,NAct)
+c
+      Do IQ=1,INActive
+      Do IP=INactive+1,NOccup
+      IPP=IP-INActive
+      FPsiB(IG)=FPsiB(IG)
+     &         +Occ(IP)*OOai(IPP,IQ)*OrbGrid(IG,IP)*OrbGrid(IG,IQ)
+      EndDo
+      EndDo
+
+      EndDo ! NGrid
+      FPsiB = 2d0*FPsiB
+      If (IIPRINT.GT.1) Print*, 'Total FPsiB =', norm2(FPsiB)
+C
+      Deallocate(CHVCSII,CHVCSAA,CHVCSAI,CHVCSIA)
+      Deallocate(OOai)
+C
+      call clock('fr loop',Tcpu,Twall)
+c
+C     add a contribution from the AC0 correlation Gamma
+C
+      Allocate(QGamII(NBasis,NBasis,NGrid))
+      Allocate(QGamIA(NBasis,NBasis,NGrid))
+      Allocate(QGamIV(NBasis,NBasis,NGrid))
+      Allocate(QGamAA(NBasis,NBasis,NGrid))
+      Allocate(QGamAV(NBasis,NBasis,NGrid))
+      Allocate(QGamVV(NBasis,NBasis,NGrid))
+!     careful! seems that some savings are
+!              possible here :
+!     Allocate(QGamVV(NOccup,NOccup,NGrid))
+      Allocate(OGamI(NCholesky,NBasis,NGrid))
+      Allocate(OGamA(NCholesky,NBasis,NGrid))
+      Allocate(OGamV(NCholesky,NBasis,NGrid))
+C
+      QGamII=Zero
+      QGamIA=Zero
+      QGamIV=Zero
+      QGamAA=Zero
+      QGamAV=Zero
+      QGamVV=Zero
+C
+      Allocate(FCorr(NGrid))
+      FCorr=Zero
+C
+      Allocate (RDM2corr(NBasis,NBasis,NOccup,NOccup))
+      RDM2corr=Zero
+      Open(10,file='rdmcorr',form='unformatted')
+CC
+  557 Read(10,End=556) IP,IQ,IR,IS,GCor
+c     print*, 'ip > ir, iq > is ',ip,ir,iq,is,GCor
+      RDM2corr(IP,IQ,IR,IS) = Half*GCor
+c
+c     multiply by 1/4 (GCor is used four times) and by 2 because GCor (with proper factors)
+c     must satisfy E^AC0 = 1/2 sum_pqrs GCor_pqrs <pqrs>
+c     assumed symmetry of GCor pqrs = rqps = psrq = rspq
+c
+      GoTo 557
+  556 Close(10)
+C
+      If (IIPRINT.GT.1) Print*, 'RDM2corr =',norm2(RDM2corr)
+C
+      Do IS=1,NBasis
+      Do IR=1,NBasis
+      IRS=IGem(IR)+(IGem(IS)-1)*3
+      select case (IRS)
+      case (1)
+c        Print*, 'case 1: Inact-Inact'
+         Do IG=1,NGrid
+         Do IQ=INactive+1,NBasis
+         Do IP=INactive+1,NBasis
+         QGamII(IP,IQ,IG)=QGamII(IP,IQ,IG)
+     &           +RDM2corr(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+         EndDo
+         EndDo
+         Enddo
+      case (2)
+c        Print*, 'case 2: Act - Inact'
+         Do IG=1,NGrid
+         Do IQ=Inactive+1,NBasis
+            Do IP=1,IR-1
+            QGamIA(IP,IQ,IG)=QGamIA(IP,IQ,IG)
+     &              +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IP=IR+1,NBasis
+            QGamIA(IP,IQ,IG)=QGamIA(IP,IQ,IG)
+     &              +RDM2corr(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         Enddo
+      case (3)
+c        print*, 'case-3: Virt-Inact'
+         Do IG=1,NGrid
+         Do IQ=Inactive+1,NBasis
+         Do IP=1,NOccup
+         QGamIV(IP,IQ,IG)=QGamIV(IP,IQ,IG)
+     &           +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+         EndDo
+         EndDo
+         Enddo
+c     case (4) IA = (AI)^T
+      case (5)
+c        Print*, 'case 5: Act-Act'
+         Do IG=1,NGrid
+         Do IQ=1,IS-1
+            Do IP=1,IR-1
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IR,IS,IP,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IP=IR+1,NBasis
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IP,IS,IR,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         Do IQ=IS+1,NBasis
+            Do IP=1,IR-1
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IP=IR+1,NBasis
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         EndDo
+      case (6) ! Virt-Act
+         Do IG=1,NGrid
+         Do IP=1,NOccup
+            Do IQ=1,IS-1
+               QGamAV(IP,IQ,IG)=QGamAV(IP,IQ,IG)
+     &           +RDM2corr(IR,IS,IP,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IQ=IS+1,NBasis
+               QGamAV(IP,IQ,IG)=QGamAV(IP,IQ,IG)
+     &           +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         Enddo
+c     case(7) IV = (VI)^T
+c     case(8) AV = (VA)^T
+      case (9)
+c       Print*, 'case 9: Virt-Virt'
+         Do IG=1,NGrid
+         Do IQ=1,NOccup
+         Do IP=1,NOccup
+         QGamVV(IP,IQ,IG)=QGamVV(IP,IQ,IG)
+     &           +RDM2corr(IR,IS,IP,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+         EndDo
+         EndDo
+         Enddo
+      end select
+      EndDo
+      EndDo
+C
+      If (IIPRINT.GT.1) Then
+       Print*, 'QGam-1 II', norm2(QGamII)
+       Print*, 'QGam-2 AI', norm2(QGamIA)
+       Print*, 'QGam-3 VI', norm2(QGamIV)
+       Print*, 'QGam-5 AA', norm2(QGamAA)
+       Print*, 'QGam-6 VA', norm2(QGamAV)
+       Print*, 'QGam-9 VV', norm2(QGamVV)
+      EndIf
+c
+      Deallocate(RDM2corr)
+C
+C     OGam matrices
+C
+      Do IT=1,NBasis
+      ITT=(IT-1)*NBasis
+      select case (IGem(IT))
+      case(1)
+         Do IG=1,NGrid
+            Do IP=1,NBasis
+               Do K=1,NCholesky
+                  OGamI(K,IP,IG)=OGamI(K,IP,IG)
+     &                          +WorkD(K,ITT+IP)*OrbGrid(IG,IT)
+               EndDo
+            EndDo
+         EndDo
+      case(2)
+         Do IG=1,NGrid
+            Do IP=1,NBasis
+               Do K=1,NCholesky
+                  OGamA(K,IP,IG)=OGamA(K,IP,IG)
+     &                          +WorkD(K,ITT+IP)*OrbGrid(IG,IT)
+               EndDo
+            EndDo
+         EndDo
+      case(3)
+         Do IG=1,NGrid
+            Do IP=1,NBasis
+               Do K=1,NCholesky
+                  OGamV(K,IP,IG)=OGamV(K,IP,IG)
+     &                          +WorkD(K,ITT+IP)*OrbGrid(IG,IT)
+               EndDo
+            EndDo
+         EndDo
+      end select
+      EndDo
+C
+      If (IIPRINT.GT.1) Then
+       Print*, 'OGamI = ', norm2(OGamI)
+       Print*, 'OGamA = ', norm2(OGamA)
+       Print*, 'OGamV = ', norm2(OGamV)
+      EndIf
+C
+      call clock('QGam OGam',Tcpu,Twall)
+c
+      Deallocate(WorkD)
+      Allocate (Work(NBasis,NBasis))
+C
+C     COMPUTE fcorr(r)
+C
+      Do IG=1,NGrid
+      FCorr(IG)=Zero
+c
+C     1 inact-inact
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamI(:,:,IG),NCholesky,OGamI(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +ddot(NBasis*NBasis,Work,1,QGamII(:,:,IG),1)
+c     print*, 'II: IG,Fcorr',IG,FCorr(IG)
+c
+C     2 act-inact
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     $  OGamA(:,:,IG),NCholesky,OGamI(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +2d0*ddot(NBasis*NBasis,Work,1,QGamIA(:,:,IG),1)
+c     print*, 'AI: IG,Fcorr',IG,FCorr(IG)
+C
+C     3 virt-inact
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     $  OGamV(:,:,IG),NCholesky,OGamI(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +2d0*ddot(NBasis*NBasis,Work,1,QGamIV(:,:,IG),1)
+c     print*, 'AI: IG,Fcorr',IG,FCorr(IG)
+c
+c    5 act-act
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamA(:,:,IG),NCholesky,OGamA(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +ddot(NBasis*NBasis,Work,1,QGamAA(:,:,IG),1)
+c     print*, 'AA: IG,Fcorr',IG,FCorr(IG)
+c
+C     6 virt-act
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamV(:,:,IG),NCholesky,OGamA(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +2d0*ddot(NBasis*NBasis,Work,1,QGamAV(:,:,IG),1)
+c     print*, 'AV: IG,Fcorr',IG,FCorr(IG)
+c
+c    9 virt-virt
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamV(:,:,IG),NCholesky,OGamV(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +ddot(NBasis*NBasis,Work,1,QGamVV(:,:,IG),1)
+c     print*, 'VV: IG,Fcorr',IG,FCorr(IG)
+c
+      EndDo ! NGrid
+      If (IIPRINT.GT.1) Print*, 'Total FCorr =',norm2(FCorr)
+c
+      Deallocate(OGamV,OGamA,OGamI)
+c
+      call clock('FCorr loop',Tcpu,Twall)
+c
+      Allocate(OnTopCorr(NGrid),XMuLocCorr(NGrid))
+C
+      Allocate(OnTop(NGrid))
+      Allocate(XMuLoc(NGrid))
+      Allocate(RhoGrid(NGrid))
+      Allocate(Sigma(NGrid))
+C
+      Do I=1,NGrid
+C
+      Call DenGrid(I,RhoGrid(I),Occ,URe,OrbGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoX,Occ,URe,OrbGrid,OrbXGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoY,Occ,URe,OrbGrid,OrbYGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoZ,Occ,URe,OrbGrid,OrbZGrid,NGrid,NBasis)
+      Sigma(I)=RhoX**2+RhoY**2+RhoZ**2
+C
+      OnTop(I)=Zero
+      Do IS=1,NOccup
+         ValS=Two*OrbGrid(I,IS)
+         Do IR=1,NOccup
+            ValRS=OrbGrid(I,IR)*ValS
+            Do IQ=1,NOccup
+               ValQRS=OrbGrid(I,IQ)*ValRS
+               Do IP=1,NOccup
+                  OnTop(I)=OnTop(I)
+     &                 +RDM2val(IP,IQ,IR,IS)*OrbGrid(I,IP)*ValQRS
+               EndDo
+            EndDo
+         EndDo
+      EndDo
+C
+      OnTopCorr(I)=Zero
+      Do IP=1,NBasis
+      Do IQ=1,NBasis
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +QGamII(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +QGamAA(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +QGamVV(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +2d0*QGamIA(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +2d0*QGamIV(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +2d0*QGamAV(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      EndDo
+      EndDo
+C
+      XMuLoc(I)=Zero
+C
+      If(OnTop(I).Gt.1.D-8) Then
+      XMuLoc(I)=Prefac*FPsiB(I)/OnTop(I)
+      EndIf
+C
+      XMuLocCorr(I)=Zero
+C
+      If(OnTop(I).Gt.1.D-8) Then
+      XMuLocCorr(I)=Prefac*(FPsiB(I)+FCorr(I))
+     $ /(OnTop(I)+OnTopCorr(I))
+      EndIf
+C
+      EndDo ! NGrid
+c
+      If (IIPRINT.GT.1) Then
+       Print*, 'OnTop      =', norm2(OnTop)
+       Print*, 'OnTopCorr  =', norm2(OnTopCorr)
+       Print*, 'XMuLoc     =', norm2(XMuLoc)
+       Print*, 'XMuLocCorr =', norm2(XMuLocCorr)
+      EndIf
+c
+      call clock('OnTop loop 1',Tcpu,Twall)
+c
+      Deallocate(Work)
+      Deallocate(RDM2val)
+      Deallocate(QGamAV,QGamIV,QGamIA)
+      Deallocate(QGamVV,QGamAA,QGamII)
+      Deallocate(FPsiB)
+      Deallocate(FCorr)
+C
+      Allocate(Zk(NGrid))
+C
+      Call PBECor(RhoGrid,Sigma,Zk,NGrid)
+C
+      Const=Three/Two/SPi/(One-SQRT(Two))
+C
+      AvMU=Zero
+      CorrMD=Zero
+      XEl=Zero
+      XPairAv=Zero
+      XPairCAv=Zero
+      XPairAC0Av=Zero
+C
+      Do I=1,NGrid
+C
+      XMu=XMuLoc(I)
+      AvMU=AvMU+XMu*RhoGrid(I)*WGrid(I)
+      XEl=XEl+RhoGrid(I)*WGrid(I)
+C
+      Bet=Zero
+      OnTopC=Zero
+      If(XMuLoc(I).Gt.1.D-8) OnTopC=OnTop(I)/(One+Two/SPi/XMu)
+      If(OnTopC.Ne.Zero) Then
+      Bet=Const*Zk(I)/OnTopC
+      C=5.0
+      CorrMD=CorrMD+Zk(I)/(C*One+Bet*XMu**3)*WGrid(I)
+      EndIf
+C
+      XPairAv=XPairAv+OnTop(I)*WGrid(I)
+      XPairCAv=XPairCAv+OnTopC*WGrid(I)
+      XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
+C
+      EndDo
+      call clock('CorrMD loop ',Tcpu,Twall)
+C
+      Write(6,'(/,
+     $" Averaged on-top pair densities: CAS, CAS-AC0, extrapolated OT",
+     $ 3F15.4)') XPairAv,XPairAC0Av,XPairCAv
+C
+      AvMU=AvMU/XEl
+C
+C     CorrMD with a contribution from Gamma^corr
+C
+      AvMUCorr=Zero
+      CorrMDCorr=Zero
+      XEl=Zero
+      Do I=1,NGrid
+C
+      XMu=XMuLocCorr(I)
+
+      AvMUCorr=AvMUCorr+XMu*RhoGrid(I)*WGrid(I)
+      XEl=XEl+RhoGrid(I)*WGrid(I)
+C
+      Bet=Zero
+      OnTopC=Zero
+      If(XMu.Gt.1.D-8) OnTopC=(OnTop(I)+OnTopCorr(I))
+     $ /(One+Two/SPi/XMu)
+      If(OnTopC.Ne.Zero) Then
+      Bet=Const*Zk(I)/OnTopC
+      C=5.0
+      CorrMDCorr=CorrMDCorr+Zk(I)/(C*One+Bet*XMu**3)*WGrid(I)
+      EndIf
+C
+      EndDo
+      call clock('CorrMDCorr loop ',Tcpu,Twall)
+C
+      AvMUCorr=AvMUCorr/XEl
+C
+      Write(6,'(/," CAS:     Corr_md and average Mu   ",
+     $ F12.8,F12.2)') CorrMD,AvMU
+      Write(6,'(  " CAS-AC0: Corr_md and average Mu   ",
+     $ F12.8,F12.2/)') CorrMDCorr,AvMUCorr
+C
+      Deallocate(OnTopCorr,XMuLocCorr)
+C
+      End Subroutine LOC_MU_CHOL_v2
 
 *Deck PBE_ONTOP_MD
       Subroutine PBE_ONTOP_MD(PBEMD,URe,Occ,

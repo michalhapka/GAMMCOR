@@ -271,7 +271,7 @@ else
   case(JOB_TYPE_RESPONSE)
      Flags%IFlRESPONSE = 1
 
-  case(JOB_TYPE_AC0)
+  case(JOB_TYPE_AC0,JOB_TYPE_SRAC0)
     ! HERE WILL BE CHANGED TO:
     !Flags%IFlAC = 0
      Flags%IFlAC   = 1
@@ -296,6 +296,9 @@ else
         elseif(Input%CalcParams%DFApp==2) then
            Flags%IFunSR2 = 2
         endif
+     endif
+     if(Input%CalcParams%JobType==JOB_TYPE_SRAC0) then
+       Flags%ICorrMD = 1
      endif
 !     if(Input%CalcParams%DFApp==2) Flags%IFunSRKer = 1
 

@@ -378,6 +378,8 @@ subroutine read_block_calculation(CalcParams, line)
                CalcParams%JobType = JOB_TYPE_RESPONSE
            elseif (uppercase(val) == "NLOCCORR" ) then
                CalcParams%JobType = JOB_TYPE_NLOCCORR
+           elseif (uppercase(val) == "SRAC0" ) then
+               CalcParams%JobType = JOB_TYPE_SRAC0
            endif
 
      !case ("FRAGMENTS")
