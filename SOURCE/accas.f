@@ -182,11 +182,11 @@ C
 
       call clock('AC  model',Tcpu,Twall)
 C
-C     Corr,md correlation energy with local mu, only available with Cholesky
+C     Corr,md correlation energy with local mu, requires Cholesky vecs
 C
       If (IFlCorrMD.Eq.1) Then
-      If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
-      Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
+      Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,1)
       call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
 C
@@ -203,7 +203,15 @@ C
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 C
       call clock('ACLR model',Tcpu,Twall)
-
+C
+C     Corr,md correlation energy with local mu, requires Cholesky vecs
+C
+      If (IFlCorrMD.Eq.1) Then
+c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
+      Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,0)
+      call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
+      EndIf
+C
       EndIf
 C
       Return
@@ -952,6 +960,12 @@ C
       EndIf ! ITwoEl
       EndIf ! ICholesky
 C
+      If (IDALTON==1) Then
+      NAct=NAcCAS
+      INActive=NInAcCAS
+      Call PsiHPsi(EPsiHPsi,Occ,XOne,ENuc,INActive,NAct,NInte1,NBasis)
+      EndIf
+C
 C     compute sr potential (vsr=xc+hartree)
 C     as a byproduct a sr energy (ensr=sr-xc+sr-hartree) is obtained
 C
@@ -1042,6 +1056,12 @@ C
       Call PBE_ONTOP_MD(PBEMD,URe,Occ,
      $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
       Write(6,'(/," SR_PBE_corr_md ",F15.8,/)') PBEMD
+C
+      If (IFlCorrMD.Eq.1) Then
+      Call PBE_ONTOP_C_MD(PBEmodMD,5.d0,URe,Occ,
+     $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
+      Write(6,'(1x,"SR_PBE_C_corr_md",F15.8,/)') PBEmodMD
+      EndIf
 C
 c      Call CASPI_SR_PBE(URe,Occ,
 c     $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
@@ -2905,7 +2925,8 @@ C
       End
 
 *Deck LOC_MU_CHOL_v2
-      Subroutine LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Subroutine LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,
+     &                          FlagAC0)
 C
       use timing
 C
@@ -2913,6 +2934,9 @@ C     DGEMM version
 C     CAREFUL : memory requirements could still be improved...
 C
 C     RETURNS SORT-RANGE CORRELATION ENERGY WITH SR-PBE ONTOP CORRELATION FUNCTIONAL AND LOCAL MU, Giner et al. JCP 152, 174104 (2020)
+C
+C     FlagAC0 == 0 : calculate CorrMD based only on fCAS function (nact^2 NGrid NCholesky)
+C     FlagAC0 == 1 : calculate CorrMD based only on fCAS + fAC0 functions (NBasis^2 NGrid NCholesky)
 C
       Implicit Real*8 (A-H,O-Z)
 C
@@ -2922,6 +2946,7 @@ C
       Include 'commons.inc'
 C
       Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
+      Integer, intent(in) :: FlagAC0
 C
       Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:),
      $ OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),
@@ -2944,21 +2969,34 @@ C     correlation contribution
      $                       OnTopCorr(:),XMuLocCorr(:)
       double precision :: Twall,TCpu
 C
+      Logical :: doGGA
+      Logical :: ex ! check rdmcorr file
+      Double Precision, Allocatable :: RR(:,:)
+      Character(*),Parameter :: griddalfile='dftgrid.dat'
+C
       call clock('START',Tcpu,Twall)
 C
 C     debug printlevel
-      IIPRINT=-1
+      IIPRINT=5 
 C
 C     set constants
 C
       Pi = dacos(-1.d0)
-      SPi = SQRT(Pi)
+c      SPi = SQRT(Pi)
+c     used in Kasia's code:
+      SPi=SQRT(3.141592653589793)
       Prefac = SQRT(3.1415)/Two ! SPi/Two
 C
       Write(6,'(/,1X,"************** ",
      $ " DGEMM Short-Range Correlation Energy with the Local Mu ")')
+      If (FlagAC0==1) Write(6,'(1X,"Compute fCAS and fAC0!")')
 C
-      Call molprogrid0(NGrid,NBasis)
+      If (IMOLPRO == 1) Then
+         Call molprogrid0(NGrid,NBasis)
+      ElseIf(IDALTON == 1) Then
+         Call daltongrid0(NGrid,griddalfile,doGGA,NBasis)
+         If (.not.doGGA) stop "LOC_MU_CHOL: Run Dalton with SR-PBE!"
+      EndIf
       Write(6,'(/,1X,"The number of Grid Points = ",I8)')
      $ NGrid
 C
@@ -2970,8 +3008,21 @@ C
 C
 C     load orbgrid, gradients, and wgrid
 C
-      Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     $ WGrid,UNOAO,NGrid,NBasis)
+      If (IMOLPRO == 1) Then
+         Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                   WGrid,UNOAO,NGrid,NBasis)
+      ElseIf (IDALTON == 1) Then
+         Allocate(Work(NBasis,NBasis))
+         Work = transpose(UNOAO)
+         Call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       WGrid,NGrid,griddalfile,NBasis)
+         Call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       Work,0,NGrid,NBasis,.false.)
+CC     visualisation
+C        Allocate(RR(3,NGrid))
+C        Call dalton_grid_coord(NGrid,RR,griddalfile)
+        Deallocate(Work)
+      EndIf
 C
       NAct=NAcCAS
       INActive=NInAcCAS
@@ -3152,6 +3203,10 @@ C
       Deallocate(OOai)
 C
       call clock('fr loop',Tcpu,Twall)
+C
+      If (FlagAC0==0) Deallocate(WorkD) ! Chol vecs no longer necessary
+C
+      If (FlagAC0==1) Then
 c
 C     add a contribution from the AC0 correlation Gamma
 C
@@ -3180,6 +3235,8 @@ C
 C
       Allocate (RDM2corr(NBasis,NBasis,NOccup,NOccup))
       RDM2corr=Zero
+      inquire(file='rdmcorr',EXIST=ex)
+      if (.not.ex) stop "no rdmcorr file!"
       Open(10,file='rdmcorr',form='unformatted')
 CC
   557 Read(10,End=556) IP,IQ,IR,IS,GCor
@@ -3397,8 +3454,10 @@ c
       Deallocate(OGamV,OGamA,OGamI)
 c
       call clock('FCorr loop',Tcpu,Twall)
+C
+      EndIf ! FlagAC0 end
 c
-      Allocate(OnTopCorr(NGrid),XMuLocCorr(NGrid))
+      If (FlagAC0==1) Allocate(OnTopCorr(NGrid),XMuLocCorr(NGrid))
 C
       Allocate(OnTop(NGrid))
       Allocate(XMuLoc(NGrid))
@@ -3428,6 +3487,19 @@ C
          EndDo
       EndDo
 C
+      XMuLoc(I)=Zero
+C
+      If(OnTop(I).Gt.1.D-8) Then
+c     XMuLoc(I)=Prefac*FPsiB(I)/OnTop(I)
+c     used in Kasia's code:
+      XMuLoc(I)=SQRT(3.1415)/Two*FPsiB(I)/OnTop(I)
+      EndIf
+C
+      EndDo ! NGrid
+
+      If (FlagAC0==1) Then
+      Do I=1,NGrid
+C
       OnTopCorr(I)=Zero
       Do IP=1,NBasis
       Do IQ=1,NBasis
@@ -3446,41 +3518,45 @@ C
       EndDo
       EndDo
 C
-      XMuLoc(I)=Zero
-C
-      If(OnTop(I).Gt.1.D-8) Then
-      XMuLoc(I)=Prefac*FPsiB(I)/OnTop(I)
-      EndIf
-C
       XMuLocCorr(I)=Zero
 C
       If(OnTop(I).Gt.1.D-8) Then
-      XMuLocCorr(I)=Prefac*(FPsiB(I)+FCorr(I))
+c     XMuLocCorr(I)=Prefac*(FPsiB(I)+FCorr(I))
+c    $ /(OnTop(I)+OnTopCorr(I))
+c     used in Kasia's code:
+      XMuLocCorr(I)=SQRT(3.1415)/Two*(FPsiB(I)+FCorr(I))
      $ /(OnTop(I)+OnTopCorr(I))
       EndIf
 C
       EndDo ! NGrid
+      EndIf ! FlagAC0 end
 c
       If (IIPRINT.GT.1) Then
        Print*, 'OnTop      =', norm2(OnTop)
-       Print*, 'OnTopCorr  =', norm2(OnTopCorr)
        Print*, 'XMuLoc     =', norm2(XMuLoc)
-       Print*, 'XMuLocCorr =', norm2(XMuLocCorr)
+       If(FlagAC0==1) Print*, 'XMuLocCorr =', norm2(XMuLocCorr)
+       If(FlagAC0==1) Print*, 'OnTopCorr  =', norm2(OnTopCorr)
       EndIf
 c
       call clock('OnTop loop 1',Tcpu,Twall)
 c
-      Deallocate(Work)
-      Deallocate(RDM2val)
-      Deallocate(QGamAV,QGamIV,QGamIA)
-      Deallocate(QGamVV,QGamAA,QGamII)
+      if(allocated(FPsiB)) print*, 'allocated FsiB!'
+      if(allocated(RDM2val)) print*, 'allocated rdm2val!'
       Deallocate(FPsiB)
-      Deallocate(FCorr)
+      Deallocate(RDM2val)
+C
+      If (FlagAC0==1) Then
+         Deallocate(Work)
+         Deallocate(QGamAV,QGamIV,QGamIA)
+         Deallocate(QGamVV,QGamAA,QGamII)
+         Deallocate(FCorr)
+      EndIf
 C
       Allocate(Zk(NGrid))
 C
       Call PBECor(RhoGrid,Sigma,Zk,NGrid)
 C
+      SPi=SQRT(3.141592653589793)
       Const=Three/Two/SPi/(One-SQRT(Two))
 C
       AvMU=Zero
@@ -3490,9 +3566,16 @@ C
       XPairCAv=Zero
       XPairAC0Av=Zero
 C
+C     Test: averaged mu
+c     Alpha = 10.0
+c     Print*, 'Use Averaged Alpha = ', Alpha
+c     Print*, 'USe C=0.0 ..'
+c     XMuLoc = Alpha ! replace local Mu with average Mu
+c
       Do I=1,NGrid
 C
       XMu=XMuLoc(I)
+c     XMu=Alpha ! replace local Mu with average Mu
       AvMU=AvMU+XMu*RhoGrid(I)*WGrid(I)
       XEl=XEl+RhoGrid(I)*WGrid(I)
 C
@@ -3501,22 +3584,32 @@ C
       If(XMuLoc(I).Gt.1.D-8) OnTopC=OnTop(I)/(One+Two/SPi/XMu)
       If(OnTopC.Ne.Zero) Then
       Bet=Const*Zk(I)/OnTopC
-      C=5.0
+      C=5.0d0
       CorrMD=CorrMD+Zk(I)/(C*One+Bet*XMu**3)*WGrid(I)
+c     print*, 'i,corrmd',I,CorrMD
+C
+CC     visualisation
+C      CorrRZ=Zk(I)/(C*One+Bet*XMu**3)
+C      If(Abs(RR(1,I)).Lt.1.D-8.And.Abs(RR(2,I)).Lt.1.D-8)
+C     $ Write(6,'(5E15.6)')RR(3,I),RhoGrid(I),XMuLoc(I),
+C     $ OnTop(I),CorrRZ
+CC
       EndIf
 C
       XPairAv=XPairAv+OnTop(I)*WGrid(I)
       XPairCAv=XPairCAv+OnTopC*WGrid(I)
-      XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
+c     XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
 C
       EndDo
       call clock('CorrMD loop ',Tcpu,Twall)
 C
       Write(6,'(/,
-     $" Averaged on-top pair densities: CAS, CAS-AC0, extrapolated OT",
-     $ 3F15.4)') XPairAv,XPairAC0Av,XPairCAv
+     $" Averaged on-top pair densities: CAS, extrapolated OT",
+     $ 2F15.4)') XPairAv,XPairCAv
 C
       AvMU=AvMU/XEl
+C
+      If (FlagAC0==1) Then
 C
 C     CorrMD with a contribution from Gamma^corr
 C
@@ -3525,6 +3618,8 @@ C
       XEl=Zero
       Do I=1,NGrid
 C
+      XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
+C      
       XMu=XMuLocCorr(I)
 
       AvMUCorr=AvMUCorr+XMu*RhoGrid(I)*WGrid(I)
@@ -3532,25 +3627,40 @@ C
 C
       Bet=Zero
       OnTopC=Zero
-      If(XMu.Gt.1.D-8) OnTopC=(OnTop(I)+OnTopCorr(I))
+c     If(XMu.Gt.1.D-8) OnTopC=(OnTop(I)+OnTopCorr(I))
+      If(XMu.Gt.1.D-8) OnTopC=OnTop(I)
      $ /(One+Two/SPi/XMu)
       If(OnTopC.Ne.Zero) Then
       Bet=Const*Zk(I)/OnTopC
-      C=5.0
+      C=5.0d0
       CorrMDCorr=CorrMDCorr+Zk(I)/(C*One+Bet*XMu**3)*WGrid(I)
+C
+CC     visualisation
+C      CorrRZ=Zk(I)/(C*One+Bet*XMu**3)
+C      If(Abs(RR(1,I)).Lt.1.D-8.And.Abs(RR(2,I)).Lt.1.D-8)
+C     $ Write(6,'(5E15.6)')RR(3,I),RhoGrid(I),XMuLocCorr(I),
+C     $ OnTop(I)+OnTopCorr(I),CorrRZ
+C
       EndIf
 C
       EndDo
       call clock('CorrMDCorr loop ',Tcpu,Twall)
 C
+      Write(6,'(/,
+     $" Averaged on-top pair densities: CAS, CAS-AC0, extrapolated OT",
+     $ 3F15.4)') XPairAv,XPairAC0Av,XPairCAv
+C
       AvMUCorr=AvMUCorr/XEl
+      EndIf ! FlagAC0 end
 C
       Write(6,'(/," CAS:     Corr_md and average Mu   ",
      $ F12.8,F12.2)') CorrMD,AvMU
-      Write(6,'(  " CAS-AC0: Corr_md and average Mu   ",
-     $ F12.8,F12.2/)') CorrMDCorr,AvMUCorr
+      If(FlagAC0==1) Then
+         Write(6,'(  " CAS-AC0: Corr_md and average Mu   ",
+     $         F12.8,F12.2/)') CorrMDCorr,AvMUCorr
 C
-      Deallocate(OnTopCorr,XMuLocCorr)
+         Deallocate(OnTopCorr,XMuLocCorr)
+      EndIf
 C
       End Subroutine LOC_MU_CHOL_v2
 
@@ -3578,6 +3688,113 @@ C
 C
       Write(6,'(/,1X,"COMPUTING SR-PBE_CORR_MD FOR THE RANGE PARAMETER "
      $ ,F8.3)')Alpha
+C
+      NAct=NAcCAS
+      INActive=NInAcCAS
+      NOccup=INActive+NAct
+      Ind2(1:NBasis)=0
+      Do I=1,NAct
+      Ind1(I)=INActive+I
+      Ind2(INActive+I)=I
+      EndDo
+C
+      NRDM2Act = NAct**2*(NAct**2+1)/2
+      Allocate (RDM2Act(NRDM2Act))
+      RDM2Act(1:NRDM2Act)=Zero
+C
+      Open(newunit=iunit,File="rdm2.dat",Status='Old')
+C
+      Do
+      Read(iunit,*,iostat=ios)I,J,K,L,X
+      If (ios/=0) Exit
+C
+C     X IS DEFINED AS: < E(IJ)E(KL) > - DELTA(J,K) < E(IL) > = 2 GAM2(JLIK)
+C
+      RDM2Act(NAddrRDM(J,L,I,K,NAct))=Half*X
+C
+      I=Ind1(I)
+      J=Ind1(J)
+      K=Ind1(K)
+      L=Ind1(L)
+C
+      EndDo
+      Close(iunit)
+C
+      Do I=1,NGrid
+C
+      Call DenGrid(I,RhoGrid(I),Occ,URe,OrbGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoX,Occ,URe,OrbGrid,OrbXGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoY,Occ,URe,OrbGrid,OrbYGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoZ,Occ,URe,OrbGrid,OrbZGrid,NGrid,NBasis)
+      Sigma(I)=RhoX**2+RhoY**2+RhoZ**2
+C
+      OnTop(I)=Zero
+      Do IP=1,NOccup
+      Do IQ=1,NOccup
+      Do IR=1,NOccup
+      Do IS=1,NOccup
+      OnTop(I)=OnTop(I)
+     $ +Two*FRDM2(IP,IQ,IR,IS,RDM2Act,Occ,Ind2,NAct,NBasis)
+     $ *OrbGrid(I,IP)*OrbGrid(I,IQ)*OrbGrid(I,IR)*OrbGrid(I,IS)
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+C     
+      EndDo
+C
+      Call PBECor(RhoGrid,Sigma,Zk,NGrid)
+C
+      SPi=SQRT(3.141592653589793)
+      Const=Three/Two/SPi/(One-SQRT(Two))
+C
+      PBEMD=Zero      
+      Do I=1,NGrid
+C
+      Bet=Zero
+      OnTopC=OnTop(I)/(One+Two/SPi/Alpha)
+      If(OnTopC.Ne.Zero) Bet=Const*Zk(I)/OnTopC
+C
+      PBEMD=PBEMD+Zk(I)/(One+Bet*Alpha**3)*WGrid(I)
+C
+      EndDo
+C
+      Return
+      End
+
+*Deck PBE_ONTOP_C_MD
+      Subroutine PBE_ONTOP_C_MD(PBEmodMD,Cfac,URe,Occ,
+     $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
+C
+C     RETURNS A SR-PBE modified ONTOP CORRELATION 
+C     DEFINED IN Eq.(25)-(29), Toulouse JCP 150, 084103 (2019)
+C     Difference:
+C     Eq. (26): e_{c,md} = e_c^PBE / (C + beta*mu^3)
+C     Recommended value: Cfac = 5.0d0
+C
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0, 
+     $ Four=4.D0)
+C
+      Include 'commons.inc'
+C
+      Double Precision, intent(in)  :: Cfac
+      Double Precision, intent(out) :: PBEmodMD
+C
+      Real*8, Allocatable :: RDM2Act(:)
+C
+      Dimension URe(NBasis,NBasis),Occ(NBasis),
+     $ Ind1(NBasis),Ind2(NBasis),
+     $ WGrid(NGrid),OrbGrid(NGrid,NBasis),OrbXGrid(NGrid,NBasis),
+     $ OrbYGrid(NGrid,NBasis),OrbZGrid(NGrid,NBasis)
+C
+      Dimension Zk(NGrid),RhoGrid(NGrid),Sigma(NGrid),OnTop(NGrid)
+C
+      Write(6,'(1X,"COMPUTING SR-PBE_CORR_MD FOR THE RANGE PARAMETER "
+     $ ,F8.3)')Alpha
+      Write(6,'(1x, "C FACTOR ", F6.3)')Cfac
 C
       NAct=NAcCAS
       INActive=NInAcCAS
@@ -3637,17 +3854,88 @@ C
       SPi=SQRT(3.141592653589793)
       Const=Three/Two/SPi/(One-SQRT(Two))
 C
-      PBEMD=Zero      
+      PBEmodMD=Zero      
       Do I=1,NGrid
 C
       Bet=Zero
       OnTopC=OnTop(I)/(One+Two/SPi/Alpha)
-      If(OnTopC.Ne.Zero) Bet=Const*Zk(I)/OnTopC
+      If(OnTopC.Ne.Zero) Then
+         Bet=Const*Zk(I)/OnTopC
+c     If(OnTopC.Ne.Zero) Bet=Const*Zk(I)/OnTopC
 C
-      PBEMD=PBEMD+Zk(I)/(One+Bet*Alpha**3)*WGrid(I)
+         PBEmodMD=PBEmodMD+Zk(I)/(Cfac*One+Bet*Alpha**3)*WGrid(I)
+c        print*, 'i,pbemod',I,PBEmodMD
+      EndIf
 C
       EndDo
 C
       Return
+      End
+
+      Subroutine PsiHPSi(Ene,Occ,XOne,ENuc,INActive,NAct,NInte1,NBasis)
+C
+C     Returns E = <Psi|T+V+W|Psi> , where
+C     W is the full 1/r operator
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Include 'commons.inc'
+C
+      Integer,Intent(in) :: INActive,NAct,NInte1,NBasis
+      Double Precision,Intent(in)  :: ENuc
+      Double Precision,Intent(in)  :: Occ(NBasis),XOne(NInte1)
+      Double Precision,Intent(out) :: Ene
+C      
+      Integer :: I,J,K,L,II
+      Integer :: IFunSR_save
+      Integer :: NRDM2Act
+      Integer :: Ind1(NBasis)
+      Double Precision :: X,EOne,ETwo
+      Double Precision, Allocatable :: RDM2Act(:)
+
+c     Write(6,*) 'Entering <Psi|H|Psi>...'
+c
+      Do I=1,NAct
+      Ind1(I)=INActive+I
+C     Ind2(INActive+I)=I
+      EndDo
+C
+      NRDM2Act=NAct**2*(NAct**2+1)/2
+      Allocate(RDM2Act(NRDM2Act))
+      Open(10,File="rdm2.dat",Status='Old')
+C
+   10 Read(10,*,End=40)I,J,K,L,X
+C
+C     X IS DEFINED AS: < E(IJ)E(KL) > - DELTA(J,K) < E(IL) > = 2 GAM2(JLIK)
+C
+      RDM2Act(NAddrRDM(J,L,I,K,NAct))=0.5d0*X
+C
+      I=Ind1(I)
+      J=Ind1(J)
+      K=Ind1(K)
+      L=Ind1(L)
+C
+      GoTo 10
+   40 Continue
+      Close(10)
+C
+      EOne=0d0
+      Do I=1,NBasis
+      II=(I*(I+1))/2
+      EOne=EOne+2d0*Occ(I)*XOne(II)
+      EndDo
+C
+      IFunSR_save = IFunSR ! select FOFO integrals
+      IFunSR = 0
+      Call TwoEneChck(ETwo,RDM2Act,Occ,INActive,NAct,NBasis)
+      IFunSR = IFunSR_save
+C
+      Ene = EOne + ETwo + ENuc
+      Print*, '<Psi|T+Vne|Psi>  =',EOne
+      Print*, '<Psi|Vee  |Psi>  =',ETwo
+      Write(6,'(/1x,a,F14.8)') '<Psi|H|Psi>+ENuc = ',Ene
+C
+      Deallocate(RDM2Act)
+
       End
 

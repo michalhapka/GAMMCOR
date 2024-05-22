@@ -459,7 +459,7 @@ character(*)                 :: IntJFile,IntKFile
 double precision,intent(out) :: ETot,ECorr
 double precision,intent(out) :: ABPLUS(NDimX,NDimX),ABMIN(NDimX,NDimX)
 
-integer          :: iunit
+integer          :: iunit,iunit2
 integer          :: NOccup,NCholesky
 integer          :: i,j,k,l,kl,ii,ip,iq,ir,is,ipq,irs
 integer          :: ipos,jpos,iblk,jblk,nblk
@@ -650,6 +650,9 @@ if(ICholesky==0) then
 
    allocate(work1(NBasis*NBasis))
 
+   ! dump Gamma^corr
+   open(newunit=iunit2,file='rdmcorr',form='unformatted')
+
    open(newunit=iunit,file='FOFO',status='OLD', &
         access='DIRECT',recl=8*NBasis*NOccup)
 
@@ -683,6 +686,9 @@ if(ICholesky==0) then
 
                    if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
 
+                   ! dump Gamma^corr
+                   if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit2)ir,ip,is,iq,Aux
+
                  endif
               enddo
            enddo
@@ -692,6 +698,7 @@ if(ICholesky==0) then
    enddo
 
    close(iunit)
+   close(iunit2)
    deallocate(work1)
 
 elseif(ICholesky==1) then
@@ -702,6 +709,9 @@ elseif(ICholesky==1) then
    allocate(MatFF(NCholesky,NBasis**2))
    read(iunit) MatFF
    close(iunit)
+
+   ! dump Gamma^corr
+   open(newunit=iunit,file='rdmcorr',form='unformatted')
 
    ! set number of loops over integrals
    dimFO = NOccup*NBasis
@@ -759,6 +769,9 @@ elseif(ICholesky==1) then
 
                  if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
 
+                 ! dump Gamma^corr
+                 if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit)ir,ip,is,iq,Aux
+
                endif
             enddo
          enddo
@@ -770,6 +783,8 @@ elseif(ICholesky==1) then
    enddo
 
    deallocate(work,MatFF)
+   ! close a file with Gamma^corr
+   close(iunit)
 endif
 
 ECorr = EAll - EIntra

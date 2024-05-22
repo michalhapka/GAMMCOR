@@ -166,7 +166,18 @@ C     memory allocation for sorter
          Stop "CholeskyOTF not ready in ReadDAL!"
       EndIf ! ICholesky
       EndIf ! ITwoEl
-C
+
+C     JOBTYPE=SRAC0 (IFlCorrdMD=1) : save Cholesky vecs
+C                                    with L accuracy
+      If (IFlCorrMD==1) then
+        ICholeskyAccu=3 ! use LUDICROUS accuracy
+        Print*, 'IFCorrMD 1 =',IFlCorrMD
+        Print*, 'Cholesky Accuracy =', ICholeskyAccu 
+        Call chol_CoulombMatrix(CholeskyVecs,NBasis,
+     &                          'AOTWOINT',1,ICholeskyAccu)
+        NCholesky=CholeskyVecs%NCholesky
+      endif
+CC
       If(ICASSCF.Eq.0) Then
 C
 C     read geminal coefficients
@@ -299,6 +310,30 @@ C
 C
       EndIf ! ICholesky
       EndIf ! ITwoEl
+C
+C     JOBTYPE=SRAC0 (IFlCorrdMD=1) : save Cholesky vecs
+C                                    with L accuracy at disk
+      If (IFlCorrMD==1) then
+      Allocate(MatFF(NCholesky,NBasis**2))
+      If(MemType == 2) then       !MB
+         MemMOTransfMB = MemVal
+      ElseIf(MemType == 3) then   !GB
+         MemMOTransfMB = MemVal * 1024_8
+      Endif
+      Write(LOUT,'(1x,a,i5,a)') 'Using ',MemMOTransfMB,
+     $                          ' MB for 3-indx Cholesky transformation'
+      Call chol_MOTransf_TwoStep(MatFF,CholeskyVecs,
+     $              UAux,1,NBasis,
+     $              UAux,1,NBasis,
+     $              MemMOTransfMB)
+C
+      Open(newunit=iunit,file='cholvecs',form='unformatted')
+      Write(iunit) NCholesky
+      Write(iunit) MatFF
+      Close(iunit)
+      Deallocate(MatFF)
+      EndIf ! test IFCorrmd
+C
 C
       If(ITwoEl.Gt.1) Then
 C     DELETE SORTED AOTWOINTS FOFO
