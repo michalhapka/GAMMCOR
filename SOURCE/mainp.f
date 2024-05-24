@@ -177,10 +177,14 @@ C     IFlRESPONSE = 1 : compute polarizability tensor for a given frequency Freq
 C
       IFlRESPONSE=Flags%IFlRESPONSE
 C
-C     IFlCorrMD = 1 : compute Ecorr,MD for SR-AC0
+C     IFlCorrMD = 1 : AC0+Ecmd^sr (SR-AC0 jobtype)
 C
       IFlCorrMD = Flags%ICorrMD
-      Print*, 'IFlCorrMD =', IFlCorrMD
+C
+C     IFlFCorr  = 1 : AC0+Ecmd^sr with self-adapting mu based on fCAS+fAC0
+C                 0 : AC0+Ecmd^sr with self-adapting mu based on fCAS (default)
+C
+      IFlFCorr = Flags%IFlFCorr
 C
 C     *************************************************************************
 C

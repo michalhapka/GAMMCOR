@@ -187,6 +187,7 @@ C
       If (IFlCorrMD.Eq.1) Then
 c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
       Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,1)
+      Call delfile('cholvecs') ! delete cholesky vecs
       call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
 C
@@ -209,6 +210,7 @@ C
       If (IFlCorrMD.Eq.1) Then
 c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
       Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,0)
+      Call delfile('cholvecs')
       call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
 C
@@ -2925,8 +2927,7 @@ C
       End
 
 *Deck LOC_MU_CHOL_v2
-      Subroutine LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,
-     &                          FlagAC0)
+      Subroutine LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
 C
       use timing
 C
@@ -2935,8 +2936,8 @@ C     CAREFUL : memory requirements could still be improved...
 C
 C     RETURNS SORT-RANGE CORRELATION ENERGY WITH SR-PBE ONTOP CORRELATION FUNCTIONAL AND LOCAL MU, Giner et al. JCP 152, 174104 (2020)
 C
-C     FlagAC0 == 0 : calculate CorrMD based only on fCAS function (nact^2 NGrid NCholesky)
-C     FlagAC0 == 1 : calculate CorrMD based only on fCAS + fAC0 functions (NBasis^2 NGrid NCholesky)
+C     IFlCorr == 0 : calculate CorrMD based only on fCAS function (nact^2 NGrid NCholesky)
+C     IFlCorIFlCorr: calculate CorrMD based only on fCAS + fAC0 functions (NBasis^2 NGrid NCholesky)
 C
       Implicit Real*8 (A-H,O-Z)
 C
@@ -2946,7 +2947,6 @@ C
       Include 'commons.inc'
 C
       Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
-      Integer, intent(in) :: FlagAC0
 C
       Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:),
      $ OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),
@@ -2989,7 +2989,7 @@ c     used in Kasia's code:
 C
       Write(6,'(/,1X,"************** ",
      $ " DGEMM Short-Range Correlation Energy with the Local Mu ")')
-      If (FlagAC0==1) Write(6,'(1X,"Compute fCAS and fAC0!")')
+      If (IFlFCorr==1) Write(6,'(1X,"Compute fCAS and fAC0!")')
 C
       If (IMOLPRO == 1) Then
          Call molprogrid0(NGrid,NBasis)
@@ -3204,9 +3204,9 @@ C
 C
       call clock('fr loop',Tcpu,Twall)
 C
-      If (FlagAC0==0) Deallocate(WorkD) ! Chol vecs no longer necessary
+      If (IFlFCorr==0) Deallocate(WorkD) ! Chol vecs no longer necessary
 C
-      If (FlagAC0==1) Then
+      If (IFlFCorr==1) Then
 c
 C     add a contribution from the AC0 correlation Gamma
 C
@@ -3455,9 +3455,9 @@ c
 c
       call clock('FCorr loop',Tcpu,Twall)
 C
-      EndIf ! FlagAC0 end
+      EndIf ! IFlFCorr end
 c
-      If (FlagAC0==1) Allocate(OnTopCorr(NGrid),XMuLocCorr(NGrid))
+      If (IFlFCorr==1) Allocate(OnTopCorr(NGrid),XMuLocCorr(NGrid))
 C
       Allocate(OnTop(NGrid))
       Allocate(XMuLoc(NGrid))
@@ -3497,7 +3497,7 @@ c     used in Kasia's code:
 C
       EndDo ! NGrid
 
-      If (FlagAC0==1) Then
+      If (IFlFCorr==1) Then
       Do I=1,NGrid
 C
       OnTopCorr(I)=Zero
@@ -3529,13 +3529,13 @@ c     used in Kasia's code:
       EndIf
 C
       EndDo ! NGrid
-      EndIf ! FlagAC0 end
+      EndIf ! IFlFCorr end
 c
       If (IIPRINT.GT.1) Then
        Print*, 'OnTop      =', norm2(OnTop)
        Print*, 'XMuLoc     =', norm2(XMuLoc)
-       If(FlagAC0==1) Print*, 'XMuLocCorr =', norm2(XMuLocCorr)
-       If(FlagAC0==1) Print*, 'OnTopCorr  =', norm2(OnTopCorr)
+       If(IFlFCorr==1) Print*, 'XMuLocCorr =', norm2(XMuLocCorr)
+       If(IFlFCorr==1) Print*, 'OnTopCorr  =', norm2(OnTopCorr)
       EndIf
 c
       call clock('OnTop loop 1',Tcpu,Twall)
@@ -3545,7 +3545,7 @@ c
       Deallocate(FPsiB)
       Deallocate(RDM2val)
 C
-      If (FlagAC0==1) Then
+      If (IFlFCorr==1) Then
          Deallocate(Work)
          Deallocate(QGamAV,QGamIV,QGamIA)
          Deallocate(QGamVV,QGamAA,QGamII)
@@ -3609,7 +3609,7 @@ C
 C
       AvMU=AvMU/XEl
 C
-      If (FlagAC0==1) Then
+      If (IFlFCorr==1) Then
 C
 C     CorrMD with a contribution from Gamma^corr
 C
@@ -3651,11 +3651,11 @@ C
      $ 3F15.4)') XPairAv,XPairAC0Av,XPairCAv
 C
       AvMUCorr=AvMUCorr/XEl
-      EndIf ! FlagAC0 end
+      EndIf ! IFlFCorr end
 C
       Write(6,'(/," CAS:     Corr_md and average Mu   ",
      $ F12.8,F12.2)') CorrMD,AvMU
-      If(FlagAC0==1) Then
+      If(IFlFCorr==1) Then
          Write(6,'(  " CAS-AC0: Corr_md and average Mu   ",
      $         F12.8,F12.2/)') CorrMDCorr,AvMUCorr
 C

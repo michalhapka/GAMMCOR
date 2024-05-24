@@ -298,7 +298,8 @@ else
         endif
      endif
      if(Input%CalcParams%JobType==JOB_TYPE_SRAC0) then
-       Flags%ICorrMD = 1
+       Flags%ICorrMD  = 1
+       Flags%IFlFCorr = Input%CalcParams%FunCorr ! set fCAS/fCAS+fAC0
      endif
 !     if(Input%CalcParams%DFApp==2) Flags%IFunSRKer = 1
 

@@ -151,6 +151,7 @@ character(*),parameter :: PossibleUnits(2) = &
          integer :: Rdm2Type  = FLAG_RDM2TYP
          integer :: OrbRelax  = FLAG_ORBRELAX
          integer :: OrbIncl   = FLAG_ORBINCL
+         integer :: FunCorr   = 0 ! SR-AC0,fCAS (default)
          integer :: MemVal = 2, MemType = 3 ! default: use 2 GB for 3-ind_tran (Cholesky)
          logical :: Visual     = FLAG_VISUAL
          logical :: Restart    = FLAG_RESTART
@@ -354,6 +355,7 @@ type FlagsData
      integer :: IFunSRKer = 0
      integer :: IFunSR2   = 0 ! for POSTCAS
      integer :: ICorrMD   = 0 ! for SRAC0
+     integer :: IFlFCorr  = 0 ! for SRAC0
      double precision :: Alpha = 0
      integer :: IModG   = 1
      integer :: NGOcc   = 0

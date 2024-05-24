@@ -438,7 +438,7 @@ end subroutine ACABMAT0_FOFO
 
 subroutine AC0CAS_FOFO(ECorr,ETot,Occ,URe,XOne,ABPLUS,ABMIN, &
                        IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
-                       NoSt,IntJFile,IntKFile,ICholesky)
+                       NoSt,IntJFile,IntKFile,ICholesky,IFlFCorr)
 !
 !     A ROUTINE FOR COMPUTING AC0 INTEGRAND
 !     (FOFO VERSION, USED IN AC0-CAS)
@@ -446,6 +446,8 @@ subroutine AC0CAS_FOFO(ECorr,ETot,Occ,URe,XOne,ABPLUS,ABMIN, &
 !     - USES BLOCK STRUCTURE FOR ABPLUS0 and ABMIN0
 !       (DOES NOT DAMP TO FILE)
 !     - COMPUTES THE AC0 ENERGY
+!     - IFlFCorr =1 (for SR-AC0) : dumps rdmcorr matrix for fAC0
+!
 !
 !use timing
 !
@@ -454,6 +456,7 @@ implicit none
 integer,intent(in)           :: NAct,INActive,NDimX,NBasis,NDim,NInte1,NoSt
 integer,intent(in)           :: IndN(2,NDim),IndX(NDim),IGemIN(NBasis)
 integer,intent(in)           :: ICholesky
+integer,intent(in)           :: IFlFCorr
 double precision,intent(in)  :: URe(NBasis,NBasis),Occ(NBasis),XOne(NInte1)
 character(*)                 :: IntJFile,IntKFile
 double precision,intent(out) :: ETot,ECorr
@@ -488,6 +491,11 @@ type(EblockData) :: EblockIV
 
 ! timing
 !call clock('START',Tcpu,Twall)
+
+if(IFlFCorr==1) then
+  write(lout,*) 'Error! Disabled CorrFun=fAC0 in AC0CAS_FOFO!'
+  stop
+endif
 
 ! set dimensions
 NOccup = NAct + INActive
@@ -650,8 +658,8 @@ if(ICholesky==0) then
 
    allocate(work1(NBasis*NBasis))
 
-   ! dump Gamma^corr
-   open(newunit=iunit2,file='rdmcorr',form='unformatted')
+   !! SR-AC0(fAC0) : dump Gamma^corr
+   !open(newunit=iunit2,file='rdmcorr',form='unformatted')
 
    open(newunit=iunit,file='FOFO',status='OLD', &
         access='DIRECT',recl=8*NBasis*NOccup)
@@ -686,8 +694,8 @@ if(ICholesky==0) then
 
                    if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
 
-                   ! dump Gamma^corr
-                   if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit2)ir,ip,is,iq,Aux
+                   !! dump Gamma^corr
+                   !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit2)ir,ip,is,iq,Aux
 
                  endif
               enddo
@@ -698,7 +706,7 @@ if(ICholesky==0) then
    enddo
 
    close(iunit)
-   close(iunit2)
+   if (IFlFCorr==1) close(iunit2)
    deallocate(work1)
 
 elseif(ICholesky==1) then
@@ -710,8 +718,8 @@ elseif(ICholesky==1) then
    read(iunit) MatFF
    close(iunit)
 
-   ! dump Gamma^corr
-   open(newunit=iunit,file='rdmcorr',form='unformatted')
+   !! dump Gamma^corr
+   !open(newunit=iunit,file='rdmcorr',form='unformatted')
 
    ! set number of loops over integrals
    dimFO = NOccup*NBasis
@@ -769,8 +777,8 @@ elseif(ICholesky==1) then
 
                  if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
 
-                 ! dump Gamma^corr
-                 if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit)ir,ip,is,iq,Aux
+                 !! dump Gamma^corr
+                 !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit)ir,ip,is,iq,Aux
 
                endif
             enddo

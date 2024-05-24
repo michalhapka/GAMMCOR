@@ -471,6 +471,14 @@ subroutine read_block_calculation(CalcParams, line)
                CalcParams%Rdm2Type = 11
            endif
 
+      case ("CORRFUNCTION","CORRFUN","FCORR") ! option for SRAC0 (AC0+E_cmd^sr)
+           if (uppercase(val) == "FCAS") then
+               CalcParams%FunCorr = 0
+           elseif (uppercase(val) == "FCORR".or. &
+               uppercase(val) == "FAC0") then
+               CalcParams%FunCorr = 1
+           endif
+
       ! here not sure
       case ("RESPONSE")
            if (uppercase(val) == "ERPA-APSG".or.&
