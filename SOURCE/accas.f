@@ -2936,8 +2936,8 @@ C     CAREFUL : memory requirements could still be improved...
 C
 C     RETURNS SORT-RANGE CORRELATION ENERGY WITH SR-PBE ONTOP CORRELATION FUNCTIONAL AND LOCAL MU, Giner et al. JCP 152, 174104 (2020)
 C
-C     IFlCorr == 0 : calculate CorrMD based only on fCAS function (nact^2 NGrid NCholesky)
-C     IFlCorIFlCorr: calculate CorrMD based only on fCAS + fAC0 functions (NBasis^2 NGrid NCholesky)
+C     IFlFCorr == 0 : calculate CorrMD based only on fCAS function (nact^2 NGrid NCholesky)
+C     IFlFCorr == 1 : calculate CorrMD based only on fCAS + fAC0 functions (NBasis^2 NGrid NCholesky)
 C
       Implicit Real*8 (A-H,O-Z)
 C
