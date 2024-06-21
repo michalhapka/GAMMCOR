@@ -32,6 +32,17 @@ C
 C
       type(FlagsData) :: Flags
 C
+C     Cholesky OnTheFly
+      type(TCholeskyVecsOTF) :: CholeskyVecsOTF
+      Type(TCholeskyVecsOTF) :: CholErfVecsOTF
+      type(TSystem)  :: System
+      type(TAOBasis) :: AOBasis
+C
+      logical :: SortAngularMomenta
+      character(:),allocatable :: XYZPath
+      character(:),allocatable :: BasisSetPath
+C
+C     Cholesky Binary
       Type(TCholeskyVecs) :: CholeskyVecs
       Real*8, Allocatable :: MatFF(:,:)
 C
@@ -159,11 +170,31 @@ C     memory allocation for sorter
          Call readtwoint(NBasis,1,'AOERFINT','AOERFSORT',MemSrtSize)
       EndIf ! IFunSR
       ElseIf(ICholeskyBIN==1) Then
+C
+      Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
+      Write(LOUT,'(1x,a)') 'Cholesky Binary'
+      Write(LOUT,'(1x,3a6)') ('******',i=1,3)
+C
          Call chol_CoulombMatrix(CholeskyVecs,NBasis,'AOTWOINT',1,
      &                           ICholeskyAccu)
-      NCholesky=CholeskyVecs%NCholesky
+         NCholesky=CholeskyVecs%NCholesky
+C
       ElseIf(ICholeskyOTF==1) Then
-         Stop "CholeskyOTF not ready in ReadDAL!"
+C
+      Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
+      Write(LOUT,'(1x,a)') 'Cholesky On-The-Fly'
+      Write(LOUT,'(1x,3a6)') ('******',i=1,3)
+C
+      Call auto2e_init()
+C
+      XYZPath = "./input.inp"
+      BasisSetPath = BasisSet
+      SortAngularMomenta = .true.
+C
+      Call CholeskyOTF_ao_vecs(CholeskyVecsOTF,AOBasis,System,IUnits,
+     $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu)
+      NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
+
       EndIf ! ICholesky
       EndIf ! ITwoEl
 
@@ -288,8 +319,6 @@ C
 C
       ElseIf (ICholesky==1) Then
 C
-      Allocate(MatFF(NCholesky,NBasis**2))
-C
       If(MemType == 2) then       !MB
          MemMOTransfMB = MemVal
       ElseIf(MemType == 3) then   !GB
@@ -297,10 +326,32 @@ C
       Endif
       Write(LOUT,'(1x,a,i5,a)') 'Using ',MemMOTransfMB,
      $                          ' MB for 3-indx Cholesky transformation'
+C
+C     cholesky BIN
+      If (ICholeskyBIN==1) Then
+C
+      Allocate(MatFF(NCholesky,NBasis**2))
+C
       Call chol_MOTransf_TwoStep(MatFF,CholeskyVecs,
      $              UAux,1,NBasis,
      $              UAux,1,NBasis,
      $              MemMOTransfMB)
+C
+C     cholesky OTF
+      ElseIf (ICholeskyOTF==1) Then
+      NA = NBasis
+      NB = NBasis
+      allocate(MatFF(NCholesky,NA*NB))
+C
+      call chol_gammcor_Rkab(MatFF,UAux,1,NBasis,UAux,1,NBasis,
+     $                   MemMOTransfMB, CholeskyVecsOTF,
+     $                   AOBasis, ORBITAL_ORDERING_DALTON)
+c     Call clock('chol_gammcor_Rkab',Tcpu,Twall)
+C
+      ElseIf (ICholeskyTHC==1) Then
+      Stop "Implement ICholeskyTHC in ReadDAL!"
+C
+      EndIf ! Cholesky BIN / OTF / THC
 C
       Open(newunit=iunit,file='cholvecs',form='unformatted')
       Write(iunit) NCholesky
