@@ -2,7 +2,7 @@
      $ IInteg,IAO,IGVB,IFreeze,ILoc,NInActOrb,NActOrb,NVirtOrb,
      $ ISAPT,IWarn,ITwoEl,ITrpl,
      $ ICholesky,ICholeskyBIN,ICholeskyOTF,ICholeskyTHC,
-     $ ICholeskyAccu,MemVal,MemType,
+     $ ICholeskyAccu,Monomer,MemVal,MemType,
      $ IH0test,IUnits,InternalGrid,IGridType
       Common/INTF/ IDALTON,IMOLPRO,ITREXIO,
      $ IOrbOrder

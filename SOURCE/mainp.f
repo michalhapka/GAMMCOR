@@ -10,6 +10,7 @@ C     K.PERNAL 2018
 C
       Program PRDMFT
 C
+      use memory
       use types
       use inputfill
       use systemdef
@@ -415,6 +416,7 @@ C
 C
       Call free_System(System)
       Call clock(PossibleJobType(Flags%JobType),Tcpu,Twall)
+      call mem_report
 C      Stop
       End
 C

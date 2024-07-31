@@ -1102,7 +1102,7 @@ C    set buffer size for Cholesky AO2NO transformation
       elseif(MemType == 3) then   !GB
          MemMOTransfMB = MemVal * 1024_8
       endif
-      Write(LOUT,'(1x,a,i5,a)') 'Using ',MemMOTransfMB,
+      Write(LOUT,'(1x,a,i6,a)') 'Using ',MemMOTransfMB,
      $                          ' MB for 3-indx Cholesky transformation'
 C
       If(ICholeskyBIN==1) Then
@@ -1503,6 +1503,7 @@ C
 C     READ/WRITE THE ONE- AND TWO-ELECTRON INTEGRALS
 C     INTERFACED WITH MOLPRO
 C
+      use memory
       use types
       use sorter
       use tran
@@ -2066,7 +2067,8 @@ C     $                          CAOMO,CSAOMO,XKin,GammaF,
 C     $                          MemType,MemVal,NInte1,NBasis,
 C     $                          JMO,KMO)
 C
-           Monomer = 3 ! SYS_TOTAL in System
+c          Monomer = 3 ! SYS_TOTAL in System
+           Print*, 'Monomer =',Monomer
 c          IH0Test=0
 c          Print*, 'IH0Test =',IH0Test
            Call CholeskyOTF_Fock_MO_v2(work1,CholeskyVecsOTF,
@@ -2247,7 +2249,6 @@ C
       Call MatTr(XKin,UAOMO,NBasis)
 C
       If(ICholeskyOTF==1.or.ICholeskyTHC==1) Then
-      print*, 'ICholeskyOTF in GET.AO.NO '
 C
 C     GET AO --> NO matrix
 C     CAOMO = C(AO,MO) ; URe = C(NO,MO)
@@ -2356,7 +2357,8 @@ C
       ElseIf (ICholesky==1) Then
 C     cholesky BIN
       If (ICholeskyBIN==1) Then
-      Allocate(MatFF(NCholesky,NBasis**2))
+c     Allocate(MatFF(NCholesky,NBasis**2))
+      call mem_alloc(MatFF,NCholesky,NBasis**2)
       Call chol_MOTransf_TwoStep(MatFF,CholeskyVecs,
      $             UAux,1,NBasis,
      $             UAux,1,NBasis,
@@ -2364,16 +2366,12 @@ C     cholesky BIN
 
 C     cholesky OTF
       ElseIf (ICholeskyOTF==1) Then
-      NA = NBasis
-      NB = NBasis
-      a0 = 1
-      a1 = NBasis
-      b0 = 1
-      b1 = NBasis
-      allocate(MatFF(NCholesky,NA*NB))
+
+c     allocate(MatFF(NCholesky,NA*NB))
+      call mem_alloc(MatFF,NCholesky,NBasis**2)
       UAux = CAONO
 C
-      call chol_gammcor_Rkab(MatFF, UAux, a0, a1, UAux, b0, b1,
+      call chol_gammcor_Rkab(MatFF,UAux,1,Nbasis,UAux,1,NBasis,
      $                   MemMOTransfMB, CholeskyVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_MOLPRO)
       Call clock('chol_gammcor_Rkab',Tcpu,Twall)
@@ -2381,7 +2379,8 @@ C
 C     cholesky THC
       ElseIf (ICholeskyTHC==1) Then
       NCholesky = NCholeskyTHC
-      allocate(MatFF(NCholesky,NBasis**2))
+c     allocate(MatFF(NCholesky,NBasis**2))
+      call mem_alloc(MatFF,NCholesky,NBasis**2)
       allocate(Xga(NGridTHC,NBasis))
 C
       Print*, 'THC Step 2: NO transform Xgp to Xga'
@@ -2420,7 +2419,8 @@ C
       write(iunit) NCholesky
       write(iunit) MatFF
       close(iunit)
-      Deallocate(MatFF)
+c     Deallocate(MatFF)
+      call mem_dealloc(MatFF)
 C
       EndIf ! ICholesky
 C     TEST MITHAP

@@ -24,6 +24,7 @@ OBJ = $(O)mainp.o $(O)initia.o $(O)dmscf.o $(O)misc.o $(O)optocc.o \
        $(O)exmisc.o $(O)exdpino.o $(O)exi.o $(O)exappr.o \
        $(O)srefex.o $(O)diis.o \
        $(O)timing.o \
+       $(O)memory.o \
        $(O)srlrdynamic.o $(O)erpa.o $(O)interpa.o  $(O)exact2el.o $(O)optapsg.o $(O)newton.o $(O)acfd.o $(O)accas.o \
        $(O)caspidft.o $(O)ac_exact_2el.o $(O)vv10.o \
       $(O)tran_Chol.o $(O)CholeskyOTF.o \
@@ -44,8 +45,8 @@ $(O)%.o : $(S)%.f
 $(PROG) : $(OBJ)
 	$(FCC) -o $@ $^ $(XOBJ) $(FFLAGS) $(LIBS)
 
-$(O)mainp.o            : $(S)commons.inc $(O)types.o $(O)inputfill.o $(O)systemdef.o $(O)sapt_main.o $(O)git_info.o $(O)build_info.o
-$(O)initia.o           : $(S)commons.inc $(O)priunit.o $(O)timing.o $(O)rdwrext.o $(O)sorter.o $(O)abmats.o $(O)types.o $(O)tran.o $(O)CholeskyOTF.o $(O)gammint.o
+$(O)mainp.o            : $(S)commons.inc $(O)memory.o $(O)types.o $(O)inputfill.o $(O)systemdef.o $(O)sapt_main.o $(O)git_info.o $(O)build_info.o
+$(O)initia.o           : $(S)commons.inc $(O)memory.o $(O)priunit.o $(O)timing.o $(O)rdwrext.o $(O)sorter.o $(O)abmats.o $(O)types.o $(O)tran.o $(O)CholeskyOTF.o $(O)gammint.o
 $(O)accas.o            : $(S)commons.inc $(O)priunit.o $(O)timing.o $(O)rdwrext.o $(O)sorter.o $(O)abmats.o $(O)abfofo.o $(O)ab0fofo.o \
                          $(O)gridintern.o
 $(O)acfd.o             : $(S)commons.inc $(O)abmats.o $(O)abfofo.o  $(O)ab0fofo.o $(O)rdwrext.o
@@ -71,6 +72,7 @@ $(O)srlrdynamic.o      : $(S)commons.inc
 $(O)vv10.o             : $(S)commons.inc
 
 $(O)ac_fofo.o          : $(O)abmats.o $(O)abfofo.o $(O)blocktypes.o \
+                         $(O)memory.o \
                          $(O)C_integrator.o $(O)iter_algorithm.o $(O)iter_algorithm_diis.o $(O)iter_algorithm_damping.o \
                          $(O)lambda_calculator.o $(O)lambda_calculator_diag.o $(O)lambda_calculator_block.o $(O)lambda_calculator_projector.o
 
