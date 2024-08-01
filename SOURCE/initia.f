@@ -858,6 +858,10 @@ C
 C
 C       temp solution
         if(ICholeskyTHC==1) stop "Error! THC not ready in ReadDMRG!"
+C       set THC for FockOTF subroutine
+        NGridTHC=1
+        NCholeskyTHC=1
+        allocate(Xgp(NGridTHC,1),Zgk(NCholeskyTHC,1))
 C
          Call CholeskyOTF_Fock_MO_v2(WorkSq,CholeskyVecsOTF,
      $                         AOBasis,System,Monomer,'ORCA  ',
@@ -1118,14 +1122,8 @@ C
      $              MemMOTransfMB)
 
       ElseIf(ICholeskyOTF==1) Then
-      NA = NBasis
-      NB = NBasis
-      a0 = 1
-      a1 = NBasis
-      b0 = 1
-      b1 = NBasis
       NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
-      allocate(MatFF(NCholesky,NA*NB))
+      allocate(MatFF(NCholesky,NBasis**2))
 C
 CC     test print MO orbitals (this is transposed):
 C      Print*, 'Orbitals from Pavel:'
@@ -1147,7 +1145,7 @@ C      write(LOUT,'()')
      $           UAux,NBasis,0d0,UAONO,NBasis)
 
 c     CMOAO=transpose(CMOAO)
-      call chol_gammcor_Rkab(MatFF, UAONO, a0, a1, UAONO, b0, b1,
+      call chol_gammcor_Rkab(MatFF,UAONO,1,NBasis,UAONO,1,NBasis,
      $                   MemMOTransfMB, CholeskyVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_ORCA)
 

@@ -73,6 +73,7 @@ integer, parameter :: GRID_PARAMS_MEDIUM = 2
 integer, parameter :: GRID_PARAMS_FINE   = 3
 integer, parameter :: GRID_PARAMS_XFINE  = 4
 integer, parameter :: GRID_PARAMS_MOLPRO = 5
+integer, parameter :: GRID_PARAMS_DALTON = 6
 
 integer, parameter :: UNITS_ANGSTROM = 1
 integer, parameter :: UNITS_BOHR     = 2
@@ -116,9 +117,9 @@ character(*),parameter :: PossibleCholAccu(3) = &
 [character(9) :: &
 'DEFAULT', 'TIGHT', 'LUDICROUS']
 
-character(*),parameter :: PossibleGridType(5) = &
+character(*),parameter :: PossibleGridType(6) = &
 [character(8) :: &
-'SG1', 'MEDIUM', 'FINE', 'XFINE', 'MOLPRO']
+'SG1', 'MEDIUM', 'FINE', 'XFINE', 'MOLPRO', 'DALTON']
 
 character(*),parameter :: PossibleUnits(2) = &
 [character(8) :: &

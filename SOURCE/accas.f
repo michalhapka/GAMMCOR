@@ -193,7 +193,7 @@ c      endif
 c      Call LOC_MU_CBS_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
 c      stop "stop here!"
 
-      Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Call LOC_MU_CHOL_v2(BasisSet,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
       Call delfile('cholvecs') ! delete cholesky vecs
       call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
@@ -2934,9 +2934,12 @@ C
       End
 
 *Deck LOC_MU_CHOL_v2
-      Subroutine LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Subroutine LOC_MU_CHOL_v2(BasisSet,CorrMD,AvMU,
+     $                          URe,UNOAO,Occ,NBasis)
 C
       use timing
+      use types
+      use grid_internal
 C
 C     DGEMM version
 C     CAREFUL : memory requirements could still be improved...
@@ -2948,17 +2951,21 @@ C     IFlFCorr == 1 : calculate CorrMD based only on fCAS + fAC0 functions (NBas
 C
       Implicit Real*8 (A-H,O-Z)
 C
-      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
-     $ Four=4.D0)
+      Parameter(Half=0.5D0)
+c     Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
+c    $ Four=4.D0)
 C
+      Character(*) :: BasisSet
       Include 'commons.inc'
 C
       Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
 C
       Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:),
-     $ OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),
      $ Zk(:),RhoGrid(:),Sigma(:),WGrid(:),WorkD(:,:),
      $ Oa(:,:),Oi(:,:),Oia(:,:),Oai(:,:),Q(:,:)
+      Real*8,allocatable,target :: PhiGGA(:,:,:)
+      Real*8,pointer :: OrbGrid(:,:)
+      Real*8,pointer :: OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:)
       Double Precision, Allocatable :: Oaa(:,:),Oii(:,:)
       Double Precision, Allocatable :: OOai(:,:),OOia(:,:)
       Double Precision, Allocatable :: CHVCSAA(:,:),CHVCSII(:,:)
@@ -2988,7 +2995,7 @@ C     debug printlevel
 C
 C     set constants
 C
-      Pi = dacos(-1.d0)
+c     Pi = dacos(-1.d0)
 c      SPi = SQRT(Pi)
 c     used in Kasia's code:
       SPi=SQRT(3.141592653589793)
@@ -2998,38 +3005,57 @@ C
      $ " DGEMM Short-Range Correlation Energy with the Local Mu ")')
       If (IFlFCorr==1) Write(6,'(1X,"Compute fCAS and fAC0!")')
 C
-      If (IMOLPRO == 1) Then
-         Call molprogrid0(NGrid,NBasis)
-      ElseIf(IDALTON == 1) Then
-         Call daltongrid0(NGrid,griddalfile,doGGA,NBasis)
-         If (.not.doGGA) stop "LOC_MU_CHOL: Run Dalton with SR-PBE!"
+C     Load grid (Molpro, Dalton, Internal)
+C
+      If (InternalGrid==0) then
+C
+         If (IMOLPRO == 1) Then
+            Write(6,'(/,1X,"Read MOLPRO DFT grid file")')
+            Call molprogrid0(NGrid,NBasis)
+         ElseIf(IDALTON == 1) Then
+            Write(6,'(/,1X,"Read DALTON DFT grid file")')
+            Call daltongrid0(NGrid,griddalfile,doGGA,NBasis)
+            If (.not.doGGA) stop "LOC_MU_CHOL: Run Dalton with SR-PBE!"
+         EndIf
+C
+         Write(6,'(1X,"The number of Grid Points = ",I8)')
+     $         NGrid
+         Allocate(WGrid(NGrid))
+         Allocate(PhiGGA(NGrid,NBasis,4))
+
+      ElseIf (InternalGrid==1) then
+C
+c        Write(6,'(/,1X,"Generate internal DFT grid: ")',advance='no')
+c        Write(6,'(1x,"Grid Type ",a)') PossibleGridType(IGridType)
+         Call internal_gga_no_orbgrid(IGridType,BasisSet,
+     $                          IOrbOrder,transpose(UNOAO),
+     $                          WGrid,PhiGGA,NGrid,NBasis,NBasis,IUnits)
       EndIf
-      Write(6,'(/,1X,"The number of Grid Points = ",I8)')
-     $ NGrid
 C
-      Allocate (WGrid(NGrid))
-      Allocate (OrbGrid(NGrid,NBasis))
-      Allocate (OrbXGrid(NGrid,NBasis))
-      Allocate (OrbYGrid(NGrid,NBasis))
-      Allocate (OrbZGrid(NGrid,NBasis))
+C     use pointers for orbitals and gradients
+      OrbGrid  => PhiGGA(:,:,1)
+      OrbXGrid => PhiGGA(:,:,2)
+      OrbYGrid => PhiGGA(:,:,3)
+      OrbZGrid => PhiGGA(:,:,4)
 C
-C     load orbgrid, gradients, and wgrid
-C
-      If (IMOLPRO == 1) Then
-         Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     &                   WGrid,UNOAO,NGrid,NBasis)
-      ElseIf (IDALTON == 1) Then
-         Allocate(Work(NBasis,NBasis))
-         Work = transpose(UNOAO)
-         Call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     &                       WGrid,NGrid,griddalfile,NBasis)
-         Call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     &                       Work,0,NGrid,NBasis,.false.)
-CC     visualisation
-C        Allocate(RR(3,NGrid))
-C        Call dalton_grid_coord(NGrid,RR,griddalfile)
-        Deallocate(Work)
-      EndIf
+      If(InternalGrid==0) Then
+C        load orbitals, gradients, and wgrid
+         If (IMOLPRO == 1) Then
+            Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                      WGrid,UNOAO,NGrid,NBasis)
+         ElseIf (IDALTON == 1) Then
+            Allocate(Work(NBasis,NBasis))
+            Work = transpose(UNOAO)
+            Call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                          WGrid,NGrid,griddalfile,NBasis)
+            Call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                          Work,0,NGrid,NBasis,.false.)
+CC        visualisation
+C           Allocate(RR(3,NGrid))
+C           Call dalton_grid_coord(NGrid,RR,griddalfile)
+           Deallocate(Work)
+         EndIf
+      EndIf ! InternalGrid
 C
       NAct=NAcCAS
       INActive=NInAcCAS
@@ -3076,7 +3102,7 @@ C
       Allocate(WorkD(NCholesky,NBasis**2))
       read(iunit) WorkD
       close(iunit)
-      print*,'NCholesky',NCholesky
+c     print*,'NCholesky',NCholesky
 C
 C     truncate CHOLVECS
 C
@@ -3130,12 +3156,12 @@ C
       Allocate (FPsiB(NGrid))
       Allocate (Q(NAct,NAct))
       Allocate (Oa(NCholesky,NAct))
-      Allocate (Oi(NCholesky,INActive))
       Allocate (Oai(NCholesky,NAct))
+      Allocate (Oi(NCholesky,INActive))
       Allocate (Oia(NCholesky,INActive))
 c
-      Allocate (Oaa(NAct,NAct),Oii(INActive,INActive))
-      Allocate (OOai(NAct,INActive))
+      Allocate (Oaa(NAct,NAct))
+      Allocate (Oii(INActive,INActive),OOai(NAct,INActive))
 
       Do IG=1,NGrid
 C
@@ -3167,6 +3193,8 @@ C
       FPsiB(IG)=ddot(NAct*NAct,Oaa,1,Q,1)
 C
 C     inactive-inactive
+C
+      If(INActive/=0) Then
 C
       Call dgemv('N',NCholesky*INActive,INActive,1d0,CHVCSII,
      $          NCholesky*INActive,OrbGrid(IG,1:INActive),1,0d0,Oi,1)
@@ -3201,6 +3229,8 @@ c
      &         +Occ(IP)*OOai(IPP,IQ)*OrbGrid(IG,IP)*OrbGrid(IG,IQ)
       EndDo
       EndDo
+C
+      EndIf ! INActive.ne.0
 
       EndDo ! NGrid
       FPsiB = 2d0*FPsiB
@@ -3547,8 +3577,8 @@ c
 c
       call clock('OnTop loop 1',Tcpu,Twall)
 c
-      if(allocated(FPsiB)) print*, 'allocated FsiB!'
-      if(allocated(RDM2val)) print*, 'allocated rdm2val!'
+c     if(allocated(FPsiB)) print*, 'allocated FsiB!'
+c     if(allocated(RDM2val)) print*, 'allocated rdm2val!'
       Deallocate(FPsiB)
       Deallocate(RDM2val)
 C
