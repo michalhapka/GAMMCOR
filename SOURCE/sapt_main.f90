@@ -458,6 +458,12 @@ elseif(Flags%ICholesky==1) then
 
 endif
 
+if(SAPT%ic6==1) then
+    print*, 'calculate only C6 coeffs!'
+    call c6_dummy(Flags,SAPT%monA,SAPT%monB,SAPT)
+endif
+
+
 call print_warn(SAPT)
 call free_sapt(Flags,SAPT)
 

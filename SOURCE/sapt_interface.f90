@@ -195,8 +195,15 @@ SAPT%monB%NDim = NBasis*(NBasis-1)/2
  if(SAPT%InterfaceType==1.and.SAPT%ic6==1) then
     write(LOUT,*) 'DALTON CANNOT BE USED FOR Cn COEFFS!'
  elseif(SAPT%InterfaceType==2.and.SAPT%ic6==1) then
-    !call read_dip_molpro(SAPT%monA,'DIP_A',NBasis)
-    !call read_dip_molpro(SAPT%monB,'DIP_B',NBasis)
+    !if (allocated(SAPT%monA%dipm)) print*, 'DIP-A allocated in sapt_interface!'
+    !if (allocated(SAPT%monB%dipm)) print*, 'DIP-B allocated in sapt_interface!'
+      allocate(SAPT%monA%dipm(3,NBasis,NBasis))
+      allocate(SAPT%monB%dipm(3,NBasis,NBasis))
+    associate (DipA => SAPT%monA%dipm, &
+               DipB => SAPT%monB%dipm)
+      call read_dip_molpro(DipA(1,:,:),DipA(2,:,:),DipA(3,:,:),'DIP_A',NBasis)
+      call read_dip_molpro(DipB(1,:,:),DipB(2,:,:),DipB(3,:,:),'DIP_B',NBasis)
+    end associate
  endif
 
 ! read 2-el integrals

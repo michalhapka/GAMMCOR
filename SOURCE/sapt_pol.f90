@@ -4048,6 +4048,7 @@ double precision,parameter :: BigE = 1.D8
     enddo
  enddo
  write(LOUT,*) 16d0*c6val
+ call print_en('C6iso',16d0*c6val,.true.)
 
 deallocate(Bdm,Adm)
 deallocate(intB,intA)

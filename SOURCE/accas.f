@@ -3025,12 +3025,27 @@ C
 
       ElseIf (InternalGrid==1) then
 C
-c        Write(6,'(/,1X,"Generate internal DFT grid: ")',advance='no')
-c        Write(6,'(1x,"Grid Type ",a)') PossibleGridType(IGridType)
+C     for Orca UNOAO orbitals are read from file
+C
+!      print*, 'UAONO =',norm2(UNOAO)
+!         If (IOrbOrder == 2) then ! orca
+!            Allocate(Work(NBasis,NBasis),Oaa(NBasis,NBasis))
+!            Oaa=UNOAO
+!            Open(newunit=ione,file='uaono.dat',access='sequential',
+!     $         form='unformatted',status='old')
+!            Read(ione) Work
+!            Close(ione)
+!            UNOAO = transpose(Work)
+!         Endif
          Call internal_gga_no_orbgrid(IGridType,BasisSet,
      $                          IOrbOrder,transpose(UNOAO),
      $                          WGrid,PhiGGA,NGrid,NBasis,NBasis,IUnits)
-      EndIf
+c
+c     for Orca, restore original UNOAO==C(MO,NO)
+!     If (IOrbOrder == 2) UNOAO = Oaa
+!     If (IOrbOrder == 2) Deallocate(Oaa)
+C
+      EndIf ! InternalGrid
 C
 C     use pointers for orbitals and gradients
       OrbGrid  => PhiGGA(:,:,1)
@@ -3500,7 +3515,7 @@ C
       Allocate(XMuLoc(NGrid))
       Allocate(RhoGrid(NGrid))
       Allocate(Sigma(NGrid))
-C
+
       Do I=1,NGrid
 C
       Call DenGrid(I,RhoGrid(I),Occ,URe,OrbGrid,NGrid,NBasis)
