@@ -570,7 +570,7 @@ C
       AUXM(I,J)=AUXM2((J-1)*NAc+I)
       EndDo
       EndDo
-C
+c
       Sum=Zero
       NAc=0
       Do I=1,NBasis
@@ -772,6 +772,7 @@ C
 
       Call CholeskyOTF_ao_vecs(CholeskyVecsOTF,AOBasis,System,IUnits,
      $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu)
+      Call sys_NuclearRepulsion(ENuc,System)
       end block
 
       EndIf
@@ -1143,8 +1144,14 @@ C      write(LOUT,'()')
       !UAONO = (CMOAO)^T.UMONO
       call dgemm('T','N',NBasis,NBasis,NBasis,1d0,CMOAO,NBasis,
      $           UAux,NBasis,0d0,UAONO,NBasis)
+c
+Cc     save C(AO,NO) orbitals to a file
+Cc     (e.g., for SRAC0)
+Cc
+C      open(newunit=iunt,file='uaono.dat',form='unformatted')
+C      write(iunt) UAONO(1:NBasis,1:NBasis)
+C      close(iunt)
 
-c     CMOAO=transpose(CMOAO)
       call chol_gammcor_Rkab(MatFF,UAONO,1,NBasis,UAONO,1,NBasis,
      $                   MemMOTransfMB, CholeskyVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_ORCA)
@@ -1481,6 +1488,17 @@ C
       open(10,file='ure_casno.dat')
       write(10,*)URe
       close(10)
+C
+C     Cholesky OTF: save C(NO,AO)
+C     matrix in UMOAO (used later, e.g., in SRAC0)
+C
+      If (ICholeskyOTF==1) Then
+      Do J=1,NBasis
+      Do I=1,NBasis
+      UMOAO((J-1)*NBasis+I)=UAONO(J,I)
+      EndDo
+      EndDo
+      EndIf
 C
 C     INTEGRALS ARE TRANSFORMED SO URe IS SET AS A UNIT MATRIX
 C
@@ -2093,7 +2111,7 @@ c
            CSAOMO = transpose(UAux)
            Call read_caomo_molpro(CAOMO,SAO,itsoao,jtsoao,
      &                           'MOLPRO.MOPUN','CASORBAO',NBasis)
-           Monomer = 3 ! SYS_TOTAL in System
+c          Monomer = 3 ! SYS_TOTAL in System
            Call CholeskyOTF_Fock_MO_v2(work1,CholErfVecsOTF,
      $                            AOBasis,System,Monomer,'MOLPRO',
      $                            CAOMO,CSAOMO,XKin,GammaF,
