@@ -277,6 +277,7 @@ else
      Flags%IFlAC   = 1
      Flags%IFlSnd  = 1
      Flags%IFlAC0D = 0
+     Flags%IDBBSC  = Input%CalcParams%DBBSC
      print*,'Input%CalcParams%PostCAS', Input%CalcParams%PostCAS
      print*,'Input%CalcParams%DFApp  ', Input%CalcParams%DFApp
      print*,'Flags%IFunSRKer         ', Input%CalcParams%Kernel

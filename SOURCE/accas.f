@@ -189,13 +189,15 @@ c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
 c      If(ITwoEl.eq.1) then
 c      Call LOC_MU_CBS(CorrMD,AvMU,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
 c      stop
-c      endif
-c      Call LOC_MU_CBS_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
-c      stop "stop here!"
 
       Call LOC_MU_CHOL_v2(BasisSet,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
       Call delfile('cholvecs') ! delete cholesky vecs
       call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
+      EndIf
+C
+      Print*,'IDBBSC accas =' ,IDBBSC
+      If (IDBBSC.Eq.1) Then
+      Call LOC_MU_CBS_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
       EndIf
 C
       EndIf
@@ -305,7 +307,7 @@ C
       If (ICholesky .Eq. 0) Then
       Call delfile('FFOO')
       Call delfile('FOFO')
-      ElseIf (ICholesky.Eq.1 .and. IFlCorrMD.Eq.0) Then
+      ElseIf (IFlCorrMD.eq.0.and.IDBBSC.Eq.0) Then
       Call delfile('cholvecs')
       EndIf
       EndIf
@@ -4261,7 +4263,7 @@ C
 
       Deallocate(RDM2val)
 
-      End
+      End Subroutine LOC_MU_CBS_v2
 
 *Deck PBE_ONTOP_MD
       Subroutine PBE_ONTOP_MD(PBEMD,URe,Occ,

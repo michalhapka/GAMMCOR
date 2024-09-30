@@ -153,6 +153,7 @@ character(*),parameter :: PossibleUnits(2) = &
          integer :: OrbRelax  = FLAG_ORBRELAX
          integer :: OrbIncl   = FLAG_ORBINCL
          integer :: FunCorr   = 0 ! SR-AC0,fCAS (default)
+         integer :: DBBSC     = 0 ! AC0, CBS correction
          integer :: MemVal = 2, MemType = 3 ! default: use 2 GB for 3-ind_tran (Cholesky)
          logical :: Visual     = FLAG_VISUAL
          logical :: Restart    = FLAG_RESTART
@@ -357,6 +358,7 @@ type FlagsData
      integer :: IFunSR2   = 0 ! for POSTCAS
      integer :: ICorrMD   = 0 ! for SRAC0
      integer :: IFlFCorr  = 0 ! for SRAC0
+     integer :: IDBBSC    = 0 ! for AC0
      double precision :: Alpha = 0
      integer :: IModG   = 1
      integer :: NGOcc   = 0

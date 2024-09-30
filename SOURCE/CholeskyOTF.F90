@@ -478,6 +478,9 @@ do j=1,NBasis
 enddo
 #endif
 
+print*, 'ORBITAL_ORDERING =',ORBITAL_ORDERING
+print*, 'Cmat =',norm2(Cmat)
+
 call ints1e_gammcor_H0_mo(H0_int,Cmat,AOBasis,System,ORBITAL_ORDERING)
 #if CHOLOTF_DEBUG > 4
 !print*, 'Cmat = ',norm2(Cmat)

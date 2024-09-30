@@ -479,6 +479,13 @@ subroutine read_block_calculation(CalcParams, line)
                CalcParams%FunCorr = 1
            endif
 
+      case ("CBS","DBBSC") ! AC0 (Giner's CBS correction)
+           if (uppercase(val) == ".TRUE.".or. &
+               uppercase(val) == "TRUE".or.   &
+               uppercase(val) == "T") then
+               CalcParams%DBBSC = 1
+           endif
+
       ! here not sure
       case ("RESPONSE")
            if (uppercase(val) == "ERPA-APSG".or.&

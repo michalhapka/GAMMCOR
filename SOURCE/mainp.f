@@ -187,6 +187,10 @@ C                 0 : AC0+Ecmd^sr with self-adapting mu based on fCAS (default)
 C
       IFlFCorr = Flags%IFlFCorr
 C
+C     IDBBSC   = 1 : compute density-based basis set correction (Giner et al., JCP 2018)
+C
+      IDBBSC = Flags%IDBBSC
+C
 C     *************************************************************************
 C
 C     SELECT A LONG-RANGE DMFT FUNCTIONAL
