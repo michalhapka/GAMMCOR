@@ -195,7 +195,6 @@ c      stop
       call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
 C
-      Print*,'IDBBSC accas =' ,IDBBSC
       If (IDBBSC.Eq.1) Then
       Call LOC_MU_CBS_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
       EndIf

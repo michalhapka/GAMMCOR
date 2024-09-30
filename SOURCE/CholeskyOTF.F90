@@ -1,4 +1,4 @@
-#define CHOLOTF_DEBUG 5
+#define CHOLOTF_DEBUG -1
 
 module CholeskyOTF_interface
 

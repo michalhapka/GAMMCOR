@@ -1421,7 +1421,7 @@ subroutine read_mo_dalton(cmo,nbasis,nsym,nbas,norb,nsiri,nmopun)
 !
 ! reads MOs either from SIRIUS.RST or DALTON.MOPUN
 ! unpacks symmetry blocks to (NBasis,NOrb) form
-! in SAPT orbitals kept in AOMO order!
+! in SAPT, orbitals kept in AOMO order!
 !
 implicit none
 

@@ -3,7 +3,7 @@
      $ TwoEl,UMOAO,NInte1,NBasis,NInte2,NGem,Flags)
 C
 C     READ HAO, 2-EL INTEGRALS IN NO, C_COEFFICIENTS, IGEM FROM A DALTON_GENERATED FILE
-C     READ UMOAO FROM DALTON.MOPUN
+C     READ UMOAO FROM SIRIUS.RST or DALTON.MOPUN
 C
       use print_units
       use types
@@ -22,7 +22,8 @@ C
      $ UAux(NBasis,NBasis)
       integer :: ione,NBas(8),NSymBas(8),NSymOrb(8),nrhf(8),ioprhf
       integer(8) :: MemSrtSize
-      logical :: exione,ex
+      logical :: exione,exinuc,ex
+      double precision,allocatable :: CAONO(:,:)
       double precision, allocatable :: VsrKS(:,:),Jsr(:,:)
       double precision, allocatable :: Work(:,:),WorkTr(:)
 C
@@ -85,11 +86,47 @@ C
       Call read_mo_dalton(UAux,NBasis,NSym,NSymBas,NSymOrb,
      $            'SIRIUS.RST','DALTON.MOPUN')
 C
+C
+C     CholeskyOTF: read C(AO,NO) instead of C(SAO,NO)
+      If(ICholeskyOTF==1) Then
+      If(NSym.gt.1) Then
+C
+         Open(newunit=iunit,file="CAONO.dat",status='OLD',
+     &        access='SEQUENTIAL',form='UNFORMATTED')
+         read(iunit)
+         read(iunit) nbast,norbt
+         allocate(CAONO(nbast,norbt))
+         read(iunit) CAONO
+         Close(iunit)
+C     Sort orbitals according to irrep
+         Allocate(Work(NBasis,NBasis),WorkTr(NBasis))
+C      Print*, 'CAONO before Sort =',norm2(CAONO)
+C      do i=1,NBast
+C         write(6,'(*(f13.8))') (CAONO(i,j),j=1,Norbt)
+C      enddo
+         Work=Transpose(CAONO)
+         Call SortOrbDal(Work,WorkTr,NInAc,NAc,NSym,NSymOrb,NBasis)
+         CAONO=Transpose(Work)
+C      Print*, 'CAONO after Sort =',norm2(CAONO)
+C      do i=1,NBast
+C         write(6,'(*(f13.8))') (CAONO(i,j),j=1,Norbt)
+C      enddo
+         DeallocatE(Work,WorkTr)
+      ElseIf(NSym.eq.1) Then
+         allocate(CAONO(NBasis,NBasis))
+         CAONO =  UAux
+      EndIf !NSym
+      EndIf !ICholeskyOTF
+C
       Do I=1,NBasis
       Do J=1,NBasis
       UMOAO(J,I)=UAux(I,J)
       EndDo
       EndDo
+C      Print*, 'UMOAO =',norm2(UMOAO)
+C      do j=1,NBasis
+C         write(6,'(*(f13.8))') (UMOAO(i,j),i=1,NBasis)
+C      enddo
 C
       Call SortOrbDal(UMOAO,Occ,NInAc,NAc,NSym,NSymOrb,NBasis)
       Do I=1,NInAc+NAc
@@ -194,6 +231,12 @@ C
       Call CholeskyOTF_ao_vecs(CholeskyVecsOTF,AOBasis,System,IUnits,
      $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu)
       NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
+      Call sys_NuclearRepulsion(ENucOTF,System)
+
+      If(IH0Test==1) then
+      Call CholeskyOTF_H0_test0(AOBasis,System,'DALTON',
+     &                         CAONO,XKin,NINte1,NBasis)
+      EndIf
 
       EndIf ! ICholesky
       EndIf ! ITwoEl
@@ -341,6 +384,9 @@ C     cholesky OTF
       ElseIf (ICholeskyOTF==1) Then
       NA = NBasis
       NB = NBasis
+
+      If(NSym.gt.1) UAux = CAONO
+
       allocate(MatFF(NCholesky,NA*NB))
 C
       call chol_gammcor_Rkab(MatFF,UAux,1,NBasis,UAux,1,NBasis,
@@ -392,6 +438,13 @@ C     DELETE SORTED AOTWOINTS FOFO
       Call delfile('AOTWOSORT')
       EndIf
 C
+C     Read Nuclear Repulsion
+      If(ICholeskyOTF==1) Then ! from OTF library
+      ENuc=ENucOTF
+      Write(6,'(/,"  Nuclear repulsion:",F20.12)')ENuc
+C
+      Else ! read Enuc from file
+C
       Inquire(File='AOONEINT',EXIST=exione)
       If(exione) Then
 C
@@ -404,14 +457,26 @@ C
 C
       Else
 C
-      Open(10,File='enuc.dat',Form='Formatted',Status='Old')
-      Read(10,'(A31,F20.12)')Line,ENuc
-      Write(6,'(/,"  Nuclear repulsion:",F20.12)')ENuc
-      Close(10)
+      Inquire(File='enuc.dat',EXIST=exinuc)
+      If(exinuc) Then
+         Open(10,File='enuc.dat',Form='Formatted',Status='Old')
+         Read(10,'(A31,F20.12)')Line,ENuc
+         Write(6,'(/,"  Nuclear repulsion:",F20.12)')ENuc
+         Close(10)
       EndIf
+C
+      EndIf
+      EndIf
+C
+C     save CAONO instead of CSAONO
+      if (ICholeskyOTF==1) Then
+      UMOAO=transpose(CAONO)
+      endif
 C
       Return
       End
+C*End Subroutine ReadDAL
+
 C
 C     ReadDMRG: VERSION THAT WORKS WITH EUGENE'S INTS (IEugene=1)
 C               IT WORKS WITH ORCA OUTPUTS (IEugene=0)
@@ -4549,8 +4614,11 @@ C     inactive orbitals go first, then active, and secondary orbitals
 C
       Implicit Real*8 (A-H,O-Z)
 C
-      Real*8 URe1(NBasis*NBasis),URe2(NBasis*NBasis),
-     $ Occ1(NBasis),Occ2(NBasis)
+C     LOCAL
+C
+      Real*8, intent(inout) :: URe1(NBasis*NBasis)
+      Real*8, intent(out)   :: Occ2(NBasis)
+      Real*8 URe2(NBasis*NBasis),Occ1(NBasis)
       Dimension IOrbSym(8),IActOrb(NBasis),InActOrb(NBasis)
       Dimension LabelAct(NBasis),LabelIAct(NBasis),
      $ ICpy1(NBasis),ICpy2(NBasis)
@@ -4558,6 +4626,7 @@ C
 C
       Occ2(1:NBasis)=0.0
       Occ1(1:NBasis)=0.0
+      URe2=0d0
 C
       Inquire(file="occupations.dat",EXIST=FileOcc)
       Inquire(file="SIRIFC",EXIST=FileSIRIFC)
@@ -4697,10 +4766,11 @@ C
       double precision,allocatable :: OneAct(:,:),EigAct(:)
       double precision,allocatable :: work(:)
 
-
+      DV=0d0
       ! read 1RDM in active orbs from SIRIFC file
       open(newunit=isirifc,file='SIRIFC',status='OLD',
      &     access='SEQUENTIAL',form='UNFORMATTED')
+      rewind(isirifc)
       read(isirifc)
       read(isirifc)
       read(isirifc) NISHT,NASHT,DUMMY,DUMMY,DUMMY,DUMMY,DUMMY,DUMMY,
@@ -4712,14 +4782,14 @@ C
       read(isirifc)
       read(isirifc) DV(1:NNASHX) ! how to correctly read DS?
 
-C      print*, 'DV',DV(1:NNASHX)
+c     print*, 'DV',DV(1:NNASHX)
       close(isirifc)
 
       allocate(EigAct(NASHT))
 c      print*, 'Active occ numbers'
       Do I=1,NASHT
          EigAct(I) = DV((I-1)*I/2+I)
-C        print*, I,EigAct(i)
+c        print*, I,EigAct(i)
       EndDo
 
 C     test if DV diagonal
