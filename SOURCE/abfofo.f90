@@ -808,7 +808,7 @@ integer,intent(in)           :: ICholesky
                  NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
 
    ! a separate procedure for ints OTF
-   if (ICholesky) stop "MP2RDM: ICholesky not ready!"
+   if (ICholesky==1) stop "MP2RDM: ICholesky not ready!"
 
    allocate(work(NBasis**2),ints_bi(NBasis,NBasis),ints_bk(NBasis,NBasis))
    open(newunit=iunit1,file=trim(IntKFile),status='OLD', &
