@@ -168,7 +168,7 @@ integer :: NBas
 double precision :: e2ba,e2ab,e2ic
 double precision :: Tcpu,Twall
 
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
 
  NBas = A%NBasis 
 
@@ -189,7 +189,7 @@ double precision :: Tcpu,Twall
     SAPT%e2ind = e2ic
  endif
 
- call clock('E2ind',Tcpu,Twall)
+ call gclock('E2ind',Tcpu,Twall)
 
 end subroutine e2ind_icerpa
 
@@ -578,7 +578,7 @@ double precision,parameter :: SmallE = 1.D-6
     NBas = A%NBasis
  endif
 
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
 
  ! E2IND(B<--A)
 
@@ -750,7 +750,7 @@ double precision,parameter :: SmallE = 1.D-6
  deallocate(WaBB,WbAA)
  deallocate(EVecA,OmA)
 
- call clock('E2ind ',Tcpu,Twall)
+ call gclock('E2ind ',Tcpu,Twall)
 
 end subroutine e2ind
 
@@ -1891,7 +1891,7 @@ double precision,parameter :: SmallE = 1.D-3
     NBas = A%NBasis 
  endif
 
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
 
 ! print thresholds
  if(SAPT%IPrint>1) then 
@@ -1952,7 +1952,7 @@ if(.not.(Flags%ICASSCF==0.and.Flags%ISERPA==0)) then
 
  call e2disp_intermed1(tmp1,tmp01,A,B,dimOA,dimOB,nOVA,nOVB,EvecA,fact,Y01BlockA,iunit,work)
  !call e2disp_test(tmp1,tmp01,A,B,EVecA,dimOA,dimOB,nOVA,nOVB)
- !call clock('E2disp: intermed1',Tcpu,Twall)
+ !call gclock('E2disp: intermed1',Tcpu,Twall)
 
  ! coupled
  call dgemm('N','N',A%NDimX,B%NDimX,B%NDimX,1d0,tmp1,A%NDimX,EVecB,B%NDimX,0d0,tmp2,A%NDimX)
@@ -2118,7 +2118,7 @@ endif
  deallocate(tmp02,tmp01,tmp2,tmp1)
  deallocate(OmB0,OmA0,OmB,EVecB,OmA,EVecA)
 
- call clock('E2disp ',Tcpu,Twall)
+ call gclock('E2disp ',Tcpu,Twall)
 
 end subroutine e2disp
 

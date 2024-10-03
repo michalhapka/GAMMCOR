@@ -59,7 +59,7 @@ double precision,allocatable :: work1(:)
  !print*, A%num0,A%num1
  !print*, A%INAct,A%NAct
 
-! call clock('START',Tcpu,Twall)
+! call gclock('START',Tcpu,Twall)
 
  allocate(S(NBas,NBas),Sab(NBas,NBas),&
           PA(NBas,NBas),PB(NBas,NBas),&
@@ -580,7 +580,7 @@ double precision,allocatable :: work1(:)
  !deallocate(JJb)
  deallocate(RDM2Bval,RDM2Aval)
 
-! call clock('E1exch(S2)',Tcpu,Twall)
+! call gclock('E1exch(S2)',Tcpu,Twall)
 
 end subroutine e1exchs2
 
@@ -3204,8 +3204,8 @@ double precision,parameter :: BigE   = 1.D8
 double precision,parameter :: SmallE = 1.D-3
 double precision :: TCpu,TWall
 
-! start clock
-call clock('START',Tcpu,Twall)
+! start gclock
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
  NBas = A%NBasis
@@ -3914,7 +3914,7 @@ call clock('START',Tcpu,Twall)
     else
 
        ! make s_ij
-       !call clock('START',Tcpu,Twall)
+       !call gclock('START',Tcpu,Twall)
        if(Flags%ICholesky==0) then
           call make_sij_Y(sij,tmp1,A%Occ,B%Occ,A%EigY,A%EigX,B%EigY,B%EigX,&
                           A%num0,B%num0,dimOA,dimOB,nOVB,A%IndN,B%IndN, &
@@ -3928,14 +3928,14 @@ call clock('START',Tcpu,Twall)
                           A%DChol,B%DChol, &
                           A%num0,B%num0,dimOA,dimOB,nOVB,A%IndN,B%IndN, &
                           A%NDimX,B%NDimX,A%NChol,NBas)
-          !call clock('make_sij_Y_Chol2',TCpu,TWall)
+          !call gclock('make_sij_Y_Chol2',TCpu,TWall)
        endif
        call writeampl(sij,'PROP_AB')
 
     endif
 
     ! term X
-    !call clock('START',Tcpu,Twall)
+    !call gclock('START',Tcpu,Twall)
     termX = 0d0
     do j=1,B%NDimX
        do i=1,A%NDimX
@@ -3953,7 +3953,7 @@ call clock('START',Tcpu,Twall)
        enddo
     enddo
     termX = -4d0*termX
-    !call clock('termX',TCpu,TWall)
+    !call gclock('termX',TCpu,TWall)
 
     !if(SAPT%IPrint>5) write(LOUT,'(/1x,a,f16.8)') 'term Z      = ',  termZ*1.0d3
     !if(SAPT%IPrint>5) write(LOUT,'(1x,a,f16.8)') 'term X      = ',  termX*1.0d3
@@ -3968,16 +3968,16 @@ call clock('START',Tcpu,Twall)
 
     else
 
-       !call clock('START',Tcpu,Twall)
+       !call gclock('START',Tcpu,Twall)
        ! term Y: t_ij
        !call make_tij_Y(tmp3,tmp2,tmp1,posA,posB,Sab,Sba,A,B,NBas)
        call make_tij_Y(tmp3,tmp2,tmp1,A%Occ,B%Occ,A%EigY,A%EigX,B%EigY,B%EigX,&
                        A%IndN,B%IndN,posA,posB,Sab,Sba,A%NDimX,B%NDimX,NBas)
 
-       !call clock('make_tij_Y',TCpu,TWall)
+       !call gclock('make_tij_Y',TCpu,TWall)
 
        ! term Y
-       !call clock('START',Tcpu,Twall)
+       !call gclock('START',Tcpu,Twall)
        termY = 0d0
        do j=1,B%NDimX
           do i=1,A%NDimX
@@ -3996,7 +3996,7 @@ call clock('START',Tcpu,Twall)
        enddo
 
        termY = -8d0*(SAPT%elst-SAPT%Vnn)*termY
-       !call clock('termY',TCpu,TWall)
+       !call gclock('termY',TCpu,TWall)
 
     endif ! approx => termY = 0
 
@@ -4039,7 +4039,7 @@ call clock('START',Tcpu,Twall)
  endif
 
  deallocate(sij)
- call clock('Exch-Disp',Tcpu,Twall)
+ call gclock('Exch-Disp',Tcpu,Twall)
 
  deallocate(posB,posA,ints)
  deallocate(Vbab,Vaba,Vaab,Vbaa,Vabb,Vb,Va,PB,PA,Sab,S)

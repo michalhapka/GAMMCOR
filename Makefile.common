@@ -71,7 +71,7 @@ $(O)projector.o        : $(S)commons.inc
 $(O)srlrdynamic.o      : $(S)commons.inc
 $(O)vv10.o             : $(S)commons.inc
 
-$(O)ac_fofo.o          : $(O)abmats.o $(O)abfofo.o $(O)blocktypes.o \
+$(O)ac_fofo.o          : $(O)abmats.o $(O)abfofo.o $(O)ab0fofo.o $(O)blocktypes.o \
                          $(O)memory.o \
                          $(O)C_integrator.o $(O)iter_algorithm.o $(O)iter_algorithm_diis.o $(O)iter_algorithm_damping.o \
                          $(O)lambda_calculator.o $(O)lambda_calculator_diag.o $(O)lambda_calculator_block.o $(O)lambda_calculator_projector.o

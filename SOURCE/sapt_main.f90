@@ -48,7 +48,7 @@ double precision :: Tcpu,Twall
  ! jump to reduceVirt framework
  if(Flags%IRedVirt==1) call sapt_driver_red(Flags,SAPT)
 
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
  call sapt_basinfo(SAPT,NBasis)
  call sapt_interface(Flags,SAPT,NBasis,AOBasis,CholeskyVecsOTF)
 
@@ -136,7 +136,7 @@ double precision :: Tcpu,Twall
  call print_warn(SAPT)
  call free_sapt(Flags,SAPT)
 
- call clock('SAPT',Tcpu,Twall)
+ call gclock('SAPT',Tcpu,Twall)
 
  stop
 
@@ -156,7 +156,7 @@ type(TCholeskyVecsOTF) :: CholeskyVecsOTF
 integer :: NBasis
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 print*, 'Experimental SAPT(UKS) implementation...'
 
@@ -176,7 +176,7 @@ call e2disp_o(SAPT%monA,SAPT%monB,SAPT)
 call summary_saptuks(SAPT)
 call free_saptuks(Flags,SAPT)
 
-call clock('SAPT',Tcpu,Twall)
+call gclock('SAPT',Tcpu,Twall)
 
 stop
 
@@ -224,7 +224,7 @@ logical          :: onlyDisp
  SAPT%iCpld      = .false.
  Flags%IFlag0    = 1
 
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
  call sapt_basinfo(SAPT,NBasis)
  call sapt_interface(Flags,SAPT,NBasis,AOBasis,CholeskyVecsOTF)
 
@@ -259,7 +259,7 @@ elseif (Flags%ICholeskyBIN==1) then
     stop "CholeskyBIN+RedVirt not tested!"
 endif
 
- call clock('SAPT(FULL SPACE)',Tcpu,Twall)
+ call gclock('SAPT(FULL SPACE)',Tcpu,Twall)
 
  call reduce_virt(Flags,SAPT%monA,NBasis)
  call reduce_virt(Flags,SAPT%monB,NBasis)
@@ -309,7 +309,7 @@ endif
  call print_warn(SAPT)
  call free_sapt(Flags,SAPT)
 
- call clock('SAPT',Tcpu,Twall)
+ call gclock('SAPT',Tcpu,Twall)
 
  stop
 
@@ -467,7 +467,7 @@ endif
 call print_warn(SAPT)
 call free_sapt(Flags,SAPT)
 
-call clock('SAPT',Tcpu,Twall)
+call gclock('SAPT',Tcpu,Twall)
 
 stop
 
@@ -557,7 +557,7 @@ integer :: i
  call print_warn(SAPT)
  call free_sapt(Flags,SAPT)
 
- call clock('SAPT',Tcpu,Twall)
+ call gclock('SAPT',Tcpu,Twall)
 
  stop
 
@@ -763,7 +763,7 @@ integer            :: thr_id
 integer            :: ntr,iunit_aotwosort
 double precision :: Tcpu,TWall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 if(Flags%SaptLevel==999) then
   print*, 'In RSPT2 intermoner ints not calculated for now'
@@ -948,7 +948,7 @@ if(Flags%ISERPA==0) then
      deallocate(B%FO)
      deallocate(A%OOAB)
 
-     call clock('Time in Assemble:',Tcpu,Twall)
+     call gclock('Time in Assemble:',Tcpu,Twall)
 
   else
    ! working stuff...
@@ -1541,7 +1541,7 @@ character(:),allocatable     :: twojfile,twokfile
 !test
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
  NSq = NBas**2
@@ -1624,14 +1624,14 @@ call clock('START',Tcpu,Twall)
             NBas,MO,&
             NBas,MO,&
             twojfile,'AOTWOSORT')
-       call clock('FFOO',Tcpu,Twall)
+       call gclock('FFOO',Tcpu,Twall)
        call tran4_gen(NBas,&
             NBas,MO,&
             Mon%num0+Mon%num1,MO(1:NBas*(Mon%num0+Mon%num1)),&
             NBas,MO,&
             Mon%num0+Mon%num1,MO(1:NBas*(Mon%num0+Mon%num1)),&
             twokfile,'AOTWOSORT')
-       call clock('FOFO',Tcpu,Twall)
+       call gclock('FOFO',Tcpu,Twall)
     endif
  end select
 
@@ -2066,7 +2066,7 @@ call delfile ('ONEEL_B')
 
 call delfile('TMPOOAB')
 
-if (Flags%ICholeskyOTF) call delfile('cholesky')
+if (Flags%ICholeskyOTF==1) call delfile('cholesky')
 
 if(SAPT%SaptLevel/=1) then
    call delfile('TWOMOAB')

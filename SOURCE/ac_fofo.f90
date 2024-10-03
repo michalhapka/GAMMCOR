@@ -1388,132 +1388,6 @@ subroutine read_D_array(NCholesky, DChol, DCholAct, NDimX, NBasis, IndN, Occ, In
 
 end subroutine read_D_array
 
-subroutine pack_AC0BLOCK(ABPlus,ABMin,A0Block,A0blockIV,nblk,IndN,INActive,NAct,NDimX,NBasis,ver,dumpfile)
-!
-!     A ROUTINE FOR PACKING : a) ver=0  ABPLUS^{(0)} and ABMIN^{(0)}
-!                                       (stored in matY and matX, respectively)
-!                             b) ver=1  A0=ABPLUS^{(0)}.ABMIN^{(0)}
-
-use abfofo
-use blocktypes
-
-implicit none
-
-integer,intent(in) :: NAct,INActive
-integer,intent(in) :: NDimX,NBasis
-integer,intent(in) :: ver
-integer            :: nblk
-integer,intent(in) :: IndN(2,NDimX)
-double precision,intent(in) :: ABPlus(NDimX,NDimX),ABMin(NDimX,NDimX)
-character(*),optional       :: dumpfile
-
-type(EblockData) :: A0block(nblk), A0blockIV
-
-integer :: NOccup
-integer :: i,ii,ip,iq
-integer :: IGem(NBasis),Ind(NBasis)
-integer :: pos(NBasis,NBasis)
-
-integer :: iblk
-integer :: iunit
-
-integer :: nAA,nAI(INActive),nAV(INActive+NAct+1:NBasis),nIV
-integer :: tmpAA(NAct*(NAct-1)/2),tmpAI(NAct,1:INActive),&
-           tmpAV(NAct,INActive+NAct+1:NBasis),&
-           tmpIV(INActive*(NBasis-NAct-INActive))
-integer :: limAA(2),limAI(2,1:INActive),&
-           limAV(2,INActive+NAct+1:NBasis),limIV(2)
-
-! set dimensions
-NOccup = NAct + INActive
-
-Ind = 0
-do i=1,NAct
-   Ind(INActive+i) = i
-enddo
-
-! fix IGem
-do i=1,INActive
-   IGem(i) = 1
-enddo
-do i=INActive+1,NOccup
-   IGem(i) = 2
-enddo
-do i=NOccup+1,NBasis
-   IGem(i) = 3
-enddo
-
-call create_blocks_ABPL0(nAA,nAI,nAV,nIV,tmpAA,tmpAI,tmpAV,tmpIV,&
-                         limAA,limAI,limAV,limIV,pos,&
-                         IGem,IndN,INActive,NAct,NBasis,NDimX)
-
-nblk = 0
-
-!pack AA
-if(nAA>0) then
-   nblk = nblk + 1
-   call pack_A0block(ABPLUS,ABMIN,nAA,limAA(1),limAA(2),tmpAA,A0block(nblk),NDimX,ver)
-endif
-!pack AI
-do iq=1,INActive
-   if(nAI(iq)>0) then
-      nblk = nblk + 1
-      call pack_A0block(ABPLUS,ABMIN,nAI(iq),limAI(1,iq),limAI(2,iq),tmpAI(1:nAI(iq),iq),&
-                        A0block(nblk),NDimX,ver)
-   endif
-enddo
-!pack AV
-do ip=NOccup+1,NBasis
-   if(nAV(ip)>0) then
-      nblk = nblk + 1
-      call pack_A0block(ABPLUS,ABMIN,nAV(ip),limAV(1,ip),limAV(2,ip),tmpAV(1:nAV(ip),ip),&
-                        A0block(nblk),NDimX,ver)
-    endif
-enddo
-!pack IV
-associate(B => A0blockIV)
-
-  B%l1 = limIV(1)
-  B%l2 = limIV(2)
-  B%n  = B%l2-B%l1+1
-  allocate(B%pos(B%n))
-  B%pos(1:B%n) = tmpIV(1:B%n)
-
-  allocate(B%vec(B%n))
-
-  if(ver==0) then
-     do i=1,B%n
-        ii = B%l1+i-1
-        B%vec(i) = ABPLUS(ii,ii)
-     enddo
-  elseif(ver==1) then
-     do i=1,B%n
-        ii = B%l1+i-1
-        B%vec(i) = ABPLUS(ii,ii)*ABMIN(ii,ii)
-     enddo
-  endif
-
-end associate
-
-if(present(dumpfile)) then
-  ! dump to file
-  open(newunit=iunit,file=dumpfile,form='unformatted')
-  write(iunit) nblk
-  do iblk=1,nblk
-     associate(B => A0Block(iblk))
-       write(iunit) iblk, B%n, B%l1, B%l2
-       write(iunit) B%pos,B%matX
-     end associate
-  enddo
-  associate(B => A0BlockIV)
-    write(iunit) B%n,B%l1,B%l2
-    write(iunit) B%pos,B%vec
-  end associate
-  close(iunit)
-endif
-
-end subroutine pack_AC0BLOCK
-
 !subroutine pack_AC0LRBLOCK(ABPlus,ABMin,nblk,IndN,INActive,NAct,NDimX,NBasis,ver,dumpfile)
 !!
 !!     A ROUTINE FOR PACKING : a) ver=0  ABPLUS^{(0)} and ABMIN^{(0)}
@@ -1680,6 +1554,7 @@ subroutine AC0BLOCK(Occ,URe,XOne, &
 !                 (FOFO VERSION)
 !
 use abfofo
+use ab0fofo
 !use types,only : EblockData
 use blocktypes
 !

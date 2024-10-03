@@ -1926,7 +1926,7 @@ double precision,allocatable :: ints1(:,:),ints2(:,:)
 logical :: dump
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 dump = .false.
 if(present(dfile)) dump=.true.
@@ -2017,8 +2017,8 @@ do offset=0,NGrid,maxlen
 
 enddo
 
-call clock('ModABMin:Ker',Tcpu,Twall)
-call clock('START',Tcpu,Twall)
+call gclock('ModABMin:Ker',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 open(newunit=iunit1,file=trim(twokfile),status='OLD', &
      access='DIRECT',recl=8*NBasis*NOccup)
@@ -2075,7 +2075,7 @@ close(iunit1)
 
 deallocate(ABKer,batch,WtKer,ints2,ints1,work2,work1)
 
-call clock('ModABMin',Tcpu,Twall)
+call gclock('ModABMin',Tcpu,Twall)
 
 end subroutine ModABMin_FOFO
 

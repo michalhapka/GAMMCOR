@@ -70,7 +70,7 @@ double precision,allocatable :: COMTilde(:)
 double precision,allocatable :: ABPlus0(:,:),ABMin0(:,:)
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set filenames
 if(Mon%Monomer==1) then
@@ -357,7 +357,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
      enddo
   enddo
 
-  call clock('ERPA response',Tcpu,Twall)
+  call gclock('ERPA response',Tcpu,Twall)
 
   !print*, 'EigVecR',norm2(EigVecR)
   !print*, 'Eig    ',norm2(Mon%Eig)
@@ -553,7 +553,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
 
   end select
 
-  call clock('ERPA unc response',Tcpu,Twall)
+  call gclock('ERPA unc response',Tcpu,Twall)
 
   !! test CAlpha
 !   NGOcc = 0
@@ -1539,7 +1539,7 @@ MultpC(1,1)=1
 call GetKerNPT(SRKer,Mon%Occ,URe,OrbGrid,WGrid,NSymNO,MultpC, &
                NBas,NGrid)
 print*, 'SRKer',norm2(SRKer)
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 select case(Mon%TwoMoInt)
 case(TWOMO_INCORE)
    call ModABMin(Mon%Occ,SRKer,WGrid,OrbGrid,TwoMO,TwoElErf,ABMin,&
@@ -1556,7 +1556,7 @@ case(TWOMO_FOFO)
                       twokfile,twokerf,.false.)
    print*, 'ABMin-MY',norm2(ABMin)
 end select
-call clock('Mod ABMin',Tcpu,Twall)
+call gclock('Mod ABMin',Tcpu,Twall)
 
 !write(LOUT,'(1x,a)') "*** sr-kernel added. ***"
 ! test true energy
@@ -2050,7 +2050,7 @@ write(LOUT,'(/,1x,a,f16.8,a,1x,f16.8)') 'ABPlus',norm2(ABPlus),'ABMin',norm2(ABM
 MultpC(1,1)=1
 call GetKerNPT(SRKer,Mon%Occ,URe,OrbGrid,WGrid,NSymNO,MultpC,NBasis,NGrid)
 print*, 'SRKer',norm2(SRKer)
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 call ModABMin_FOFO(Mon%Occ,SRKer,WGrid,OrbGrid,ABMin,&
                    MultpC,NSymNO,&
@@ -2058,7 +2058,7 @@ call ModABMin_FOFO(Mon%Occ,SRKer,WGrid,OrbGrid,ABMin,&
                    Mon%num0,Mon%num1, &
                    twokfile,twokerf,.false.)
 print*, 'ABMin-MY',norm2(ABMin)
-call clock('Mod ABMin',Tcpu,Twall)
+call gclock('Mod ABMin',Tcpu,Twall)
 
 if(Flags%ICholeskyOTF==1) then
    ! dump matrices for iterative C-ERPA

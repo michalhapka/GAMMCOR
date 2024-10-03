@@ -207,7 +207,7 @@ SAPT%monB%NDim = NBasis*(NBasis-1)/2
  endif
 
 ! read 2-el integrals
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
 
 ! memory allocation for sorter
  MemSrtSize = Flags%MemVal*1024_8**Flags%MemType
@@ -308,7 +308,7 @@ SAPT%monB%NDim = NBasis*(NBasis-1)/2
     endif ! CholeskyOTF
 
  endif
- call clock('2ints',Tcpu,Twall)
+ call gclock('2ints',Tcpu,Twall)
 
  if(SAPT%InterfaceType==2) then
 
@@ -430,12 +430,12 @@ SAPT%monB%NDim = NBasis*(NBasis-1)/2
     call chol_OO_sapt_AO2NO_BIN(SAPT%monA,SAPT%monB,CholeskyVecs,NBasis,Flags%MemVal,Flags%MemType)
     call chol_FO_sapt_AO2NO_BIN(SAPT%monA,SAPT%monB,CholeskyVecs,NBasis,Flags%MemVal,Flags%MemType)
     call chol_FF_sapt_AO2NO_BIN(SAPT,SAPT%monA,SAPT%monB,CholeskyVecs,NBasis,Flags%MemVal,Flags%MemType)
-    call clock('chol_AO2NO_BIN',Tcpu,Twall)
+    call gclock('chol_AO2NO_BIN',Tcpu,Twall)
  elseif(Flags%ICholeskyOTF==1) then
     !call chol_sapt_AO2NO_OTF(SAPT,SAPT%monA,SAPT%monB,CholeskyVecsOTF,AOBasis,Flags,NBasis)
     call chol_OO_sapt_AO2NO_OTF(SAPT,SAPT%monA,SAPT%monB,CholeskyVecsOTF,AOBasis,Flags,NBasis)
     call chol_FO_sapt_AO2NO_OTF(SAPT,SAPT%monA,SAPT%monB,CholeskyVecsOTF,AOBasis,Flags,NBasis)
-    call clock('chol_AO2NO_OTF',Tcpu,Twall)
+    call gclock('chol_AO2NO_OTF',Tcpu,Twall)
  endif
 
 ! MAYBE: one should print with NOrbt?
@@ -564,7 +564,7 @@ call select_uactive(SAPT%monA,SAPT%monB,NBasis)
 call print_uocc(NBasis,SAPT)
 
 ! read 2-el integrals
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! memory allocation for sorter
 MemSrtSize = Flags%MemVal*1024_8**Flags%MemType
@@ -2941,7 +2941,7 @@ double precision,allocatable :: tmp(:,:)
 ! test
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set buffer size
 if(MemType == 2) then       !MB
@@ -3007,7 +3007,7 @@ print*, 'dimOB',dimOB
                     A%CMO,1,dimOA,&
                     A%CMO,1,dimOA,&
                     MaxBufferDimMB)
-call clock('AOO',Tcpu,Twall)
+call gclock('AOO',Tcpu,Twall)
  ! (OO|BB)
  !call chol_MOTransf(B%OO,CholeskyVecs,&
  !                   B%CMO,1,dimOB,&
@@ -3018,7 +3018,7 @@ call clock('AOO',Tcpu,Twall)
                     B%CMO,1,dimOB,&
                     B%CMO,1,dimOB,&
                     MaxBufferDimMB)
-call clock('BOO',Tcpu,Twall)
+call gclock('BOO',Tcpu,Twall)
 
 print*, 'A%OO',norm2(A%OO)
 print*, 'B%OO',norm2(B%OO)
@@ -3052,7 +3052,7 @@ print*, 'B%OOBA',norm2(B%OOBA)
                     A%CMO,1,NBasis,&
                     A%CMO,1,NBasis,&
                     MaxBufferDimMB)
- call clock('AFF',Tcpu,Twall)
+ call gclock('AFF',Tcpu,Twall)
  ! (FF|BB)
  !call chol_MOTransf(B%FF,CholeskyVecs,&
  !                   B%CMO,1,NBasis,&
@@ -3062,7 +3062,7 @@ print*, 'B%OOBA',norm2(B%OOBA)
                     B%CMO,1,NBasis,&
                     B%CMO,1,NBasis,&
                     MaxBufferDimMB)
- call clock('BFF',Tcpu,Twall)
+ call gclock('BFF',Tcpu,Twall)
 
 !print*, 'A%FF',norm2(A%FF)
 !print*, A%FF(3,:)
@@ -3152,7 +3152,7 @@ if(SAPT%InterfaceType==1) then
   stop
 endif
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
@@ -3173,13 +3173,13 @@ call chol_gammcor_Rkab(A%OO,A%CAONO,1,dimOA,A%CAONO,1,dimOA, &
                    MaxBufferDimMB,CholeskyVecsOTF,       &
                    AOBasis,ORBITAL_ORDERING_MOLPRO)
 
-call clock('AOO',Tcpu,Twall)
+call gclock('AOO',Tcpu,Twall)
 
 call chol_gammcor_Rkab(B%OO,B%CAONO,1,dimOB,B%CAONO,1,dimOB, &
                    MaxBufferDimMB,CholeskyVecsOTF,       &
                    AOBasis,ORBITAL_ORDERING_MOLPRO)
 
-call clock('BOO',Tcpu,Twall)
+call gclock('BOO',Tcpu,Twall)
 
 print*, 'A%OO',norm2(A%OO)
 print*, 'B%OO',norm2(B%OO)
@@ -3208,13 +3208,13 @@ call chol_gammcor_Rkab(A%FF,A%CAONO,1,NBasis,A%CAONO,1,NBasis,&
                    MaxBufferDimMB,CholeskyVecsOTF, &
                    AOBasis,ORBITAL_ORDERING_MOLPRO)
 
-call clock('AFF',Tcpu,Twall)
+call gclock('AFF',Tcpu,Twall)
 
 call chol_gammcor_Rkab(B%FF,B%CAONO,1,NBasis,B%CAONO,1,NBasis,&
                    MaxBufferDimMB,CholeskyVecsOTF, &
                    AOBasis,ORBITAL_ORDERING_MOLPRO)
 
-call clock('BFF',Tcpu,Twall)
+call gclock('BFF',Tcpu,Twall)
 
 print*, 'A%FF',norm2(A%FF)
 print*, 'B%FF',norm2(B%FF)
@@ -3328,7 +3328,7 @@ double precision :: Cpq
 
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
@@ -3359,13 +3359,13 @@ call chol_gammcor_Rkab(A%OO,A%CAONO,1,dimOA,A%CAONO,1,dimOA, &
                    MaxBufferDimMB,CholeskyVecsOTF,       &
                    AOBasis,ORBITAL_ORDERING)
 
-call clock('AOO',Tcpu,Twall)
+call gclock('AOO',Tcpu,Twall)
 
 call chol_gammcor_Rkab(B%OO,B%CAONO,1,dimOB,B%CAONO,1,dimOB, &
                    MaxBufferDimMB,CholeskyVecsOTF,       &
                    AOBasis,ORBITAL_ORDERING)
 
-call clock('BOO',Tcpu,Twall)
+call gclock('BOO',Tcpu,Twall)
 
 allocate(A%OOAB(NCholesky,dimOA*dimOB), &
             B%OOBA(NCholesky,dimOB*dimOA))
@@ -3374,7 +3374,7 @@ call chol_gammcor_Rkab(A%OOAB,A%CAONO,1,dimOA,B%CAONO,1,dimOB, &
                    MaxBufferDimMB,CholeskyVecsOTF, &
                    AOBasis,ORBITAL_ORDERING)
 
-call clock('AOOAB',Tcpu,Twall)
+call gclock('AOOAB',Tcpu,Twall)
 
 call chol_gammcor_Rkab(B%OOBA,B%CAONO,1,dimOB,A%CAONO,1,dimOA, &
                    MaxBufferDimMB,CholeskyVecsOTF, &
@@ -3459,7 +3459,7 @@ double precision :: Cpq
 
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholesky = CholeskyVecs%NCholesky
@@ -3478,13 +3478,13 @@ call chol_MOTransf_TwoStep(A%FF,CholeskyVecs,&
                    A%CMO,1,NBasis,&
                    A%CMO,1,NBasis,&
                    MaxBufferDimMB)
-call clock('AFF',Tcpu,Twall)
+call gclock('AFF',Tcpu,Twall)
 
 call chol_MOTransf_TwoStep(B%FF,CholeskyVecs,&
                    B%CMO,1,NBasis,&
                    B%CMO,1,NBasis,&
                    MaxBufferDimMB)
-call clock('BFF',Tcpu,Twall)
+call gclock('BFF',Tcpu,Twall)
 
 ! DChol(NCholeksy,NDimX)
 allocate(A%DChol(NCholesky,A%NDimX), &
@@ -3547,7 +3547,7 @@ double precision :: Cpq
 
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
@@ -3581,7 +3581,7 @@ call chol_gammcor_Rkab(B%FO,B%CAONO,1,NBasis,B%CAONO,1,dimOB, &
                    MaxBufferDimMB,CholeskyVecsOTF,        &
                    AOBasis,ORBITAL_ORDERING)
 
-call clock('AFO+BFO',Tcpu,Twall)
+call gclock('AFO+BFO',Tcpu,Twall)
 
 allocate(A%FOAB(NCholesky,NBasis*dimOB),B%FOBA(NCholesky,NBasis*dimOA))
 
@@ -3593,7 +3593,7 @@ call chol_gammcor_Rkab(B%FOBA,B%CAONO,1,NBasis,A%CAONO,1,dimOA, &
                    MaxBufferDimMB,CholeskyVecsOTF,          &
                    AOBasis,ORBITAL_ORDERING)
 
-call clock('AFOAB+BFOBA',Tcpu,Twall)
+call gclock('AFOAB+BFOBA',Tcpu,Twall)
 
 end subroutine chol_FO_sapt_AO2NO_OTF
 
@@ -3620,7 +3620,7 @@ double precision :: Cpq
 
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholErf = CholErfVecsOTF%Chol2Data%NVecs
@@ -3649,8 +3649,8 @@ allocate(MON%FOErf(NCholErf,NBasis*dimO))
 call chol_gammcor_Rkab(MON%FOErf,MON%CAONO,1,NBasis,MON%CAONO,1,dimO, &
                    MaxBufferDimMB,CholErfVecsOTF,AOBasis,ORBITAL_ORDERING)
 
-if (MON%Monomer==1) call clock('AFOERF',Tcpu,Twall)
-if (MON%Monomer==2) call clock('BFOERF',Tcpu,Twall)
+if (MON%Monomer==1) call gclock('AFOERF',Tcpu,Twall)
+if (MON%Monomer==2) call gclock('BFOERF',Tcpu,Twall)
 
 end subroutine chol_FOERF_AO2NO_OTF
 
@@ -3673,7 +3673,7 @@ integer :: ORBITAL_ORDERING
 
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholErf = CholErfVecsOTF%Chol2Data%NVecs
@@ -3702,8 +3702,8 @@ call chol_gammcor_Rkab(M%FFErf,M%CAONO,1,NBasis,M%CAONO,1,NBasis,&
                    MaxBufferDimMB,CholErfVecsOTF, &
                    AOBasis,ORBITAL_ORDERING)
 
-if (M%Monomer==1) call clock('AFFErf',Tcpu,Twall)
-if (M%Monomer==2) call clock('BFFErf',Tcpu,Twall)
+if (M%Monomer==1) call gclock('AFFErf',Tcpu,Twall)
+if (M%Monomer==2) call gclock('BFFErf',Tcpu,Twall)
 
 end subroutine chol_FFERF_AO2NO_OTF
 
@@ -3729,7 +3729,7 @@ double precision :: Cpq
 
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholesky = CholeskyVecsOTF%Chol2Data%NVecs
@@ -3758,8 +3758,8 @@ call chol_gammcor_Rkab(M%FF,M%CAONO,1,NBasis,M%CAONO,1,NBasis,&
                    MaxBufferDimMB,CholeskyVecsOTF, &
                    AOBasis,ORBITAL_ORDERING)
 
-if (M%Monomer==1) call clock('AFF',Tcpu,Twall)
-if (M%Monomer==2) call clock('BFF',Tcpu,Twall)
+if (M%Monomer==1) call gclock('AFF',Tcpu,Twall)
+if (M%Monomer==2) call gclock('BFF',Tcpu,Twall)
 
 allocate(M%DChol(NCholesky,M%NDimX))
 
@@ -3796,7 +3796,7 @@ double precision :: Cpq
 
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NCholesky = CholeskyVecsOTF%Chol2Data%NVecs

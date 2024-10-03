@@ -1668,7 +1668,7 @@ print*, 'Experimental E2disp(CAlpha) procedure...'
 both = SAPT%iCpld
 
 ! timing
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ACAlpha = 1.0d0
 Pi = 4.0d0*atan(1.0)
@@ -2109,7 +2109,7 @@ if (SAPT%Visual) then
    
 endif
 
-call clock('E2disp(CAlpha)',Tcpu,Twall)
+call gclock('E2disp(CAlpha)',Tcpu,Twall)
 
 deallocate(WFreq,XFreq)
 deallocate(A2A,A1A)

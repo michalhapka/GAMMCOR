@@ -33,7 +33,7 @@ C
 C
 C     START TIMING FOR AC PROCEDURES
 C
-      call clock('START',Tcpu,Twall)
+      call gclock('START',Tcpu,Twall)
       If (ICholeskyOTF==1) Write(6,'(1x," BasisSet = ", A)') BasisSet
 C
 C     CONSTRUCT LOOK-UP TABLES
@@ -173,14 +173,14 @@ C
       Call RunACDEXIT(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 C
-      call clock('ACD model',Tcpu,Twall)
+      call gclock('ACD model',Tcpu,Twall)
 
       Else
 C
       Call RunACCAS(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 
-      call clock('AC  model',Tcpu,Twall)
+      call gclock('AC  model',Tcpu,Twall)
 C
 C     Corr,md correlation energy with local mu, requires Cholesky vecs
 C
@@ -192,7 +192,7 @@ c      stop
 
       Call LOC_MU_CHOL_v2(BasisSet,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
       Call delfile('cholvecs') ! delete cholesky vecs
-      call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
+      call gclock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
 C
       If (IDBBSC.Eq.1) Then
@@ -211,7 +211,7 @@ C
       Call RunACCASLR(BasisSet,ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 C
-      call clock('ACLR model',Tcpu,Twall)
+      call gclock('ACLR model',Tcpu,Twall)
 C
 C     Corr,md correlation energy with local mu, requires Cholesky vecs
 C
@@ -219,7 +219,7 @@ C
 c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
       Call LOC_MU_CHOL_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,0)
       Call delfile('cholvecs')
-      call clock('LOC_MU_CHOL_v2',Tcpu,Twall)
+      call gclock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
 C
       EndIf
@@ -763,7 +763,7 @@ C
       Write(LOUT,'(/1x,a)') 'DALTON GRID '
 C     read no of grid pts
       Call daltongrid0(NGrid,griddalfile,doGGAdal,NBasis)
-      if (doGGA/=doGGAdal) then
+      if (doGGA.neqv.doGGAdal) then
          print*, 'doGGA GammCor =', doGGA
          print*, 'doGGA Dalton  =', doGGAdal
          stop "error in RunACCASLR!"
@@ -1290,7 +1290,7 @@ C
 C
 C     ADD A SR-ALDA KERNEL
 C
-      Call clock('START',Tcpu,Twall)
+      Call gclock('START',Tcpu,Twall)
 C
 C      WITHOUT BATCHES:
 C
@@ -1348,7 +1348,7 @@ C
       EndIf
 C
       Write(6,'(1X," *** sr-kernel added ***")')
-      Call clock('sr-kernel',Tcpu,Twall)
+      Call gclock('sr-kernel',Tcpu,Twall)
 C
       EndIf
 C
@@ -2132,7 +2132,7 @@ C
 C 
 C     2nd: ADD KERNEL IN BATCHES:
 C
-      call clock('START',Tcpu,Twall)
+      call gclock('START',Tcpu,Twall)
       Allocate(Work(Maxlen),Batch(Maxlen,NBasis))
 C
       Do Offset=0,NGrid,Maxlen
@@ -2178,7 +2178,7 @@ C
       Deallocate(Batch,Work)
 CC
       Write(6,'("*** sr-kernel added ***")')
-      call clock('sr-kernel AB(1)',Tcpu,Twall)
+      call gclock('sr-kernel AB(1)',Tcpu,Twall)
 CC
       EndIf
 C
@@ -2989,7 +2989,7 @@ C
       Double Precision, Allocatable :: RR(:,:)
       Character(*),Parameter :: griddalfile='dftgrid.dat'
 C
-      call clock('START',Tcpu,Twall)
+      call gclock('START',Tcpu,Twall)
 C
 C     debug printlevel
       IIPRINT=5 
@@ -3255,7 +3255,7 @@ C
       Deallocate(CHVCSII,CHVCSAA,CHVCSAI,CHVCSIA)
       Deallocate(OOai)
 C
-      call clock('fr loop',Tcpu,Twall)
+      call gclock('fr loop',Tcpu,Twall)
 C
       If (IFlFCorr==0) Deallocate(WorkD) ! Chol vecs no longer necessary
 C
@@ -3449,7 +3449,7 @@ C
        Print*, 'OGamV = ', norm2(OGamV)
       EndIf
 C
-      call clock('QGam OGam',Tcpu,Twall)
+      call gclock('QGam OGam',Tcpu,Twall)
 c
       Deallocate(WorkD)
       Allocate (Work(NBasis,NBasis))
@@ -3506,7 +3506,7 @@ c
 c
       Deallocate(OGamV,OGamA,OGamI)
 c
-      call clock('FCorr loop',Tcpu,Twall)
+      call gclock('FCorr loop',Tcpu,Twall)
 C
       EndIf ! IFlFCorr end
 c
@@ -3591,7 +3591,7 @@ c
        If(IFlFCorr==1) Print*, 'OnTopCorr  =', norm2(OnTopCorr)
       EndIf
 c
-      call clock('OnTop loop 1',Tcpu,Twall)
+      call gclock('OnTop loop 1',Tcpu,Twall)
 c
 c     if(allocated(FPsiB)) print*, 'allocated FsiB!'
 c     if(allocated(RDM2val)) print*, 'allocated rdm2val!'
@@ -3654,7 +3654,7 @@ C
 c     XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
 C
       EndDo
-      call clock('CorrMD loop ',Tcpu,Twall)
+      call gclock('CorrMD loop ',Tcpu,Twall)
 C
       Write(6,'(/,
      $" Averaged on-top pair densities: CAS, extrapolated OT",
@@ -3697,7 +3697,7 @@ C
       EndIf
 C
       EndDo
-      call clock('CorrMDCorr loop ',Tcpu,Twall)
+      call gclock('CorrMDCorr loop ',Tcpu,Twall)
 C
       Write(6,'(/,
      $" Averaged on-top pair densities: CAS, CAS-AC0, extrapolated OT",
@@ -3967,7 +3967,7 @@ C
       Double Precision, Allocatable :: RR(:,:)
       Character(*),Parameter :: griddalfile='dftgrid.dat'
 C
-      call clock('START',Tcpu,Twall)
+      call gclock('START',Tcpu,Twall)
 C
 C     debug printlevel
       IIPRINT=5
@@ -4258,7 +4258,7 @@ C
      $" CBS-my correction, average Mu",
      $ F15.8,F15.2/)') CorrMD,AvMU
 C
-      call clock('Esrcmd CBS ',Tcpu,Twall)
+      call gclock('Esrcmd CBS ',Tcpu,Twall)
 
       Deallocate(RDM2val)
 

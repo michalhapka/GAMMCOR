@@ -392,7 +392,7 @@ C
       call chol_gammcor_Rkab(MatFF,UAux,1,NBasis,UAux,1,NBasis,
      $                   MemMOTransfMB, CholeskyVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_DALTON)
-c     Call clock('chol_gammcor_Rkab',Tcpu,Twall)
+c     Call gclock('chol_gammcor_Rkab',Tcpu,Twall)
 C
       ElseIf (ICholeskyTHC==1) Then
       Stop "Implement ICholeskyTHC in ReadDAL!"
@@ -1225,7 +1225,7 @@ C      close(iunt)
 C
       EndIf ! Cholesky BIN/OTF
 C
-c     Call clock('chol_NOTransf',Tcpu,Twall)
+c     Call gclock('chol_NOTransf',Tcpu,Twall)
 C
 C
 C      Call chol_ints_fofo(NBasis,Num0+Num1,MatFF,
@@ -1733,7 +1733,7 @@ C
      $     .true.,NInte1)
 C
 C     SET TIMING FOR 2-el integrals
-      Call clock('START',Tcpu,Twall)
+      Call gclock('START',Tcpu,Twall)
 C
 CCC     bug!!!
 C       If(IRes==1) then
@@ -1827,7 +1827,7 @@ c
 C
       EndIf ! CholeskyBIN .OR. CholeskyOTF .OR. CholeskyTHC
 C      EndIf ! IRes
-      Call clock('2-electron ints',Tcpu,Twall)
+      Call gclock('2-electron ints',Tcpu,Twall)
 C
 C     LOAD AO TO CAS_MO ORBITAL TRANSFORMATION MATRIX FROM uaomo.dat
 C
@@ -2212,7 +2212,7 @@ C     transform Fock to MO for regular and ICholeskyBIN
          Call MatTr(FockF,UAux,NBasis)
       EndIf
 
-      Call clock('generate Fock',Tcpu,Twall)
+      Call gclock('generate Fock',Tcpu,Twall)
 CC     test Fock 2
 C      block
 C      double precision :: Fmat(NBasis,NBasis)
@@ -2433,7 +2433,7 @@ C
      $        'FFFO','AOTWOSORT')
       EndIf
 C
-      Call clock('tran4_FOFO',Tcpu,Twall)
+      Call gclock('tran4_FOFO',Tcpu,Twall)
 C
       ElseIf (ICholesky==1) Then
 C     cholesky BIN
@@ -2455,7 +2455,7 @@ C
       call chol_gammcor_Rkab(MatFF,UAux,1,Nbasis,UAux,1,NBasis,
      $                   MemMOTransfMB, CholeskyVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_MOLPRO)
-      Call clock('chol_gammcor_Rkab',Tcpu,Twall)
+      Call gclock('chol_gammcor_Rkab',Tcpu,Twall)
 
 C     cholesky THC
       ElseIf (ICholeskyTHC==1) Then
@@ -2472,11 +2472,11 @@ C
       Print*, 'THC Step 3: assemble Cholesky vecs'
       Call thc_gammcor_Rkab_2(MatFF, Xga, Xga, Zgk, NBasis, NBasis,
      $                        NCholeskyTHC, NGridTHC)
-      Call clock('thc_gammcor_Rkab',Tcpu,Twall)
+      Call gclock('thc_gammcor_Rkab',Tcpu,Twall)
 C
       EndIf ! Cholesky BIN / OTF / THC
 C
-      Call clock('chol_NOTransf',Tcpu,Twall)
+      Call gclock('chol_NOTransf',Tcpu,Twall)
 C
       If(IRedVirt==0) Then
         Write(6,'(/," Skipping FOFO/FFOO assembling")')
@@ -2492,7 +2492,7 @@ C
          EndIf
       EndIf
 C
-C     Call clock('chol_FFOOFOFO',Tcpu,Twall)
+C     Call gclock('chol_FFOOFOFO',Tcpu,Twall)
 C
 C KP 07.2021: dump MatFF
 C

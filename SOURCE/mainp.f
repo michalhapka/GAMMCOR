@@ -367,7 +367,7 @@ C
       write(LOUT,'(1x,a)') 'STARTING CALCULATIONS '
       write(LOUT,'(8a10)') ('**********',i=1,8)
 C
-      Call clock('START',Tcpu,Twall)
+      Call gclock('START',Tcpu,Twall)
 C
 C     LOAD THE INTEGRALS
 C
@@ -419,7 +419,7 @@ C
       Call delfile('AOTWOSORT')
 C
       Call free_System(System)
-      Call clock(PossibleJobType(Flags%JobType),Tcpu,Twall)
+      Call gclock(PossibleJobType(Flags%JobType),Tcpu,Twall)
       call mem_report
 C      Stop
       End

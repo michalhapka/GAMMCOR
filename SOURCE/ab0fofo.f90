@@ -490,7 +490,7 @@ type(EblockData),allocatable :: Eblock(:)
 type(EblockData) :: EblockIV
 
 ! timing
-!call clock('START',Tcpu,Twall)
+!call gclock('START',Tcpu,Twall)
 
 if(IFlFCorr==1) then
   write(lout,*) 'Error! Disabled CorrFun=fAC0 in AC0CAS_FOFO!'
@@ -545,7 +545,7 @@ do i=1,NBasis
    C(i) = sign(sqrt(Occ(i)),Occ(i)-0.5d0)
 enddo
 
-!call clock('AB0MAT',Tcpu,Twall)
+!call gclock('AB0MAT',Tcpu,Twall)
 
 allocate(Eblock(1+NBasis-NAct))
 
@@ -589,25 +589,25 @@ associate(B => EblockIV)
 
 end associate
 
-!call clock('PACKING',Tcpu,Twall)
+!call gclock('PACKING',Tcpu,Twall)
 
 ! AB(1) PART
 call AB_CAS_FOFO(ABPLUS,ABMIN,val,URe,Occ,XOne,&
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
               NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
 
-!call clock('AB(1)',Tcpu,Twall)
+!call gclock('AB(1)',Tcpu,Twall)
 
 allocate(work(NDimX,NDimX),Eig(NDimX))
 
 ! B = A.X
 call ABPM_TRAN(ABPLUS,work,EBlock,EBlockIV,nblk,NDimX,.true.)
 ABPLUS=work
-!call clock('ABPM_TRAN(1)',Tcpu,Twall)
+!call gclock('ABPM_TRAN(1)',Tcpu,Twall)
 ! C = X^T.B
 call ABPM_TRAN(ABMIN,work,EBlock,EBlockIV,nblk,NDimX,.false.)
 ABMIN=work
-!call clock('ABPM_TRAN(2)',Tcpu,Twall)
+!call gclock('ABPM_TRAN(2)',Tcpu,Twall)
 
 ! unpack Eig (1)
 do iblk=1,nblk
@@ -641,7 +641,7 @@ enddo
 call ABPM_BACKTRAN(work,ABPLUS,EBlock,EBlockIV,nblk,NDimX)
 
 deallocate(Eig,work)
-!call clock('ABPM_BACKTRAN',Tcpu,Twall)
+!call gclock('ABPM_BACKTRAN',Tcpu,Twall)
 
 pos = 0
 do i=1,NDimX
@@ -870,7 +870,7 @@ logical                      :: debug
 debug = .false.
 
 !! timing
-!call clock('START',Tcpu,Twall)
+!call gclock('START',Tcpu,Twall)
 
 ! set dimensions
 NOccup = NAct + INActive
@@ -906,7 +906,7 @@ call ABPM0_FOFO(Occ,URe,XOne,ABPLUS,ABMIN, &
 !print*, 'ABPLUS-new',norm2(ABPLUS)
 !print*, 'ABMIN -new',norm2(ABMIN)
 
-!call clock('ABPM(0)',Tcpu,Twall)
+!call gclock('ABPM(0)',Tcpu,Twall)
 
 allocate(Eblock(1+NBasis-NAct))
 
@@ -956,7 +956,7 @@ end associate
 !print*, 'nblk-check:',nblk,1+NBasis-NAct
 !print*, 'NAct      :',NAct
 
-!call clock('PACK',Tcpu,Twall)
+!call gclock('PACK',Tcpu,Twall)
 
 ! dump EBLOCKS: X(0),Y(0)
 call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
@@ -996,7 +996,7 @@ if((debug .eqv. .true.).or.(IFlag0==0)) then
      enddo
 
    end associate
-   !call clock('UNPACK',Tcpu,Twall)
+   !call gclock('UNPACK',Tcpu,Twall)
 
 endif
 
@@ -1008,17 +1008,17 @@ if(IFlag0==0) then
                     IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
                     NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
 
-   !call clock('ABPM(1)',Tcpu,Twall)
+   !call gclock('ABPM(1)',Tcpu,Twall)
 
    allocate(work(NDimX,NDimX))
 
    ! X^T.AB.X
    call ABPM_TRAN(ABPLUS,work,EBlock,EBlockIV,nblk,NDimX,.true.)
    ABPLUS=work
-   !call clock('ABPM_TRAN(1)',Tcpu,Twall)
+   !call gclock('ABPM_TRAN(1)',Tcpu,Twall)
    call ABPM_TRAN(ABMIN,work,EBlock,EBlockIV,nblk,NDimX,.false.)
    ABMIN=work
-   !call clock('ABPM_TRAN(2)',Tcpu,Twall)
+   !call gclock('ABPM_TRAN(2)',Tcpu,Twall)
 
    deallocate(work)
 
@@ -1172,7 +1172,7 @@ type(EblockData) :: EblockIV
 double precision,parameter :: Thresh = 1.D-12
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ABPLUS = 0
 ABMIN  = 0
@@ -1218,8 +1218,8 @@ call ABPM0_FOFO(Occ,URe,XOne,ABPLUS,ABMIN, &
                 IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
                 IntJFile,IntKFile,ICholesky,ETot)
 
-call clock('Y01CASLR:ABMAT',Tcpu,Twall)
-call clock('START',Tcpu,Twall)
+call gclock('Y01CASLR:ABMAT',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! symmetrize AB(0)
 call sq_symmetrize(ABPLUS,NDimX)
@@ -1306,8 +1306,8 @@ associate(B => EblockIV)
 end associate
 
 !print*, 'Eig-MY',norm2(Eig),norm2(EigY),norm2(EigY1)
-call clock('Y01CAS:DIAG',Tcpu,Twall)
-call clock('START',Tcpu,Twall)
+call gclock('Y01CAS:DIAG',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! dump EBLOCKS: X(0),Y(0)
 call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
@@ -1321,7 +1321,7 @@ call AB_CAS_FOFO(ABPLUS,ABMIN,EnDummy,URe,Occ,XOne,&
               NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
 !print*, 'AB1-MY',norm2(ABPLUS),norm2(ABMIN)
 
-call clock('AB_CAS_FOFO',Tcpu,Twall)
+call gclock('AB_CAS_FOFO',Tcpu,Twall)
 
 if(IFunSRKer==1) then
    call ModABMin_FOFO(Occ,SRKer,Wt,OrbGrid,ABMIN,&
@@ -1332,17 +1332,17 @@ if(IFunSRKer==1) then
    !print*, 'ABM-MY',norm2(ABMIN)
 endif
 ! here!!!! can this be made cheaper?
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
    allocate(workA(NDimX,NDimX))
 
    call ABPM_TRAN(ABPLUS,workA,EBlock,EBlockIV,nblk,NDimX,.true.)
-   !call clock('MULT-1',Tcpu,Twall)
+   !call gclock('MULT-1',Tcpu,Twall)
    ABPLUS=workA
    call ABPM_TRAN(ABMIN,workA,EBlock,EBlockIV,nblk,NDimX,.false.)
    ABMIN=workA
 
-   !call clock('MULT-2',Tcpu,Twall)
+   !call gclock('MULT-2',Tcpu,Twall)
 
    deallocate(workA)
 
@@ -1372,8 +1372,8 @@ call clock('START',Tcpu,Twall)
    enddo
  end associate
 
-call clock('ABPMTRAN',Tcpu,Twall)
-!call clock('Y01CAS:dgemm',Tcpu,Twall)
+call gclock('ABPMTRAN',Tcpu,Twall)
+!call gclock('Y01CAS:dgemm',Tcpu,Twall)
 
 if(.not.present(ECorr)) then
 ! this part for E2disp
@@ -1429,7 +1429,7 @@ elseif(present(ECorr)) then
 ! for AC0Corr
 ! ------------------------------------------------------------------------------
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 do i=1,NBasis
    C(i) = sign(sqrt(Occ(i)),Occ(i)-0.5d0)
 enddo
@@ -1463,14 +1463,14 @@ enddo
 
 !print*, 'EigY1',norm2(EigY1)
 
-call clock('Y01CAS:EigY1',Tcpu,Twall)
-call clock('START',Tcpu,Twall)
+call gclock('Y01CAS:EigY1',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 !! old ways
 !call dgemm('N','N',NDimX,NDimX,NDimX,1d0,EigY,NDimX,workA,NDimX,0d0,EigY1,NDimX)
 !call dgemm('N','T',NDimX,NDimX,NDimX,1d0,EigY,NDimX,EigY1,NDimX,0d0,ABPLUS,NDimX)
 !!print*, 'ABPLUS-MY',norm2(ABPLUS)
-!call clock('Y01CAS:dgemm',Tcpu,Twall)
+!call gclock('Y01CAS:dgemm',Tcpu,Twall)
 
 ! new
 call ABPM_BACKTRAN(workA,ABPLUS,EBlock,EBlockIV,nblk,NDimX)
@@ -1494,7 +1494,7 @@ associate(B => EblockIV)
 
 end associate
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 if (ICholesky==1) then
 
@@ -1589,7 +1589,7 @@ endif ! present(ECorr)
 
 deallocate(Eig,EigY)
 
-call clock('Y01CASLR:ENE',Tcpu,Twall)
+call gclock('Y01CASLR:ENE',Tcpu,Twall)
 
 end subroutine Y01CASLR_FOFO
 
@@ -1655,7 +1655,7 @@ double precision :: tmpEn
 double precision :: Tcpu,Twall
 
 ! timing
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 print*, 'Entering Y01CASD_FOFO...'
 
@@ -2512,7 +2512,7 @@ call ABPM0_FOFO(Occ,URe,XOne,ABPLUS,ABMIN, &
 !      enddo
 !enddo
 !
-!call clock('AB0MAT',Tcpu,Twall)
+!call gclock('AB0MAT',Tcpu,Twall)
 
 allocate(EBlock(1+NBasis-NAct))
 
@@ -2769,7 +2769,7 @@ associate(B => EblockIV)
 
 end associate
 
- call clock('PACK',Tcpu,Twall)
+ call gclock('PACK',Tcpu,Twall)
 
 !! dump EBLOCKS: X(0),Y(0)
 call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
@@ -2779,18 +2779,18 @@ call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
                  IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
                  NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
 
-  call clock('AB(1)',Tcpu,Twall)
+  call gclock('AB(1)',Tcpu,Twall)
 !  ! B = A.X
 !  ! C = X^T.B
    allocate(workA(NDimX,NDimX))
 
    call ABPM_TRAN(ABPLUS,workA,EBlock,EBlockIV,nblk,NDimX,.true.)
-   call clock('MULT-1',Tcpu,Twall)
+   call gclock('MULT-1',Tcpu,Twall)
    ABPLUS=workA
    call ABPM_TRAN(ABMIN,workA,EBlock,EBlockIV,nblk,NDimX,.false.)
    ABMIN=workA
 
-   call clock('MULT-2',Tcpu,Twall)
+   call gclock('MULT-2',Tcpu,Twall)
 
    deallocate(workA)
 
@@ -2815,7 +2815,7 @@ call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
      enddo
 
    end associate
-   call clock('UNPACK',Tcpu,Twall)
+   call gclock('UNPACK',Tcpu,Twall)
 
 !deallocate(RDM2val,work2)
 !deallocate(ints)
@@ -2923,7 +2923,7 @@ do j=1,NDimX
       enddo
    endif
 enddo
-call clock('APL-AMIN/EPL',Tcpu,Twall)
+call gclock('APL-AMIN/EPL',Tcpu,Twall)
 
 call ABPM_BACKTRAN(workA,ABPLUS,EBlock,EBlockIV,nblk,NDimX)
 
@@ -2946,7 +2946,7 @@ associate(B => EblockIV)
 
 end associate
 
-call clock('ABPl-dgemm',Tcpu,Twall)
+call gclock('ABPl-dgemm',Tcpu,Twall)
 !print*, 'ABPLUS-MY',norm2(ABPLUS)
 
 pos = 0
@@ -3002,7 +3002,7 @@ enddo
 
 close(iunit)
 
-call clock('ENE-loop',Tcpu,Twall)
+call gclock('ENE-loop',Tcpu,Twall)
 
 ECorr = EAll-EIntra
 !print*, 'EAll,EIntra',EAll,EIntra
@@ -3087,7 +3087,7 @@ double precision :: Tcpu,Twall
 integer :: IFlAC0DP
 
 ! timing
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 Do I=1,NBasis
    C(I)=SQRT(Occ(I))
@@ -3140,7 +3140,7 @@ call ABPM0_FOFO(Occ,URe,XOne,ABPLUS,ABMIN, &
                 IntJFile,IntKFile,ICholesky,ETot)
 
 print*, 'after ABPM0_FOFO...'
-call clock('AB0MAT',Tcpu,Twall)
+call gclock('AB0MAT',Tcpu,Twall)
 
 allocate(EBlock(1+NBasis-NAct))
 
@@ -3335,7 +3335,7 @@ associate(B => EblockIV)
 
 end associate
 
-! call clock('PACK',Tcpu,Twall)
+! call gclock('PACK',Tcpu,Twall)
 
 !! dump EBLOCKS: X(0),Y(0)
 call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
@@ -3345,18 +3345,18 @@ call AB_CAS_FOFO(ABPLUS,ABMIN,EnDummy,URe,Occ,XOne,&
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
               NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
 
-call clock('AB(1)',Tcpu,Twall)
+call gclock('AB(1)',Tcpu,Twall)
 !  ! B = A.X
 !  ! C = X^T.B
 allocate(workA(NDimX,NDimX))
 
 call ABPM_TRAN(ABPLUS,workA,EBlock,EBlockIV,nblk,NDimX,.true.)
-!   call clock('MULT-1',Tcpu,Twall)
+!   call gclock('MULT-1',Tcpu,Twall)
 ABPLUS=workA
 call ABPM_TRAN(ABMIN,workA,EBlock,EBlockIV,nblk,NDimX,.false.)
 ABMIN=workA
 
-!   call clock('MULT-2',Tcpu,Twall)
+!   call gclock('MULT-2',Tcpu,Twall)
 deallocate(workA)
 
 allocate(Eig(NDimX),Eig1(NDimX))
@@ -3378,7 +3378,7 @@ associate(B => EblockIV)
   enddo
 
 end associate
-!   call clock('UNPACK',Tcpu,Twall)
+!   call gclock('UNPACK',Tcpu,Twall)
 
 do i=1,NBasis
    C(i) = sign(sqrt(Occ(i)),Occ(i)-0.5d0)
@@ -3582,13 +3582,13 @@ do j=1,NDimX
       enddo
    endif
 enddo
-call clock('APL-AMIN/EPL',Tcpu,Twall)
+call gclock('APL-AMIN/EPL',Tcpu,Twall)
 
 call ABPM_BACKTRAN(workA,ABP,EBlock,EBlockIV,nblk,NDimX)
 
 deallocate(workA)
 
-call clock('ABPl-dgemm',Tcpu,Twall)
+call gclock('ABPl-dgemm',Tcpu,Twall)
 !print*, 'ABPLUS-MY',norm2(ABPLUS)
 
 pos = 0
@@ -3734,7 +3734,7 @@ elseif(ICholesky==1) then
 
 endif ! ICholesky
 
-call clock('ENE-loop Y01CASDSYM_FOFO',Tcpu,Twall)
+call gclock('ENE-loop Y01CASDSYM_FOFO',Tcpu,Twall)
 
 ECorr = EAll-EIntra
 ECorrSym(IDCORR)=ECorr
@@ -4258,6 +4258,137 @@ deallocate(Skipped)
 deallocate(ints,work)
 
 end subroutine EneERPA_FOFO
+
+subroutine pack_AC0BLOCK(ABPlus,ABMin,A0Block,A0blockIV,nblk,IndN,INActive,NAct,NDimX,NBasis,ver,dumpfile)
+!
+!     mh 03.10.24 : moved from ac_fofo.90
+!
+!     A ROUTINE FOR PACKING : a) ver=0  ABPLUS^{(0)} and ABMIN^{(0)}
+!                                       (stored in matY and matX, respectively)
+!                             b) ver=1  A0=ABPLUS^{(0)}.ABMIN^{(0)}
+
+!use abfofo
+!use blocktypes
+
+implicit none
+
+integer,intent(in) :: NAct,INActive
+integer,intent(in) :: NDimX,NBasis
+integer,intent(in) :: ver
+integer            :: nblk
+integer,intent(in) :: IndN(2,NDimX)
+double precision,intent(in) :: ABPlus(NDimX,NDimX),ABMin(NDimX,NDimX)
+character(*),optional       :: dumpfile
+
+type(EblockData) :: A0block(nblk), A0blockIV
+
+integer :: NOccup
+integer :: i,ii,ip,iq
+integer :: IGem(NBasis),Ind(NBasis)
+integer :: pos(NBasis,NBasis)
+
+integer :: iblk
+integer :: iunit
+
+integer :: nAA,nAI(INActive),nAV(INActive+NAct+1:NBasis),nIV
+integer :: tmpAA(NAct*(NAct-1)/2),tmpAI(NAct,1:INActive),&
+           tmpAV(NAct,INActive+NAct+1:NBasis),&
+           tmpIV(INActive*(NBasis-NAct-INActive))
+integer :: limAA(2),limAI(2,1:INActive),&
+           limAV(2,INActive+NAct+1:NBasis),limIV(2)
+
+! set dimensions
+NOccup = NAct + INActive
+
+Ind = 0
+do i=1,NAct
+   Ind(INActive+i) = i
+enddo
+
+! fix IGem
+do i=1,INActive
+   IGem(i) = 1
+enddo
+do i=INActive+1,NOccup
+   IGem(i) = 2
+enddo
+do i=NOccup+1,NBasis
+   IGem(i) = 3
+enddo
+
+call create_blocks_ABPL0(nAA,nAI,nAV,nIV,tmpAA,tmpAI,tmpAV,tmpIV,&
+                         limAA,limAI,limAV,limIV,pos,&
+                         IGem,IndN,INActive,NAct,NBasis,NDimX)
+
+nblk = 0
+
+!pack AA
+if(nAA>0) then
+   nblk = nblk + 1
+   call pack_A0block(ABPLUS,ABMIN,nAA,limAA(1),limAA(2),tmpAA,A0block(nblk),NDimX,ver)
+endif
+!pack AI
+do iq=1,INActive
+   if(nAI(iq)>0) then
+      nblk = nblk + 1
+      call pack_A0block(ABPLUS,ABMIN,nAI(iq),limAI(1,iq),limAI(2,iq),tmpAI(1:nAI(iq),iq),&
+                        A0block(nblk),NDimX,ver)
+   endif
+enddo
+!pack AV
+do ip=NOccup+1,NBasis
+   if(nAV(ip)>0) then
+      nblk = nblk + 1
+      call pack_A0block(ABPLUS,ABMIN,nAV(ip),limAV(1,ip),limAV(2,ip),tmpAV(1:nAV(ip),ip),&
+                        A0block(nblk),NDimX,ver)
+    endif
+enddo
+!pack IV
+associate(B => A0blockIV)
+
+  B%l1 = limIV(1)
+  B%l2 = limIV(2)
+  B%n  = B%l2-B%l1+1
+  allocate(B%pos(B%n))
+  B%pos(1:B%n) = tmpIV(1:B%n)
+
+  allocate(B%vec(B%n))
+
+  if(ver==0) then
+     do i=1,B%n
+        ii = B%l1+i-1
+        B%vec(i) = ABPLUS(ii,ii)
+     enddo
+  elseif(ver==1) then
+     do i=1,B%n
+        ii = B%l1+i-1
+        B%vec(i) = ABPLUS(ii,ii)*ABMIN(ii,ii)
+     enddo
+  endif
+
+end associate
+
+if(present(dumpfile)) then
+  ! dump to file
+  open(newunit=iunit,file=dumpfile,form='unformatted')
+  write(iunit) nblk
+  do iblk=1,nblk
+     associate(B => A0Block(iblk))
+       write(iunit) iblk, B%n, B%l1, B%l2
+       write(iunit) B%pos,B%matX
+     end associate
+  enddo
+  associate(B => A0BlockIV)
+    write(iunit) B%n,B%l1,B%l2
+    write(iunit) B%pos,B%vec
+  end associate
+  close(iunit)
+endif
+
+end subroutine pack_AC0BLOCK
+
+
+
 
 subroutine reduce_to_XY0CAS(EigX0,EigY0,Eig0,C,IndN,NAct,INActive,NDimX,NBasis,xy0file)
 !
