@@ -1017,6 +1017,46 @@ character(8) :: label
 
 end subroutine read_NoSt_molpro
 
+subroutine read_Ene_molpro(ECasscf,nstates,infile)
+!
+! read CASSCF energies from Molpro
+! NStates is obtained by summing nstats(mxstsy)
+!         (from common/cstate in Molpro)
+!
+! probably fails for symmetry!
+!
+implicit none
+
+integer,intent(out) :: nstates
+double precision,intent(out) :: ECasscf(8)
+character(*),intent(in) :: infile
+
+integer :: iunit, ios
+character(8) :: label
+
+ open(newunit=iunit,file=infile,status='OLD', &
+      access='SEQUENTIAL',form='UNFORMATTED')
+
+ fileloop: do
+           read(iunit,iostat=ios) label
+           if(ios<0) then
+              write(LOUT,*) 'ERROR!!! LABEL ENEINFO  not found!'
+              stop
+           endif
+           if(label=='ENEINFO ') then
+              read(iunit) nstates
+              read(iunit) ECasscf(1:nstates)
+              exit fileloop
+           endif
+         enddo fileloop
+
+ close(iunit)
+
+! print*, 'NStates Molpro  = ', nstates
+! print*, 'CASSCF Energies = ', ECasscf(1:nstates)
+
+end subroutine read_Ene_molpro
+
 subroutine read_dip_molpro(matdx,matdy,matdz,infile,nbasis)
 !
 ! Purpose: read dipole integrals and unpack withour symmetry

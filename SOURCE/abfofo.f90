@@ -1186,7 +1186,7 @@ Call MultpM(UCorr,AuxMat,UNOAO,NBasis)
 Inquire(file='DIP',exist=DipCheck)
 If(DipCheck) Then
   write(LOUT,'(/,x,"Dipole moment with correlated 1-RDM")')
-  Call ComputeDipoleMom(UCorr,PC,NBasis,NBasis)
+  Call ComputeDipoleMom(UCorr,PC,'DIP','AOONEINT.mol',NBasis,NBasis)
 Else
   write(LOUT,'(/,x,"Dipole moment ints not available")')
 EndIf

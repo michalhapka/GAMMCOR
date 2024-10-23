@@ -1988,9 +1988,9 @@ integer :: I,J,IJ,inf,ICholesky,NOccup
 Om=FreqOm
 
 NOccup=NAct+INActive
-Call ComputeDipoleMom(UNOAO,Occ,NOccup,NBasis)
+Call ComputeDipoleMom(UNOAO,Occ,'DIP','AOONEINT.mol',NOccup,NBasis)
 
-Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 
 do i=1,NBasis
 CICoef(i) = sign(sqrt(Occ(i)),Occ(i)-0.5d0)
@@ -2070,9 +2070,9 @@ integer :: I,J,IJ,inf,ICholesky,NOccup
 Om=FreqOm
 
 NOccup=NAct+INActive
-Call ComputeDipoleMom(UNOAO,Occ,NOccup,NBasis)
+Call ComputeDipoleMom(UNOAO,Occ,'DIP','AOONEINT.mol',NOccup,NBasis)
 
-Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 
 do i=1,NBasis
 CICoef(i) = sign(sqrt(Occ(i)),Occ(i)-0.5d0)

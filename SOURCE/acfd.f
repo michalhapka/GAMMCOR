@@ -2663,7 +2663,7 @@ C
       CICoef(I)=C(I)
       EndDo
 C
-      Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+      Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 C
       NoStMx=0
       Write(6,'(X,"**** SA-CAS FROM MOLPRO ****",/)')
@@ -7457,13 +7457,14 @@ C
       End
 
 *Deck ReadDip
-      Subroutine ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+      Subroutine ReadDip(DipX,DipY,DipZ,UNOAO,filename,NBasis)
 C
 C     Read dipole moment matrices and transform them to NO
 C
       use read_external
 C
       Implicit Real*8 (A-H,O-Z)
+      Character(*), Intent(In) :: filename
 C
       Include 'commons.inc'
 C
@@ -7472,7 +7473,7 @@ C
       Dimension DipX(NBasis,NBasis),DipY(NBasis,NBasis),
      $ DipZ(NBasis,NBasis),UNOAO(NBasis,NBasis),AUXM(NBasis,NBasis)
 C
-      Call read_dip_molpro(DipX,DipY,DipZ,'DIP',NBasis)
+      Call read_dip_molpro(DipX,DipY,DipZ,filename,NBasis)
 C
       Call dgemm('N','N',NBasis,NBasis,NBasis,1d0,UNOAO,NBasis,
      $           dipz,NBasis,0d0,AUXM,NBasis)
@@ -7491,12 +7492,14 @@ C
       End
 
 *Deck ComputeDipoleMom
-      Subroutine ComputeDipoleMom(UNOAO,Occ,NOccup,NBasis)
+      Subroutine ComputeDipoleMom(UNOAO,Occ,filedip,filegeom,
+     $                            NOccup,NBasis)
 C
 C     compute electronic part of the DM
 C     using occupation numbers
 C
       Implicit Real*8 (A-H,O-Z)
+      Character(*),Intent(In) :: filedip,filegeom
 C
       Include 'commons.inc'
 C
@@ -7512,11 +7515,11 @@ C
       Real*8 NUC_DMX,NUC_DMY,NUC_DMZ
       Character(8) label
 
-      Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+      Call ReadDip(DipX,DipY,DipZ,UNOAO,filedip,NBasis)
 
 C     Nuclear
 C
-      Open(newunit=ione,file='AOONEINT.mol',access='sequential',
+      Open(newunit=ione,file=filegeom,access='sequential',
      $     form='unformatted',status='old')
 C
       Do
@@ -7615,7 +7618,7 @@ C
       EndDo
 C
       If(IStCAS(1,ICAS).Eq.1.And.IStCAS(2,ICAS).Eq.1) 
-     $ Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+     $ Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 C
 C     AUXILIARY STUFF LATER NEEDED TO GET A+ AND A- MATRICES FOR ALPHA=0
 C

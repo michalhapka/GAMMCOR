@@ -368,10 +368,10 @@ elseif(IH0Test==2) then
    write(6,'(1x,"Skipping H0 Test: use external H0")')
 endif
 
-!transform Cholesky or THC vecs to MO
-print*, 'NGridTHC     = ',NGridTHC
-print*, 'NCholeskyTHC = ',NCholeskyTHC
 if(NGridTHC .gt. 1) then
+   !transform Cholesky or THC vecs to MO
+   print*, 'NGridTHC     = ',NGridTHC
+   print*, 'NCholeskyTHC = ',NCholeskyTHC
 
    Print*, 'THC in FockOTF: MO transform Xgp to Xga'
    NCholesky = NCholeskyTHC
