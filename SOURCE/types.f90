@@ -195,7 +195,8 @@ type SystemBlock
       integer :: NSym
       integer :: NSymBas(8),NSymOrb(8)
       integer :: NOrb, NGem
-      integer :: NActOrb = 1
+      integer :: NActOrb  = 1
+      integer :: NCoreOrb = 0
       integer :: NAct, INAct
       integer :: ISwitchAct = 0
       integer :: NActS(8), INActS(8)

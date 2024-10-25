@@ -3949,9 +3949,10 @@ C
 C
       Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
 C
-      Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:),
-     $ OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),
-     $ Zk(:),RhoGrid(:),Sigma(:),WGrid(:)
+      Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:)
+      Real*8, Allocatable :: OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),
+     $                       OrbZGrid(:,:)
+      Real*8, Allocatable :: Zk(:),RhoGrid(:),Sigma(:),WGrid(:)
       Double Precision, Allocatable :: CHVCSAF(:,:),CHVCSIF(:,:)
       Double Precision, Allocatable :: Q(:,:),OrbGridP(:)
       Double Precision, Allocatable :: Oi(:,:),Oa(:,:),Oaa(:,:)
@@ -3968,6 +3969,15 @@ C
       Character(*),Parameter :: griddalfile='dftgrid.dat'
 C
       call gclock('START',Tcpu,Twall)
+C
+      If(IFlCore.Eq.0) Then
+         ICore = NCoreOrb ! from input.inp
+         Do I=1,ICore
+         Occ(I)=Zero
+         EndDo
+      Else
+         ICore = 0
+      EndIf
 C
 C     debug printlevel
       IIPRINT=5
@@ -4022,6 +4032,13 @@ C
       Ind2(INActive+I)=I
       EndDo
 C
+      if (IFlCore.Eq.0) Then
+         INActiveC=INactive-ICore ! skip core within inactive
+      else
+         INActiveC = INActive
+      endif
+C     PRint*, 'INActiveC =', INActiveC
+C
       NRDM2Act = NAct**2*(NAct**2+1)/2
       Allocate (RDM2Act(NRDM2Act))
       RDM2Act(1:NRDM2Act)=Zero
@@ -4074,12 +4091,12 @@ C
             EndDo
          EndDo
       EndDo
-      Allocate (CHVCSIF(NCholesky,INActive*NBasis))
+      Allocate (CHVCSIF(NCholesky,INActiveC*NBasis))
       ! use WorkD instead?
       Do K=1,NCholesky
          IIJJ=0
          Do J=1,NBasis
-            Do I=1,INActive
+            Do I=ICore+1,INActive
                IIJJ=IIJJ+1
                IJ=I+(J-1)*NBasis
                CHVCSIF(K,IIJJ) = WorkD(K,IJ)
@@ -4094,7 +4111,7 @@ C
       Allocate (FPsiB(NGrid))
       Allocate (Q(NAct,NAct))
       Allocate (Oa(NCholesky,NAct))
-      Allocate (Oi(NCholesky,INActive))
+      Allocate (Oi(NCholesky,INActiveC))
       Allocate (Oaa(NAct,NAct))
       Allocate (tOi(NCholesky),tOa(NCholesky))
       Allocate (OrbGridP(NAct))
@@ -4138,10 +4155,12 @@ C
       FPsiB(IG)=ddot(NAct*NAct,Oaa,1,Q,1)
 c     print*, '1st FPsiB =', IG, FPsiB(IG)
 C
+c     If(IFlCore.Ne.0) Then
+C
 C     inactive-inactive
 C
-      Call dgemv('N',NCholesky*INActive,NBasis,1d0,CHVCSIF,
-     $          NCholesky*INActive,OrbGrid(IG,1:NBasis),1,0d0,Oi,1)
+      Call dgemv('N',NCholesky*INActiveC,NBasis,1d0,CHVCSIF,
+     $          NCholesky*INActiveC,OrbGrid(IG,1:NBasis),1,0d0,Oi,1)
 !C
 !     ver 1
 !      Call dgemm('T','N',INActive,INActive,NCholesky,1d0,Oi,NCholesky,
@@ -4155,8 +4174,8 @@ C
 !c     print*, '2nd FPsiB =', IG, FPsiB(IG)
 C
 !     ver 2
-      Call dgemv('N',NCholesky,INActive,1d0,Oi,
-     $          NCholesky,OrbGrid(IG,1:INActive),1,0d0,tOi,1)
+      Call dgemv('N',NCholesky,INActiveC,1d0,Oi,
+     $          NCholesky,OrbGrid(IG,ICore+1:INActive),1,0d0,tOi,1)
       FPsiB(IG)=FPsiB(IG)+ddot(NCholesky,tOi,1,tOi,1)
 !
 C     active-inactive
@@ -4177,7 +4196,10 @@ C     ver2 : NChol*NOccup scaling
       Call dgemv('N',NCholesky,NAct,1d0,Oa,
      $          NCholesky,OrbGridP,1,0d0,tOa,1)
       FPsiB(IG)=FPsiB(IG)+2d0*ddot(NCholesky,tOa,1,tOi,1)
-
+C
+C     If(IFlCore.Ne.0)
+c     EndIf
+C
       EndDo ! IG=1,NGrid
 C
       Deallocate(CHVCSIF,CHVCSAF)
@@ -4254,9 +4276,18 @@ C
 C
       AvMU=AvMU/XEl
 C
+      If(IFlCore.Eq.0) Then
+      Do I=1,ICore
+c     Do I=1,NInAcCAS
+      Occ(I)=One
+      EndDo
+      Write(6,'(/,1X,"*** CBS CORRECTION EXCLUDING CORE ORBITALS ***")')
+      Write(6,'(1X,"*** NO. OF CORE ORBITALS :",I3)') ICore
+      EndIf
+C
       Write(6,'(/,
      $" CBS-my correction, average Mu",
-     $ F15.8,F15.2/)') CorrMD,AvMU
+     $ F15.8,F15.3/)') CorrMD,AvMU
 C
       call gclock('Esrcmd CBS ',Tcpu,Twall)
 

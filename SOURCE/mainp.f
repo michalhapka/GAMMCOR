@@ -77,6 +77,8 @@ C     FILL COMMONS AND CONSTANTS
       NBasis  = System%NBasis
       BasisSet= Flags%BasisSetPath // Flags%BasisSet
 C
+      NCoreOrb = System%NCoreOrb
+C
       Title   = Flags%JobTitle
 C
       IUnits  = Flags%IUnits

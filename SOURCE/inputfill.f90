@@ -696,6 +696,9 @@ character(:), allocatable :: first, last
  case ("NATOMS")
        read(val, *) SystemParams%NCen
 
+ case ("NCORE", "NCOREORB")
+       read(val, *) SystemParams%NCoreOrb
+
  case ("ACALPHA")
        read(val, *) SystemParams%ACAlpha
 

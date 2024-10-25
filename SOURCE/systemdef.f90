@@ -472,6 +472,7 @@ if(Flags%ISAPT.Eq.0) then
    System%ZNucl  = Input%SystemInput(1)%ZNucl
    System%Charge = Input%SystemInput(1)%Charge
    System%NBasis = Input%CalcParams%NBasis
+   System%NCoreOrb = Input%SystemInput(1)%NCoreOrb
    System%Omega  = Input%SystemInput(1)%Omega
    System%PerVirt= Input%SystemInput(1)%PerVirt
    System%EigFCI = Input%SystemInput(1)%EigFCI
