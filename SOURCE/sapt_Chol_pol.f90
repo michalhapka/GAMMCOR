@@ -237,7 +237,7 @@ end subroutine test_Chol_ints
 subroutine e2disp_Chol_cpld(Flags,A,B,SAPT)
 !
 ! calculate 2nd order dispersion energy
-! in coupled and uncoupled approximations
+! in coupled approximation
 !
 implicit none
 
@@ -364,6 +364,98 @@ deallocate(condOmB,condOmA)
 deallocate(tmpB,tmpA,tmpAB)
 
 end subroutine e2disp_Chol_cpld
+
+subroutine e2disp_Chol_unc(Flags,A,B,SAPT)
+!
+! calculate 2nd order dispersion energy
+! in uncoupled approximation
+!
+implicit none
+
+type(FlagsData)   :: Flags
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
+
+type(Y01BlockData),allocatable :: Y01BlockA(:),Y01BlockB(:)
+
+integer :: NBas
+integer :: NCholesky
+integer :: i,j,ik,pq,rs
+logical,allocatable          :: condOmA(:),condOmB(:)
+double precision,allocatable :: OmA0(:), OmB0(:)
+double precision,allocatable :: tmpA(:,:),tmpB(:,:)
+double precision,allocatable :: tmpAB(:,:)
+double precision :: e2du
+
+double precision :: Tcpu,Twall
+double precision,parameter :: BigE = 1.D8
+double precision,parameter :: SmallE = 1.D-3
+
+call gclock('START',Tcpu,Twall)
+
+! print thresholds for discarding spurious omega values
+if(SAPT%IPrint>1) then
+   write(LOUT,'(/,1x,a)') 'Thresholds in E2disp(unc):'
+   write(LOUT,'(1x,a,t18,a,e15.4)') 'SmallE','=', SmallE
+   write(LOUT,'(1x,a,t18,a,e15.4)') 'BigE',  '=', BigE
+endif
+
+NCholesky = SAPT%NCholesky
+
+allocate(Y01BlockA(A%NDimX),Y01BlockB(B%NDimX))
+allocate(OmA0(A%NDimX),OmB0(B%NDimX))
+
+allocate(tmpA(NCholesky,A%NDimX))
+call convert_XY0_to_Y01(A,Y01BlockA,OmA0,NBas,'XY0_A')
+
+! I(k,mu) = R(k,pq).Z(pq,mu)
+tmpA = 0d0
+do pq=1,A%NDimX
+   associate(Y => Y01BlockA(pq))
+      do ik=1,NCholesky
+         tmpA(ik,Y%l1:Y%l2) = tmpA(ik,Y%l1:Y%l2) + A%DChol(ik,pq)*Y%vec0(1:Y%n)
+      enddo
+   end associate
+enddo
+
+allocate(tmpB(NCholesky,B%NDimX))
+call convert_XY0_to_Y01(B,Y01BlockB,OmB0,NBas,'XY0_B')
+tmpB = 0d0
+do rs=1,B%NDimX
+   associate(Y => Y01BlockB(rs))
+      do ik=1,NCholesky
+         tmpB(ik,Y%l1:Y%l2) = tmpB(ik,Y%l1:Y%l2) + B%DChol(ik,rs)*Y%vec0(1:Y%n)
+      enddo
+   end associate
+enddo
+
+allocate(tmpAB(A%NDimX,B%NDimX))
+call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,tmpAB,A%NDimX)
+
+allocate(condOmA(A%NDimX),condOmB(B%NDimX))
+condOmA = (abs(OmA0).gt.SmallE.and.abs(OmA0).lt.BigE)
+condOmB = (abs(OmB0).gt.SmallE.and.abs(OmB0).lt.BigE)
+
+e2du = 0d0
+do j=1,B%NDimX
+   if(condOmB(j)) then
+      do i=1,A%NDimX
+         if(condOmA(i)) then
+            e2du = e2du + tmpAB(i,j)**2/(OmA0(i)+OmB0(j))
+         endif
+      enddo
+   endif
+enddo
+SAPT%e2disp_unc = -16d0*e2du
+
+e2du = -16d0*e2du*1000d0
+
+call print_en('E2disp(unc)',e2du,.true.)
+
+deallocate(OmB0,OmA0)
+deallocate(tmpAB,tmpB,tmpA)
+
+end subroutine e2disp_Chol_unc
 
 subroutine e2disp_Cmat(Flags,A,B,SAPT)
 !

@@ -3932,6 +3932,7 @@ C
 C
       Return
       End
+C*End Subroutine LOC_MU_CBS
 
 *Deck LOC_MU_CBS_v2
       Subroutine LOC_MU_CBS_v2(CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
@@ -3989,7 +3990,7 @@ C
       Prefac = SQRT(3.1415)/Two ! SPi/Two
 C
       Write(6,'(/,1X,"************** ",
-     $ " DGEMM LOC_MU_CBS  Correlation Energy with the Local Mu ")')
+     $ " DGEMM LOC_MU_CBS Correlation Energy with the Local Mu ")')
 C
       If (IMOLPRO == 1) Then
          Call molprogrid0(NGrid,NBasis)
