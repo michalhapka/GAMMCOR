@@ -50,6 +50,7 @@ character(8) :: label
 character(:),allocatable :: onefile,twofile,propfile,rdmfile
 character(:),allocatable :: twojfile,twokfile
 character(:),allocatable :: propfile0,propfile1
+character(:),allocatable :: propbatch
 character(:),allocatable :: y01file,xy0file
 character(:),allocatable :: abpm0file
 character(:),allocatable :: abfile,testfile
@@ -81,6 +82,7 @@ if(Mon%Monomer==1) then
    propfile   = 'PROP_A'
    propfile0  = 'PROP_A0'
    propfile1  = 'PROP_A1'
+   propbatch  = 'PROB_A'
    y01file    = 'Y01_A'
    xy0file    = 'XY0_A'
    abpm0file  = 'A0BLK_A'
@@ -95,6 +97,7 @@ elseif(Mon%Monomer==2) then
    propfile   = 'PROP_B'
    propfile0  = 'PROP_B0'
    propfile1  = 'PROP_B1'
+   propbatch  = 'PROB_B'
    y01file    = 'Y01_B'
    xy0file    = 'XY0_B'
    abpm0file  = 'A0BLK_B'
@@ -575,6 +578,12 @@ endif
 
 ! dump response
  call writeresp(EigVecR,Eig,propfile)
+
+!block
+!! dump response in batches
+! integer,parameter :: MaxBatchSize = 120
+! call WriteRespBatch(Mon%NDimX,MaxBatchSize,Eig,EigVecR,propbatch)
+!end block
 
  deallocate(work1,work2,XOne,URe)
  !if(Mon%TwoMoInt==1) deallocate(TwoMO)
@@ -1123,6 +1132,10 @@ double precision, allocatable :: ABPlus(:),ABMin(:),DMAT(:),DMATK(:),&
 end subroutine calc_resp_pino
 
 subroutine calc_resp_unc(Mon,MO,Flags,NBas)
+!
+! calculate uncoupled response
+! either for GVB-PP or CASSCF wave function
+!
 implicit none
 
 type(SystemBlock) :: Mon
@@ -1307,6 +1320,23 @@ if(Mon%TwoMoInt==1) deallocate(TwoMO)
 deallocate(URe,XOne,work1,work2)
 
 end subroutine calc_resp_unc
+
+subroutine calc_resp_dft_unc(Mon,Flags,NBas)
+!
+! calculate uncoupled response
+! for CASsrDFT wave function
+!
+implicit none
+
+type(SystemBlock) :: Mon
+type(FlagsData) :: Flags
+
+integer,intent(in) :: NBas
+
+stop "SAPT(MC-srDFT) unc response not ready!"
+
+end subroutine calc_resp_dft_unc
+
 
 subroutine calc_resp_dft_molpro(Mon,MO,Flags,NAO,NBas)
 implicit none
@@ -2038,6 +2068,8 @@ ECASSCF = 0d0
 !               Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBasis,Mon%NDimX,&
 !               NInte1,twojerf,twokerf,0,ACAlpha,.false.)
 !else
+!ACAlpha=1d-6
+print*, 'ACAlpha in Hessians = ', ACAlpha
 call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBasis,Mon%NDimX,&
                NInte1,twojerf,twokerf,Flags%ICholesky,ACAlpha,.false.)

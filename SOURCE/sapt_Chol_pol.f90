@@ -234,6 +234,123 @@ close(iunit)
 
 end subroutine test_Chol_ints
 
+subroutine e2disp_Chol_cpld_batch(Flags,A,B,SAPT)
+!
+! calculate 2nd order dispersion energy
+! in coupled approximation
+! Requires (NCholesky,MaxBatchSize) allocations
+!
+implicit none
+
+type(FlagsData)   :: Flags
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
+
+integer :: NBas,NCholesky
+integer :: i,j
+double precision :: e2d,fact,tmp
+!
+integer :: iunitA,iunitB
+integer :: iloopA,iloopB,nloopA,nloopB
+integer :: offA,offB
+integer :: BatchSizeA,BatchSizeB
+integer :: MaxBatchSizeA,MaxBatchSizeB
+!
+double precision,allocatable :: OmA(:), OmB(:)
+double precision,allocatable :: EVecA(:,:),EVecB(:,:)
+double precision,allocatable :: tmpA(:,:),tmpB(:,:)
+double precision,allocatable :: tmpAB(:,:)
+logical,allocatable          :: condOmA(:),condOmB(:)
+!
+double precision :: Tcpu,Twall
+double precision,parameter :: BigE = 1.D8
+double precision,parameter :: SmallE = 1.D-3
+
+call gclock('START',Tcpu,Twall)
+
+NCholesky = SAPT%NCholesky
+
+allocate(OmA(A%NDimX),OmB(B%NDimX))
+
+call Open_RespBatch(A%NDimX,MaxBatchSizeA,OmA,iunitA,'PROB_A')
+call Open_RespBatch(B%NDimX,MaxBatchSizeB,OmB,iunitB,'PROB_B')
+print*, 'Use MaxBatchSizeA = ', MaxBatchSizeA
+print*, 'Use MaxBatchSizeB = ', MaxBatchSizeB
+
+nloopA = (A%NDimX - 1) / MaxBatchSizeA + 1
+nloopB = (B%NDimX - 1) / MaxBatchSizeB + 1
+print*, 'nloopA = ', nloopA
+print*, 'nloopB = ', nloopB
+
+allocate(EVecA(A%NDimX,MaxBatchSizeA),EVecB(B%NDimX,MaxBatchSizeB))
+allocate(tmpA(NCholesky,MaxBatchSizeA),tmpB(NCholesky,MaxBatchSizeB))
+allocate(tmpAB(MaxBatchSizeA,MaxBatchSizeB))
+
+allocate(condOmA(A%NDimX),condOmB(B%NDimX))
+condOmA = (abs(OmA).gt.SmallE.and.abs(OmA).lt.BigE)
+condOmB = (abs(OmB).gt.SmallE.and.abs(OmB).lt.BigE)
+
+do i=1,A%NDimX
+   if(OmA(i)<0d0) write(LOUT,*) 'Negative omega A!',i,OmA(i)
+enddo
+do i=1,B%NDimX
+   if(OmB(i)<0d0) write(LOUT,*) 'Negative omega B!',i,OmB(i)
+enddo
+
+e2d = 0d0
+
+offB = 0
+do iloopB=1,nloopB
+
+   BatchSizeB = min(MaxBatchSizeB,B%NDimX-offB)
+   call Get_RespBatch(B%NDimX,BatchSizeB,EvecB,iunitB)
+   call dgemm('N','N',NCholesky,BatchSizeB,B%NDimX,1d0,B%DChol,NCholesky,EvecB,B%NDimX,0d0,tmpB,NCholesky)
+
+   offA = 0
+   do iloopA=1,nloopA
+
+      BatchSizeA = min(MaxBatchSizeA,A%NDimX-offA)
+      call Get_RespBatch(A%NDimX,BatchSizeA,EvecA,iunitA)
+      call dgemm('N','N',NCholesky,BatchSizeA,A%NDimX,1d0,A%DChol,NCholesky,EvecA,A%NDimX,0d0,tmpA,NCholesky)
+
+      call dgemm('T','N',BatchSizeA,BatchSizeB,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,tmpAB,MaxBatchSizeA)
+
+      do j=1,BatchSizeB
+         if(condOmB(offB+j)) then
+            do i=1,BatchSizeA
+               if(condOmA(offA+i)) then
+                  e2d = e2d + tmpAB(i,j)**2/(OmA(offA+i)+OmB(offB+j))
+               endif
+            enddo
+         endif
+      enddo
+
+      offA = offA + BatchSizeA
+
+   enddo
+   call Rewind_RespBatch(iunitA)
+
+   offB = offB + BatchSizeB
+
+enddo
+
+call Close_RespBatch(iunitA)
+call Close_RespBatch(iunitB)
+
+SAPT%e2disp  = -16d0*e2d
+e2d  = -16d0*e2d*1000d0
+
+call print_en('E2disp(batch)',e2d,.true.)
+
+call gclock('E2dispCholBatch',Tcpu,Twall)
+
+deallocate(condOmB,condOmA)
+deallocate(tmpB,tmpA,tmpAB)
+deallocate(OmB,OmA)
+deallocate(EvecB,EVecA)
+
+end subroutine e2disp_Chol_cpld_batch
+
 subroutine e2disp_Chol_cpld(Flags,A,B,SAPT)
 !
 ! calculate 2nd order dispersion energy
@@ -244,21 +361,18 @@ implicit none
 type(FlagsData)   :: Flags
 type(SystemBlock) :: A, B
 type(SaptData)    :: SAPT
-type(Y01BlockData),allocatable :: Y01BlockA(:),Y01BlockB(:)
 
-integer :: NBas
-integer :: dimOA,dimVA,dimOB,dimVB,nOVA,nOVB
-integer :: NCholesky
-integer :: i,j,pq,rs
-integer :: ip,iq,ir,is
-logical,allocatable          :: condOmA(:),condOmB(:)
-double precision,allocatable :: OmA(:), OmB(:)
+integer :: NBas,NCholesky
+integer :: i,j
+double precision :: e2d
+!
 double precision,allocatable :: tmpA(:,:),tmpB(:,:)
 double precision,allocatable :: tmpAB(:,:)
-double precision :: e2d,fact,tmp
-double precision :: e2du,dea,deb
-double precision :: inv_omega
+double precision,allocatable :: OmA(:), OmB(:)
+logical,allocatable          :: condOmA(:),condOmB(:)
+!
 double precision :: Tcpu,Twall
+!
 double precision,parameter :: BigE = 1.D8
 double precision,parameter :: SmallE = 1.D-3
 
@@ -277,14 +391,6 @@ if(SAPT%IPrint>1) then
    write(LOUT,'(1x,a,t18,a,e15.4)') 'SmallE','=', SmallE
    write(LOUT,'(1x,a,t18,a,e15.4)') 'BigE',  '=', BigE
 endif
-
-! set dimensions
-dimOA = A%num0+A%num1
-dimVA = A%num1+A%num2
-dimOB = B%num0+B%num1
-dimVB = B%num1+B%num2
-nOVA  = dimOA*dimVA
-nOVB  = dimOB*dimVB
 
 NCholesky = SAPT%NCholesky
 
@@ -312,6 +418,7 @@ NCholesky = SAPT%NCholesky
 !call dgemm('N','N',NCholesky,B%NDimX,B%NDimX,1d0,B%DChol,NCholesky,EvecB,B%NDimX,0d0,tmpB,NCholesky)
 !call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,tmpAB,A%NDimX)
 
+! code below uses 1 (NDimX,NDimX) allocation
 ! intermediate A
 allocate(tmpA(NCholesky,A%NDimX),tmpB(NCholesky,B%NDimX))
 allocate(tmpAB(A%NDimX,A%NDimX),OmA(A%NDimX))
@@ -350,18 +457,15 @@ do j=1,B%NDimX
       enddo
    endif
 enddo
-SAPT%e2disp  = -16d0*e2d
-
 e2d  = -16d0*e2d*1000d0
-
-call print_en('E2disp',e2d,.true.)
+call print_en('E2disp(full)',e2d,.true.)
 
 ! write amplitude to a file
 call writeampl(tmpAB,'PROP_AB')
 
-call gclock('E2dispCholCPLD',Tcpu,Twall)
+deallocate(tmpAB,tmpB,tmpA)
+deallocate(OmB,OmA)
 deallocate(condOmB,condOmA)
-deallocate(tmpB,tmpA,tmpAB)
 
 end subroutine e2disp_Chol_cpld
 
