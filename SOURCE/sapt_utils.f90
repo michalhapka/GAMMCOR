@@ -1012,6 +1012,99 @@ end associate
 
 end subroutine convert_to_ABMIN
 
+subroutine WriteRespBatch(NDim,MaxBatchSize,EVal,EVec,fname)
+!
+! write ERPA vec in batches
+!
+implicit none
+
+integer,intent(in) :: NDim,MaxBatchSize
+double precision :: EVal(NDim)
+double precision :: EVec(NDim,NDim)
+character(*) :: fname
+integer :: iunit
+integer :: iloop,nloop,off
+integer :: BatchSize
+
+ nloop = (NDim - 1) / MaxBatchSize + 1
+
+ open(newunit=iunit,file=fname,form='UNFORMATTED',&
+    access='SEQUENTIAL')
+
+ write(iunit) NDim,MaxBatchSize
+ write(iunit) EVal
+
+ off = 0
+ do iloop=1,nloop
+    BatchSize = min(MaxBatchSize,NDim-off)
+    write(iunit) EVec(:,off+1:off+BatchSize)
+    off = off + BatchSize
+ enddo
+
+ close(iunit)
+
+end subroutine WriteRespBatch
+
+subroutine Open_RespBatch(NDim,MaxBatchSize,EVal,iunit,fname)
+!
+! open response file
+! Eval(:) is read as a whole
+!
+implicit none
+
+integer,intent(in)  :: NDim
+integer,intent(out) :: MaxBatchSize
+integer,intent(out) :: iunit
+double precision,intent(out)   :: EVal(NDim)
+character(*),intent(in) :: fname
+
+integer :: NDimFile
+
+ open(newunit=iunit,file=fname,form='UNFORMATTED',&
+    access='SEQUENTIAL',status='OLD')
+
+ read(iunit) NDimFile, MaxBatchSize
+ if (NDimFile .ne. NDim) stop "Error: Open_RespBatch: inconsistent NDim size"
+ read(iunit) EVal
+
+end subroutine Open_RespBatch
+
+subroutine Close_RespBatch(iunit)
+
+implicit none
+
+integer, intent(in) :: iunit
+
+ close(iunit)
+
+end subroutine Close_RespBatch
+
+subroutine Rewind_RespBatch(iunit)
+
+implicit none
+
+integer, intent(in) :: iunit
+
+ rewind(iunit)
+ ! skip two records
+ read(iunit)
+ read(iunit)
+
+end subroutine Rewind_RespBatch
+
+subroutine Get_RespBatch(NDim,BatchSize,EVec,iunit)
+!
+! get Evec(:,Batch)
+!
+implicit none
+
+integer,intent(in)  :: NDim,BatchSize,iunit
+double precision,intent(out) :: EVec(NDim,BatchSize)
+
+ read(iunit) EVec
+
+end subroutine Get_RespBatch
+
 subroutine readresp(EVec,EVal,NDim,fname)
 implicit none
 
@@ -2093,6 +2186,88 @@ enddo
 deallocate(ABKer,batch,work)
 
 end subroutine ModABMin
+
+subroutine sapt_trdipm(RefSt,iskip,nStates,DipAO,UAONO,CICoef,IndN,NDimX,NBasis,cpld)
+!
+! transition dipole moments from (full) ERPA eigenvectors
+! ----------------------------------------------------------------------------
+!
+! UAONO=U(AO,NO)
+!
+! RefSt : reference state
+! iskip : how many negative exc skipped
+!
+implicit none
+integer,intent(in) :: RefSt,iskip,nStates,NDimX,NBasis
+integer,intent(in) :: IndN(2,NDimX)
+logical,intent(in) :: cpld
+double precision,intent(in) :: CICoef(NBasis),DipAO(3,NBasis,NBasis)
+double precision,intent(in) :: UAONO(NBasis,NBasis)
+
+integer :: ist,i,j,ip,iq
+double precision :: fact,TDIP2
+double precision,allocatable :: EigY(:,:),Eig(:)
+double precision,allocatable :: DipNO(:,:,:)
+double precision,allocatable :: EigX0(:,:),EigY0(:,:)
+
+! dipole momoments in NO
+allocate(DipNO(3,NBasis,NBasis))
+call tran2MO(DipAO(1,:,:),UAONO,UAONO,DipNO(1,:,:),NBasis)
+call tran2MO(DipAO(2,:,:),UAONO,UAONO,DipNO(2,:,:),NBasis)
+call tran2MO(DipAO(3,:,:),UAONO,UAONO,DipNO(3,:,:),NBasis)
+
+if (cpld) then
+
+   allocate(EigY(NDimX,NDimX),Eig(NDimX))
+   call readresp(EigY,Eig,NDimX,'PROP_A')
+   !call readresp(EigY,Eig,NDimX,'PROP_A1') ! semicpld
+
+else ! uncoupled 
+
+   ! create Y0, X0 act-act block for matching
+   !call read_SBlock(SBlock,SBlockIV,nblk,xy0file)
+   !nAA=SBlock(1)%n
+   !allocate(Eig(nAA),EigY(nAA,nAA),EigX(nAA,nAA),iaddr(nAA))
+   !Eig = 0
+   !EigY = 0
+   !associate(B => Sblock(1))
+   !   do i=1,B%n
+   !        !print*,i,B%vec(i),B%matY(1:B%n,i)
+   !        iaddr(i)=B%pos(i)
+   !        ip=mon%IndN(1,iaddr(i))
+   !        iq=mon%IndN(2,iaddr(i))
+   !        EigY(i,B%l1:B%l2) = (B%matY(i,1:B%n) - B%matX(i,1:B%n))*(CICoef(ip)-CICoef(iq))
+   !        EigX(i,B%l1:B%l2) = (B%matY(i,1:B%n) + B%matX(i,1:B%n))*(CICoef(ip)+CICoef(iq))
+   !  enddo
+   !  Eig(B%l1:B%l2) = B%vec(1:B%n)
+   !end associate
+
+   ! do it in a smarter way if works...
+   allocate(EigY(NDimX,NDimX),Eig(NDimX))
+   allocate(EigY0(NDimX,NDimX),EigX0(NDimX,NDimX))
+   ! get full EigY from XY0 file
+    call unpack_XY0_full(EigX0,EigY0,Eig,CICoef,IndN,NDimX,NBasis,'XY0_A')
+    do j=1,NDimX
+       do i=1,NDimX
+          ip = IndN(1,i)
+          iq = IndN(2,i)
+          fact = CICoef(ip) - CICoef(iq)
+          EigY(i,j) = fact*(EigY0(i,j)-EigX0(i,j))
+       enddo
+    enddo
+    deallocate(EigY0,EigX0)
+
+endif
+
+do ist=iskip+1,iskip+nStates
+   call TrDipMoms(ist,TDIP2,EigY,CICoef,IndN,DipNO(1,:,:),DipNO(2,:,:),DipNO(3,:,:),NDimX,NBasis)
+   write(6,'(X,I2,"->",I2,"-ERPA vec  Y <X>^2+<Y>^2+<Z>^2",F15.8,/)') RefSt,ISt,TDIP2
+enddo
+
+deallocate(DipNO)
+deallocate(Eig,EigY)
+
+end subroutine sapt_trdipm
 
 subroutine print_en(string,val,nline)
 implicit none
