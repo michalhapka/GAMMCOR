@@ -164,7 +164,7 @@ C
 C
       EndIf
 C
-      If(IFunSR.Eq.0) Then 
+      If(IFunSR.Eq.0) Then
 C
       If(IFlAC0D.Eq.1) Then
 C
@@ -187,7 +187,7 @@ C
       If (IFlCorrMD.Eq.1) Then
 c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
 c      If(ITwoEl.eq.1) then
-c      Call LOC_MU_CBS(CorrMD,AvMU,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
+c      Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
 c      stop
 
       Call LOC_MU_CHOL_v2(BasisSet,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
@@ -290,7 +290,7 @@ C
      $ Title,NBasis,NInte1,NInte2,NDimX,NGOcc,NGem,
      $ IndN,IndX,NDimX)
       EndIf
-c 
+c
 c exact AC
 c      NoEig=1
 c      NDimFull=NBasis*(NBasis-1)/2
@@ -746,7 +746,7 @@ C
       If (IFunSR == 4) Then ! POSTCAS
          If (IFunSR2 == 1) doGGA = .false.
          If (IFunSR2 > 1)  doGGA = .true.
-      Else ! REGULAR 
+      Else ! REGULAR
          If (IFunSR == 1) doGGA = .false.
          If (IFunSR > 1)  doGGA = .true.
       End If
@@ -1133,7 +1133,25 @@ C
 C
       ElseIf(ITWoEl.Eq.1) Then
 C
-      Call AC0CASLR(ECorr,ECASSCF,TwoNO,Occ,URe,XOne,
+      If (IDBBSC.Eq.1) Then
+C
+      Do I=1,NInte1
+      XOne(I)=XOne(I)-VSR(I)
+      EndDo
+      Call AC0CASLR(ECorr,ECASSCF,TwoEl2,Occ,URe,UNOAO,XOne,
+     $ ABPLUS,ABMIN,EigVecR,Eig,
+     $ IndN,IndX,NDimX,NBasis,NDim,NInte1,NInte2,
+     $ TwoNO,OrbGrid,Work,NSymNO,MultpC,NGrid)
+      Write
+     $ (6,'(1X,''CASSCF+ENuc, AC0-CBS, Total'',6X,3F15.8)')
+     $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
+C
+      Return
+C
+      EndIf
+C
+C
+      Call AC0CASLR(ECorr,ECASSCF,TwoNO,Occ,URe,UNOAO,XOne,
      $ ABPLUS,ABMIN,EigVecR,Eig,
      $ IndN,IndX,NDimX,NBasis,NDim,NInte1,NInte2,
      $ TwoEl2,OrbGrid,Work,NSymNO,MultpC,NGrid)
@@ -1474,7 +1492,7 @@ C
       End
 
 *Deck AC0CASLR
-      Subroutine AC0CASLR(ECorr,ETot,TwoNO,Occ,URe,XOne,
+      Subroutine AC0CASLR(ECorr,ETot,TwoNO,Occ,URe,UNOAO,XOne,
      $ ABPLUS,ABMIN,EigY,Eig,
      $ IndN,IndX,NDimX,NBasis,NDim,NInte1,NInte2,
      $ TwoEl2,OrbGrid,SRKerW,NSymNO,MultpC,NGrid)
@@ -1494,7 +1512,8 @@ C
       Integer,Parameter :: Maxlen = 128
 C
       Dimension
-     $ URe(NBasis,NBasis),XOne(NInte1),Occ(NBasis),TwoNO(NInte2),
+     $ URe(NBasis,NBasis),UNOAO(NBasis,NBasis),
+     $ XOne(NInte1),Occ(NBasis),TwoNO(NInte2),
      $ IndAux(NBasis),
      $ ABPLUS(NDimX*NDimX),ABMIN(NDimX*NDimX),
      $ Eig(NDimX),EigY(NDimX*NDimX),IndX(NDim),IndN(2,NDim),
@@ -1512,7 +1531,7 @@ C
      $ AuxI(NInte1),AuxIO(NInte1),IPair(NBasis,NBasis),
      $ EigX(NDimX*NDimX),
      $ IEigAddY(2,NDimX),IEigAddInd(2,NDimX),IndBlock(2,NDimX),
-     $ XMAux(NDimX*NDimX)
+     $ XMAux(NDimX*NDimX),XMuMAT(NBasis,NBasis)
 C
       IPair(1:NBasis,1:NBasis)=0
       Do II=1,NDimX
@@ -2057,6 +2076,99 @@ C
      $" *** COMPUTING ABPLUS(1) AND ABMIN(1) MATRICES ***"
      $ )')
 C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      If (IDBBSC.Eq.1) Then
+C
+C     MODIFY integrals with 1/r TO ACCOUNT FOR CBS CORRECTION
+C
+      Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
+c      goto 999
+C
+C     COMPUTE 1st-ORDER ONE-ELECTRON HAMILTONIAN (USING 1/r INTEGRALS)
+C
+C     SET THE FLAG FOR AB1_CAS
+C
+      IHNO1=1
+C
+      IJ=0
+      Do I=1,NBasis
+      Do J=1,I
+      IJ=IJ+1
+C
+      If(IGem(I).Eq.IGem(J)) Then
+C
+      Aux=Zero
+C
+      Do IT=1,NBasis
+      If(IGem(IT).Ne.IGem(I))
+     $ Aux=Aux+Occ(IT)*
+     $ (Two*TwoNO(NAddr3(IT,IT,I,J))-TwoNO(NAddr3(IT,I,IT,J)))
+      EndDo
+C
+      XOne(IJ)=-Aux
+C
+      EndIf
+C
+      EndDo
+      EndDo
+C
+C     COMPUTE SR INTEGRALS
+C
+      TwoEl2=TwoNO-TwoEl2
+C
+C     ADD MODIFIED SR INTEGRALS TO FULL-COULOMB INTEGRALS
+C
+      NAddr=0
+C
+      IPR=0
+      Do IP=1,NBasis
+      Do IR=1,IP
+
+      IPR=IPR+1
+C
+      IQS=0
+      Do IQ=1,NBasis
+      Do IS=1,IQ
+
+      IQS=IQS+1
+C
+      If(IPR.Ge.IQS) Then
+C
+      NAddr=NAddr+1
+      AuxSR=Zero
+      Do I=1,NBasis
+      AuxSR=AuxSR
+     $ +TwoEl2(NAddr3(I,IR,IQ,IS))*XMuMAT(IP,I)
+     $ +TwoEl2(NAddr3(IP,I,IQ,IS))*XMuMAT(IR,I)
+     $ +TwoEl2(NAddr3(IP,IR,I,IS))*XMuMAT(IQ,I)
+     $ +TwoEl2(NAddr3(IP,IR,IQ,I))*XMuMAT(IS,I)
+      EndDo
+C
+      AuxSR=AuxSR/Four
+      TwoNO(NAddr)=TwoNO(NAddr)+AuxSR
+c comment out the line above and uncomment the lines below to
+c include in-active contribution to the CBS correction
+c which will be printed as "EIntra"; in practice it is always very small
+c      If(IGFact(NAddr3(IP,IR,IQ,IS)).Eq.0) Then
+c      TwoNO(NAddr)=TwoNO(NAddr)+AuxSR
+c      Else
+c      TwoNO(NAddr)=AuxSR
+c      EndIf
+C
+      EndIf
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+c uncomment to include in-active contribution to the CBS correction (see above)
+c      IGFact=0
+c comment out to include in-active contribution to the CBS correction (see above)
+      IHNO1=0
+C
+      EndIf
+  999 continue
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C
       Call AB1_CAS(ABPLUS,ABMIN,URe,Occ,XOne,TwoNO,
      $ RDM2Act,NRDM2Act,IGFact,C,Ind1,Ind2,
      $ IndBlock,NoEig,NDimX,NBasis,NInte1,NInte2)
@@ -2129,7 +2241,7 @@ C
 C
       EndDo
       EndDo
-C 
+C
 C     2nd: ADD KERNEL IN BATCHES:
 C
       call gclock('START',Tcpu,Twall)
@@ -2323,15 +2435,11 @@ C
       SumY=ABPLUS(I+(J-1)*NoEig)
       Aux=(C(IS)+C(IQ))*(C(IP)+C(IR))*SumY
 C
-c herer!!!
       EAll=EAll+Aux*TwoNO(NAddr3(IP,IR,IQ,IS))
-c      EAll=EAll+Aux*TwoEl2(NAddr3(IP,IR,IQ,IS))
 C
       If(IGem(IP).Eq.IGem(IR).And.IGem(IQ).Eq.IGem(IS).
      $ And.IGem(IP).Eq.IGem(IQ))
-c herer!!!
      $ EIntra=EIntra+Aux*TwoNO(NAddr3(IP,IR,IQ,IS))
-c     $ EIntra=EIntra+Aux*TwoEl2(NAddr3(IP,IR,IQ,IS))
 C
 C     endinf of If(IP.Gt.IR.And.IQ.Gt.IS)
       EndIf
@@ -2339,7 +2447,7 @@ C
       EndDo
       EndDo
 C
-C      Print*, EAll,EIntra
+      Print*, "EAll EIntra", EAll,EIntra
 C
       ECorr=EAll-EIntra
 C
@@ -2992,7 +3100,7 @@ C
       call gclock('START',Tcpu,Twall)
 C
 C     debug printlevel
-      IIPRINT=5 
+      IIPRINT=5
 C
 C     set constants
 C
@@ -3672,7 +3780,7 @@ C
       Do I=1,NGrid
 C
       XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
-C      
+C
       XMu=XMuLocCorr(I)
 
       AvMUCorr=AvMUCorr+XMu*RhoGrid(I)*WGrid(I)
@@ -3719,10 +3827,13 @@ C
 
 C     incore version
 *Deck LOC_MU_CBS
-      Subroutine LOC_MU_CBS(CorrMD,AvMU,URe,UNOAO,Occ,TwoEl,
+      Subroutine LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoEl,
      $ NBasis,NInte2)
 C
-C     RETURNS A "BASIS-SET ERROR CORRECTION" WITH SR-PBE ONTOP CORRELATION from Giner et al. JCP 152, 174104 (2020)
+C     COMPUTES A "BASIS-SET ERROR CORRECTION" WITH SR-PBE ONTOP CORRELATION from Giner et al. JCP 152, 174104 (2020)
+C     RETURNS XMuMAT USED TO COMPUTE CBS CORRECTION BY MODIFICATION OF H' IN AC0
+C
+      use read_external
 C
       Implicit Real*8 (A-H,O-Z)
 C
@@ -3731,15 +3842,23 @@ C
 C
       Include 'commons.inc'
 C
+      Dimension NSymNO(NBasis),MultpC(15,15),NumOSym(15),IndInt(NBasis)
+C
       Real*8, Allocatable :: RDM2Act(:),FPsiB(:,:,:,:),
      $ OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),
      $ Zk(:),RhoGrid(:),Sigma(:),WGrid(:),OnTop(:),XMuLoc(:)
 C
       Dimension TwoEl(NInte2),URe(NBasis,NBasis),Occ(NBasis),
-     $ Ind1(NBasis),Ind2(NBasis),UNOAO(NBasis,NBasis)
+     $ Ind1(NBasis),Ind2(NBasis),UNOAO(NBasis,NBasis),
+     $ XMuMAT(NBasis,NBasis)
 C
       Dimension IAct(NBasis)
-
+C
+c      If(IFlCore.Eq.0) Then
+c      Do I=1,NInAcCAS
+c      Occ(I)=Zero
+c      EndDo
+c      EndIf
 C
       Call molprogrid0(NGrid,NBasis)
       Write(6,'(/,1X,"The number of Grid Points = ",I8)')
@@ -3754,6 +3873,43 @@ C
       Allocate(RhoGrid(NGrid))
       Allocate(Sigma(NGrid))
       Allocate(Zk(NGrid))
+C
+      Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
+      MxSym=NSym
+C
+      NSymNO(1:NBasis)=0
+      IStart=0
+      Do I=1,MxSym
+      Do J=IStart+1,IStart+NumOSym(I)
+C
+      Do IOrb=1,NBasis
+      If(Abs(UNOAO(IOrb,J)).Gt.1.D-1) NSymNO(IOrb)=I
+      EndDo
+C
+      EndDo
+      IStart=IStart+NumOSym(I)
+      EndDo
+C
+C     checking
+      Do I=1,MxSym
+      II=0
+      Do IOrb=1,NBasis
+      If(NSymNO(IOrb).Eq.I) II=II+1
+      EndDo
+      If(II.Ne.NumOSym(I))
+     $ Write(*,*) 'Symmetry of NO cannot be established!'
+      EndDo
+C
+      If(MxSym.Eq.1) Then
+      MultpC(1,1)=1
+      Else
+      Do I=1,MxSym
+      Do J=1,I
+      MultpC(I,J)=IEOR(I-1,J-1)+1
+      MultpC(J,I)=MultpC(I,J)
+      EndDo
+      EndDo
+      EndIf
 C
 C     load orbgrid, gradients, and wgrid
 C
@@ -3795,40 +3951,6 @@ C
       If(Occ(I).Ne.One.And.Occ(I).Ne.Zero) IAct(I)=1
       EndDo
 C
-CC     aaaaa!!!!
-C      block
-C      double precision,allocatable :: WorkD(:,:)
-C      double precision :: tmp
-CC
-CC     LOAD CHOLESKY VECTORS
-CC
-C      open(newunit=iunit,file='cholvecs',form='unformatted')
-C      read(iunit) NCholesky
-C      Allocate(WorkD(NCholesky,NBasis**2))
-C      read(iunit) WorkD
-C      close(iunit)
-C      print*,'NCholesky',NCholesky,norm2(WorkD)
-C
-C      print*, 'TwoEl -1',norm2(TwoEl)
-C      TwoEl = 0d0
-C      do ip=1,NBasis
-C      do iq=1,ip
-C      ipq = ip+(iq-1)*NBasis
-C      do ir=1,NBasis
-C      do is=1,ir
-C      irs = ir+(is-1)*NBasis
-C      tmp = 0d0
-C      do ik=1,NCholesky
-C         tmp = tmp + WorkD(ik,ipq)*WorkD(ik,irs)
-C      enddo
-C      TwoEl(NAddr3(IP,IQ,IR,IS)) = tmp
-C      enddo
-C      enddo
-C      enddo
-C      enddo
-C      print*, 'TwoEl -2',norm2(TwoEl)
-C      end block
-C
       Allocate (FPsiB(NBasis,NBasis,NOccup,NOccup))
       FPsiB=Zero
 C
@@ -3850,8 +3972,6 @@ C
       EndDo
       EndDo
       EndDo
-C
-      Print*, 'FPsiB =',norm2(FPsiB)
 C
       Do I=1,NGrid
 C
@@ -3893,10 +4013,31 @@ C
 C
       EndIf
 C
-      EndDo     
+      EndDo
+      Print*, 'OnTop', norm2(OnTop)
+      print*, 'XMuLoc',norm2(XMuLoc)
 C
-      Print*, 'OnTop  =', norm2(OnTop)
-      Print*, 'XMuLoc =', norm2(XMuLoc)
+C     COMPUTE XMuMAT MATRIX in NO
+C
+      Do IP=1,NBasis
+      Do IQ=1,IP
+      XMuMAT(IP,IQ)=Zero
+C
+      ISym=MultpC(NSymNO(IP),NSymNO(IQ))
+      If(ISym.Eq.1) Then
+C
+      Do I=1,NGrid
+      XMuMAT(IP,IQ)=XMuMAT(IP,IQ)
+     $ +OrbGrid(I,IP)*OrbGrid(I,IQ)*WGrid(I)*Exp(-XMuLoc(I))
+      EndDo
+C
+      EndIf
+      XMuMAT(IQ,IP)=XMuMAT(IP,IQ)
+C
+      EndDo
+      EndDo
+C
+C     COMPUTE CBS CORRECTION
 C
       Call PBECor(RhoGrid,Sigma,Zk,NGrid)
 C
@@ -3904,8 +4045,8 @@ C
       Const=Three/Two/SPi/(One-SQRT(Two))
 C
       AvMU=Zero
-      CorrMD=Zero
       XEl=Zero
+      CorrMD=Zero
       Do I=1,NGrid
 C
       XMu=XMuLoc(I)
@@ -3915,7 +4056,7 @@ C
 C
       Bet=Zero
       OnTopC=Zero
-      If(XMuLoc(I).Gt.1.D-8) OnTopC=OnTop(I)/(One+Two/SPi/XMu)
+      If(XMu.Gt.1.D-8) OnTopC=OnTop(I)/(One+Two/SPi/XMu)
       If(OnTopC.Ne.Zero) Then
       Bet=Const*Zk(I)/OnTopC
       C=1.0
@@ -3925,9 +4066,16 @@ C
       EndDo
 C
       AvMU=AvMU/XEl
+      Write(6,'(/," XEl",F15.2/)') XEl
 C
-      Write(6,'(/,
-     $" CBS correction, average Mu",
+c      If(IFlCore.Eq.0) Then
+c      Do I=1,NInAcCAS
+c      Occ(I)=One
+c      EndDo
+c      Write(6,'(/,1X,"*** CBS CORRECTION EXCLUDING CORE ORBITALS ***")')
+c      EndIf
+C
+      Write(6,'(/," CBS correction, average Mu",
      $ F15.8,F15.2/)') CorrMD,AvMU
 C
       Return
@@ -4304,7 +4452,7 @@ C     RETURNS A SR-PBE ONTOP CORRELATION DEFINED IN Eq.(25)-(29), Toulouse JCP 1
 C
       Implicit Real*8 (A-H,O-Z)
 C
-      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0, 
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
      $ Four=4.D0)
 C
       Include 'commons.inc'
@@ -4372,7 +4520,7 @@ C
       EndDo
       EndDo
       EndDo
-C     
+C
       EndDo
 C
       Call PBECor(RhoGrid,Sigma,Zk,NGrid)
@@ -4380,7 +4528,7 @@ C
       SPi=SQRT(3.141592653589793)
       Const=Three/Two/SPi/(One-SQRT(Two))
 C
-      PBEMD=Zero      
+      PBEMD=Zero
       Do I=1,NGrid
 C
       Bet=Zero
@@ -4398,7 +4546,7 @@ C
       Subroutine PBE_ONTOP_C_MD(PBEmodMD,Cfac,URe,Occ,
      $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
 C
-C     RETURNS A SR-PBE modified ONTOP CORRELATION 
+C     RETURNS A SR-PBE modified ONTOP CORRELATION
 C     DEFINED IN Eq.(25)-(29), Toulouse JCP 150, 084103 (2019)
 C     Difference:
 C     Eq. (26): e_{c,md} = e_c^PBE / (C + beta*mu^3)
@@ -4407,7 +4555,7 @@ C
 C
       Implicit Real*8 (A-H,O-Z)
 C
-      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0, 
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
      $ Four=4.D0)
 C
       Include 'commons.inc'
@@ -4478,7 +4626,7 @@ C
       EndDo
       EndDo
       EndDo
-C     
+C
       EndDo
 C
       Call PBECor(RhoGrid,Sigma,Zk,NGrid)
@@ -4486,7 +4634,7 @@ C
       SPi=SQRT(3.141592653589793)
       Const=Three/Two/SPi/(One-SQRT(Two))
 C
-      PBEmodMD=Zero      
+      PBEmodMD=Zero
       Do I=1,NGrid
 C
       Bet=Zero
@@ -4517,7 +4665,7 @@ C
       Double Precision,Intent(in)  :: ENuc
       Double Precision,Intent(in)  :: Occ(NBasis),XOne(NInte1)
       Double Precision,Intent(out) :: Ene
-C      
+C
       Integer :: I,J,K,L,II
       Integer :: IFunSR_save
       Integer :: NRDM2Act

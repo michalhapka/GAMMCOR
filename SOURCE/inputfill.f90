@@ -1067,10 +1067,10 @@ end associate
          write(LOUT, '(1x,a,i2)') "NO. OF SYM. EQUIV. ATOMS: ", System%UCen
       endif
       if(System%DeclareThrSelAct) then
-         write(LOUT, '(1x,a,e13.6)') "THRESHOLD SELECT ACTIVE : ", System%ThrSelAct
+         write(LOUT, '(1x,a,e13.6)') "THRESHOLD SELECT ACTIVE  : ", System%ThrSelAct
       endif
       if(System%DeclareThrQVirt) then
-         write(LOUT, '(1x,a,e13.6)') "THRESHOLD QUASI-VIRTUAL : ", System%ThrQVirt
+         write(LOUT, '(1x,a,e13.6)') "THRESHOLD QUASI-VIRTUAL  : ", System%ThrQVirt
       endif
       if(System%DeclareThrQInact) then
          write(LOUT, '(1x,a,e13.6)') "THRESHOLD QUASI-INACTIVE : ", System%ThrQInact
