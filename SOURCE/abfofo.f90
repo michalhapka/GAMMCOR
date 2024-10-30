@@ -185,16 +185,17 @@ else
 endif
 
 if(ICholesky==1) then
-   if (IDBBSC==0) then
-      call JK_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
-                        RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
-                        INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,&
-                        ACAlpha,switch,ETot)
-   elseif (IDBBSC==2) then
+   if (IDBBSC==2) then ! CBS[H] requires addition of SR integrals in Hessian
       call JK_SR_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
                           RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
                           INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,&
                           ACAlpha,switch,ETot)
+
+   else
+      call JK_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
+                        RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
+                        INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,&
+                        ACAlpha,switch,ETot)
    endif
 else
    call JK_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&

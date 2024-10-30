@@ -150,7 +150,7 @@ C
       Prefac = SQRT(3.1415)/Two ! SPi/Two
 C
       Write(6,'(/,1X,"************** ",
-     $ " DGEMM LOC_MU_CBS Correlation Energy with the Local Mu ")')
+     $ " CBS Correction with local Mu ")')
 C
       If (IMOLPRO == 1) Then
          Call molprogrid0(NGrid,NBasis)

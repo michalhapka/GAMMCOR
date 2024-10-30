@@ -498,10 +498,10 @@ if(IFlFCorr==1) then
   stop
 endif
 
-if(IDBBSC.Ne.2) then
-  write(lout,*) 'Error: DBBSC /= 2 in AC0CAS_FOFO!'
-  stop
-endif
+!if(IDBBSC.Ne.2) then
+!  write(lout,*) 'Error: DBBSC /= 2 in AC0CAS_FOFO!'
+!  stop
+!endif
 
 ! set dimensions
 NOccup = NAct + INActive
