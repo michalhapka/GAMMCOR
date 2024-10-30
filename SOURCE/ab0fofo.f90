@@ -438,7 +438,7 @@ end subroutine ACABMAT0_FOFO
 
 subroutine AC0CAS_FOFO(ECorr,ETot,Occ,URe,XOne,ABPLUS,ABMIN, &
                        IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
-                       NoSt,IntJFile,IntKFile,ICholesky,IFlFCorr)
+                       NoSt,IntJFile,IntKFile,ICholesky,IDBBSC,IFlFCorr)
 !
 !     A ROUTINE FOR COMPUTING AC0 INTEGRAND
 !     (FOFO VERSION, USED IN AC0-CAS)
@@ -447,6 +447,7 @@ subroutine AC0CAS_FOFO(ECorr,ETot,Occ,URe,XOne,ABPLUS,ABMIN, &
 !       (DOES NOT DAMP TO FILE)
 !     - COMPUTES THE AC0 ENERGY
 !     - IFlFCorr =1 (for SR-AC0) : dumps rdmcorr matrix for fAC0
+!     - IDBBSC = 2 (for CBS) : computes AC0-CBS[H] CBS correction
 !
 !
 !use timing
@@ -456,7 +457,7 @@ implicit none
 integer,intent(in)           :: NAct,INActive,NDimX,NBasis,NDim,NInte1,NoSt
 integer,intent(in)           :: IndN(2,NDim),IndX(NDim),IGemIN(NBasis)
 integer,intent(in)           :: ICholesky
-integer,intent(in)           :: IFlFCorr
+integer,intent(in)           :: IDBBSC,IFlFCorr
 double precision,intent(in)  :: URe(NBasis,NBasis),Occ(NBasis),XOne(NInte1)
 character(*)                 :: IntJFile,IntKFile
 double precision,intent(out) :: ETot,ECorr
@@ -494,6 +495,11 @@ type(EblockData) :: EblockIV
 
 if(IFlFCorr==1) then
   write(lout,*) 'Error! Disabled CorrFun=fAC0 in AC0CAS_FOFO!'
+  stop
+endif
+
+if(IDBBSC.Ne.2) then
+  write(lout,*) 'Error: DBBSC /= 2 in AC0CAS_FOFO!'
   stop
 endif
 
@@ -594,7 +600,7 @@ end associate
 ! AB(1) PART
 call AB_CAS_FOFO(ABPLUS,ABMIN,val,URe,Occ,XOne,&
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
+              NInte1,IntJFile,IntKFile,ICholesky,IDBBSC,1d0,.true.)
 
 !call gclock('AB(1)',Tcpu,Twall)
 
@@ -1006,7 +1012,7 @@ if(IFlag0==0) then
    ! AB(1) PART
    call AB_CAS_FOFO(ABPLUS,ABMIN,EnDummy,URe,Occ,XOne,&
                     IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-                    NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
+                    NInte1,IntJFile,IntKFile,ICholesky,0,1d0,.true.)
 
    !call gclock('ABPM(1)',Tcpu,Twall)
 
@@ -1318,7 +1324,7 @@ if(IFlag0==1) return
 ! AB(1) PART
 call AB_CAS_FOFO(ABPLUS,ABMIN,EnDummy,URe,Occ,XOne,&
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
+              NInte1,IntJFile,IntKFile,ICholesky,0,1d0,.true.)
 !print*, 'AB1-MY',norm2(ABPLUS),norm2(ABMIN)
 
 call gclock('AB_CAS_FOFO',Tcpu,Twall)
@@ -2000,7 +2006,7 @@ call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
    ! AB(1) PART
    call AB_CAS_FOFO(ABPLUS,ABMIN,EnDummy,URe,Occ,XOne,&
                  IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-                 NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
+                 NInte1,IntJFile,IntKFile,ICholesky,0,1d0,.true.)
 
   call gclock('AB(1)',Tcpu,Twall)
 !  ! B = A.X
@@ -2566,7 +2572,7 @@ call dump_Eblock(Eblock,EblockIV,Occ,IndN,nblk,NBasis,NDimX,xy0file)
 ! AB(1) PART
 call AB_CAS_FOFO(ABPLUS,ABMIN,EnDummy,URe,Occ,XOne,&
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
+              NInte1,IntJFile,IntKFile,ICholesky,0,1d0,.true.)
 
 call gclock('AB(1)',Tcpu,Twall)
 !  ! B = A.X
@@ -3045,7 +3051,7 @@ character(:),allocatable :: twojfile,twokfile
 
     call AB_CAS_FOFO(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne, &
                    IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDimX,&
-                   NInte1,twojfile,twokfile,ICholesky,ACAlpha,.false.)
+                   NInte1,twojfile,twokfile,ICholesky,0,ACAlpha,.false.)
     EGOne(1)=ECASSCF
 
  elseif(ICASSCF==0) then

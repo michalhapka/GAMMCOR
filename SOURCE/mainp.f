@@ -190,6 +190,7 @@ C
       IFlFCorr = Flags%IFlFCorr
 C
 C     IDBBSC   = 1 : compute density-based basis set correction (Giner et al., JCP 2018)
+C     IDBBSC   = 2 : compute density-based basis set correction (K. Pernal et al., XXXX )
 C
       IDBBSC = Flags%IDBBSC
 C
@@ -339,6 +340,8 @@ c      If(IFunSR.Ne.0.And.IFunSR.Ne.3.And.IFunSR.Ne.5) Then
       If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4) Then
 C      Call GetAlpha(Title)
       Call readalphamolpro(Alpha)
+      ElseIf(IDBBSC.Eq.2) Then
+      Alpha=1.D0
       Else
       Alpha=0.D0
       EndIf

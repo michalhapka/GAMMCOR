@@ -11,7 +11,7 @@ contains
 
 subroutine AB_CAS_FOFO(ABPLUS,ABMIN,ETot,URe,Occ,XOne, &
      IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
-     IntJFile,IntKFile,ICholesky,ACAlpha,AB1)
+     IntJFile,IntKFile,ICholesky,IDBBSC,ACAlpha,AB1)
 !
 ! COMPUTE THE A+B AND A-B MATRICES FOR 2-RDM READ FROM A rdm2.dat FILE
 !
@@ -19,12 +19,15 @@ subroutine AB_CAS_FOFO(ABPLUS,ABMIN,ETot,URe,Occ,XOne, &
 ! THE FOLLOWING SYMMETRY IS ASSUMED
 ! RDM2(ij,kl) = RDM2(kl,ij)
 ! ONLY ELEMENTS ij >= kl ARE STORED BUT ONLY FOR THE ACTIVE ELEMENTS
+!
 ! COULOMB INTEGRALS ARE READ FROM IntJFile IN (FF|OO) FORMAT
 ! EXCHANGE INTEGRALS ARE READ FROM IntKFile IN (FO|FO) FORMAT
+!
  implicit none
 
 integer,intent(in) :: NAct,INActive,NDimX,NBasis,NDim,NInte1
 integer,intent(in) :: ICholesky
+integer,intent(in) :: IDBBSC
 character(*) :: IntJFile,IntKFile
 double precision,intent(out) :: ABPLUS(NDim,NDim),ABMIN(NDim,NDim)
 double precision,intent(out) :: ETot
@@ -182,9 +185,17 @@ else
 endif
 
 if(ICholesky==1) then
-   call JK_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
-                     RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
-                     INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,ACAlpha,switch,ETot)
+   if (IDBBSC==0) then
+      call JK_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
+                        RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
+                        INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,&
+                        ACAlpha,switch,ETot)
+   elseif (IDBBSC==2) then
+      call JK_SR_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
+                          RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
+                          INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,&
+                          ACAlpha,switch,ETot)
+   endif
 else
    call JK_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
                 RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
@@ -805,7 +816,7 @@ integer,intent(in)           :: ICholesky
    ! AB(1) PART
    call AB_CAS_FOFO(ABPLUS,ABMIN,val,URe,Occ,XOne,&
                  IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-                 NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
+                 NInte1,IntJFile,IntKFile,ICholesky,0,1d0,.true.)
 
    ! a separate procedure for ints OTF
    if (ICholesky==1) stop "MP2RDM: ICholesky not ready!"

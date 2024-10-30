@@ -32,7 +32,8 @@ C     LOCAL ARRAYS
 C
       Dimension XGrid(100), WGrid(100)
       Integer Points
-C     HAP
+      real*8 :: XMuMat(NBasis,NBasis)
+C
       Double precision,Allocatable :: WorkVec(:),WorkEig(:),MYAP(:) 
 C
       real*8, dimension(:), allocatable :: ABPLUS_tmp, ABMIN_tmp
@@ -71,7 +72,7 @@ C
 C
       Call AC0CAS_FOFO(ECorr,ETot,Occ,URe,XOne,ABPLUS,ABMIN,
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDim,NInte1,
-     $ NoSt,'FFOO','FOFO',ICholesky,IFlFCorr)
+     $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
 C
 C     now Y01CAS_FOFO is used in SAPT only
 C      Call Y01CAS_FOFO(Occ,URe,XOne,ABPLUS,ABMIN,

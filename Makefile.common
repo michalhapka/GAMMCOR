@@ -26,7 +26,7 @@ OBJ = $(O)mainp.o $(O)initia.o $(O)dmscf.o $(O)misc.o $(O)optocc.o \
        $(O)timing.o \
        $(O)memory.o \
        $(O)srlrdynamic.o $(O)erpa.o $(O)interpa.o  $(O)exact2el.o $(O)optapsg.o $(O)newton.o $(O)acfd.o $(O)accas.o \
-       $(O)caspidft.o $(O)ac_exact_2el.o $(O)vv10.o \
+       $(O)caspidft.o $(O)ac_exact_2el.o $(O)vv10.o $(O)muerf.o \
       $(O)tran_Chol.o $(O)CholeskyOTF.o \
       $(O)iter_stats.o $(O)C_integrator.o $(O)iter_algorithm.o $(O)iter_algorithm_diis.o $(O)iter_algorithm_damping.o \
       $(O)lambda_calculator.o $(O)lambda_calculator_diag.o $(O)lambda_calculator_block.o $(O)lambda_calculator_projector.o \
@@ -52,6 +52,7 @@ $(O)accas.o            : $(S)commons.inc $(O)priunit.o $(O)timing.o $(O)rdwrext.
 $(O)acfd.o             : $(S)commons.inc $(O)abmats.o $(O)abfofo.o  $(O)ab0fofo.o $(O)rdwrext.o
 $(O)ac_iter.o          : $(S)commons.inc $(O)abmats.o $(O)abfofo.o
 $(O)interpa.o          : $(S)commons.inc $(O)abmats.o $(O)abfofo.o $(O)ab0fofo.o
+$(O)muerf.o            : $(S)commons.inc $(O)ab0fofo.o $(O)timing.o
 $(O)dftgrid.o          : $(S)commons.inc $(O)abmats.o
 $(O)caspidft.o         : $(S)commons.inc $(O)rdwrext.o
 $(O)ac_exact_2el.o     : $(S)commons.inc

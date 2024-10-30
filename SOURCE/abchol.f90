@@ -683,6 +683,110 @@ deallocate(work2,work1,ints)
 
 end subroutine JK_Chol_loop
 
+subroutine JK_SR_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
+                        INActive,NOccup,NDim,NDimX,NBasis,NInte1,IntJFile,IntKFile,ACAlpha,AB,ETot)
+
+implicit none
+
+integer,intent(in) :: NDim,NDimX,NBasis,NInte1
+integer,intent(in) :: INActive,NOccup,AB
+integer,intent(in) :: IGem(NBasis),AuxInd(3,3),pos(NBasis,NBasis)
+double precision,intent(inout) :: ABPLUS(NDimX,NDimX),ABMIN(NDimX,NDimX)
+double precision,intent(inout) :: HNO(NBasis,NBasis),AuxI(NBasis,NBasis),AuxIO(NBasis,NBasis),WMAT(NBasis,NBasis)
+double precision,intent(in) :: ACAlpha
+double precision,intent(in) :: AuxCoeff(3,3,3,3),Occ(NBasis),RDM2val(NOccup,NOccup,NOccup,NOccup)
+character(*) :: IntJFile,IntKFile
+double precision,intent(inout),optional :: ETot
+
+integer :: i,j,k,l,kk,ll,kl
+integer :: ip,iq,ir,is,iu,ipq,irs
+integer :: iunit
+integer :: iloop,nloop,off,dimFO,dimOO,dimFF
+integer :: mloop
+integer :: iBatch
+integer :: BatchSize,MaxBatchSize = 120
+integer :: NCholesky,NCholErf
+double precision :: val
+double precision :: AuxVal,HNOCoef
+double precision,allocatable :: work1(:,:),work2(:,:)
+double precision,allocatable :: FF(:,:),FFErf(:,:)
+double precision,allocatable :: FFTr(:,:),FFErfTr(:,:)
+double precision,allocatable :: ints(:,:)
+!
+! compute Hessian matrices with modified integrals : 
+! a) calculate modified SR integrals: <p*q|rs>_SR = \sum_t <p|mu(r)|t> <tq|rs>^SR
+! b) symmetrize : g^SR = 1/4 * ( <p*q|rs>_SR + <pq*|rs>_SR + <pq|r*s>_SR + <pq|rs*>_SR )
+! c) use : <pq|rs>_mod =  <pq|rs>^full-range + g^SR
+!
+
+if(AB==1) then
+   HNOCoef = -1
+elseif(AB==0) then
+   HNOCoef = 1 - ACAlpha
+elseif(AB==2) then
+   HNOCoef = 1
+endif
+
+! read cholesky (k|r|FF) vecs
+open(newunit=iunit,file='cholvecs',form='unformatted')
+read(iunit) NCholesky
+allocate(FF(NCholesky,NBasis**2))
+read(iunit) FF
+close(iunit)
+
+! read transformed cholesky (k|r|FF) vecs
+open(newunit=iunit,file='chol1vFR',form='unformatted')
+read(iunit) NCholesky
+allocate(FFTr(NCholesky,NBasis**2))
+read(iunit) FFTr
+close(iunit)
+
+! read LR cholesky (k|erf|FF) vecs
+open(newunit=iunit,file='cholvErf',form='unformatted')
+read(iunit) NCholErf
+allocate(FFErf(NCholErf,NBasis**2))
+read(iunit) FFErf
+close(iunit)
+
+! read transformed LR cholesky (k|erf|FF) vecs
+open(newunit=iunit,file='chol1vLR',form='unformatted')
+read(iunit) NCholErf
+allocate(FFErfTr(NCholErf,NBasis**2))
+read(iunit) FFErfTr
+close(iunit)
+
+! set number of loops over integrals
+dimFO = NOccup*NBasis
+nloop = (dimFO - 1) / MaxBatchSize + 1
+
+allocate(work1(dimFO,MaxBatchSize),work2(dimFO,MaxBatchSize))
+allocate(ints(NBasis,NBasis))
+
+off = 0
+k   = 0
+l   = 1
+! exchange loop (FO|FO)
+do iloop=1,nloop
+
+   ! batch size for each iloop; last one is smaller
+   BatchSize = min(MaxBatchSize,dimFO-off)
+
+   ! full-range (FO|BatchSize) batch from CholVecs
+   call dgemm('T','N',dimFO,BatchSize,NCholesky,1d0,FF,NCholesky, &
+              FF(:,off+1:BatchSize),NCholesky,0d0,work1,dimFO)
+   ! long-range (FO|BatchSize) batch from CholErf Vecs
+   call dgemm('T','N',dimFO,BatchSize,NCholErf,1d0,FFErf,NCholErf, &
+              FFErf(:,off+1:BatchSize),NCholErf,0d0,work2,dimFO)
+
+enddo
+
+deallocate(FF,FFErf)
+deallocate(FFTr,FFErfTr)
+
+stop "JK_SR_Chol_loop"
+
+end subroutine JK_SR_Chol_loop
+
 subroutine Chol_AC0ECorr(ECorr,ABPLUS,IndN,IndX,Occ,INActive,NOccup,NDimX,NBasis,CholVecFile)
 implicit none
 

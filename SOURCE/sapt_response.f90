@@ -285,7 +285,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
   case(TWOMO_FOFO)
      call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                  Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-                 NInte1,twojfile,twokfile,Flags%ICholesky,ACAlpha,.false.)
+                 NInte1,twojfile,twokfile,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
   case(TWOMO_FFFF)
 
      call AB_CAS_mithap(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
@@ -331,7 +331,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
 !               ABMin0(Mon%NDimX,Mon%NDimX))
 !      call AB_CAS_FOFO(ABPlus0,ABMin0,ECASSCF,URe,Mon%Occ,XOne, &
 !                  Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-!                  NInte1,twojfile,twokfile,Flags%ICholesky,1d-9,.false.)
+!                  NInte1,twojfile,twokfile,Flags%ICholesky,0,1d-9,.false.)
 !      ! dump matrices for iterative C-ERPA
 !      open(newunit=iunit,file=testfile,form='unformatted')
 !      write(iunit) ABPlus0
@@ -369,7 +369,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
   !allocate(Mon%PP(Mon%NDimX**2))
   !call AB_CAS_FOFO(ABPlus,Mon%PP,ECASSCF,URe,Mon%Occ,XOne, &
   !              Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-  !              NInte1,twojfile,twokfile,Flags%ICholesky,1d0,.true.)
+  !              NInte1,twojfile,twokfile,Flags%ICholesky,Flags%IDBBSC,1d0,.true.)
 
   !print*, 'Mon%PP',norm2(Mon%PP)
 
@@ -691,7 +691,7 @@ select case(Mon%TwoMoInt)
 case(TWOMO_FOFO)
    call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-               NInte1,twojfile,twokfile,Flags%ICholesky,ACAlpha,.false.)
+               NInte1,twojfile,twokfile,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
 case(TWOMO_FFFF)
 
    call AB_CAS_mithap(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
@@ -823,7 +823,7 @@ case(TWOMO_FOFO)
 
    call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-               NInte1,FNam%twojfile,FNam%twokfile,ICholesky,ACAlpha,.false.)
+               NInte1,FNam%twojfile,FNam%twokfile,ICholesky,0,ACAlpha,.false.)
 case(TWOMO_FFFF)
 
    call AB_CAS_mithap(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
@@ -1557,7 +1557,7 @@ case(TWOMO_FFFF)
 case(TWOMO_FOFO)
    call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-               NInte1,twojerf,twokerf,Flags%ICholesky,ACAlpha,.false.)
+               NInte1,twojerf,twokerf,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
 !else
 ! HERE:: ADD SEPARATE PROCEDURE FOR Kohn-Sham!
 !endif
@@ -2072,7 +2072,7 @@ ECASSCF = 0d0
 print*, 'ACAlpha in Hessians = ', ACAlpha
 call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBasis,Mon%NDimX,&
-               NInte1,twojerf,twokerf,Flags%ICholesky,ACAlpha,.false.)
+               NInte1,twojerf,twokerf,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
 !endif
 
 write(LOUT,'(/,1x,a,f16.8,a,1x,f16.8)') 'ABPlus',norm2(ABPlus),'ABMin',norm2(ABMin)

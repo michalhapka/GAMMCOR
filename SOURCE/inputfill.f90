@@ -479,12 +479,10 @@ subroutine read_block_calculation(CalcParams, line)
                CalcParams%FunCorr = 1
            endif
 
-      case ("CBS","DBBSC") ! AC0 (Giner's CBS correction)
-           if (uppercase(val) == ".TRUE.".or. &
-               uppercase(val) == "TRUE".or.   &
-               uppercase(val) == "T") then
-               CalcParams%DBBSC = 1
-           endif
+      case ("CBS","DBBSC") ! CBS correction
+           ! = 1 , E. Giner formulation
+           ! = 2 , K. Pernal formulation
+           read(val, *) CalcParams%DBBSC
 
       ! here not sure
       case ("RESPONSE")

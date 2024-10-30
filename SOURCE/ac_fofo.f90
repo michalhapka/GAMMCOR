@@ -196,7 +196,7 @@ Call AC0BLOCK(Occ,URe,XOne, &
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,ABMIN1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,ICholesky,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,ICholesky,0,ACAlpha,.false.)
 
 Call sq_symmetrize(ABPLUS1,NDimX)
 Call sq_symmetrize(ABMIN1,NDimX)
@@ -421,12 +421,12 @@ allocate(ABPLUS0(NDimX*NDimX),ABMIN0(NDimX*NDimX),ABPLUS1(NDimX*NDimX),ABMIN1(ND
 ACAlpha=0.D0
 call AB_CAS_FOFO(ABPLUS0,ABMIN0,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,ABMIN1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ABPLUS1=ABPLUS1-ABPLUS0
 ABMIN1 =ABMIN1 -ABMIN0
@@ -608,12 +608,12 @@ IntKFile = twokfile
 ACAlpha=0.D0
 call AB_CAS_FOFO(ABPLUS0,WORK0,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,WORK1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ABPLUS1=ABPLUS1-ABPLUS0
 WORK1=WORK1-WORK0
@@ -796,7 +796,7 @@ IntKFile = twokfile
 
 call AB_CAS_FOFO(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,0,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,0,0,ACAlpha,.false.)
 EGOne(1)=ECASSCF
 
 !     Frequency integration of CMAT
@@ -959,12 +959,12 @@ IntKFile = twokfile
 ACAlpha0=0.D0
 call AB_CAS_FOFO(ABPLUS0,WORK0,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha0,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha0,.false.)
 Call dgemm('N','N',NDimX,NDimX,NDimX,1d0,ABPLUS0,NDimX,WORK0,NDimX,0d0,A0,NDimX)
 
 call AB_CAS_FOFO(ABPLUS1,WORK1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 EGOne(1)=ECASSCF
 !A2=ABPLUS1*ABMIN1
 Call dgemm('N','N',NDimX,NDimX,NDimX,1d0,ABPLUS1,NDimX,WORK1,NDimX,0d0,A2,NDimX)
@@ -1227,7 +1227,7 @@ subroutine CIter_FOFO(PMat,ECorr,ACAlpha,XOne,URe,Occ,EGOne,NGOcc,&
 
    call AB_CAS_FOFO(ABPLUS1,WORK1,ECASSCF,URe,Occ,XOne, &
                   IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-                  NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+                  NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
    EGOne(1)=ECASSCF
    ! Calc A2=ABPLUS1*ABMIN1
    Call dgemm('N','N',NDimX,NDimX,NDimX,1d0,ABPLUS1,NDimX,WORK1,NDimX,0d0,A2,NDimX)
@@ -2010,7 +2010,7 @@ twokfile = 'FOFO'
 Alpha=1.0
 Call AB_CAS_FOFO(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,ICholesky,Alpha,.false.)
+              NInte1,twojfile,twokfile,ICholesky,0,Alpha,.false.)
 AIN=0d0
 Do I=1,NDimX
     AIN((I-1)*NDimX+I)=1.0
@@ -2188,7 +2188,7 @@ Call AC0BLOCK(Occ,URe,XOne, &
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,ABMIN1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,ICholesky,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,ICholesky,0,ACAlpha,.false.)
 
 Call sq_symmetrize(ABPLUS1,NDimX)
 Call sq_symmetrize(ABMIN1,NDimX)

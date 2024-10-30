@@ -153,7 +153,7 @@ character(*),parameter :: PossibleUnits(2) = &
          integer :: OrbRelax  = FLAG_ORBRELAX
          integer :: OrbIncl   = FLAG_ORBINCL
          integer :: FunCorr   = 0 ! SR-AC0,fCAS (default)
-         integer :: DBBSC     = 0 ! AC0, CBS correction
+         integer :: DBBSC     = 0 ! AC0, CBS correction (0=inactive, default)
          integer :: MemVal = 2, MemType = 3 ! default: use 2 GB for 3-ind_tran (Cholesky)
          logical :: Visual     = FLAG_VISUAL
          logical :: Restart    = FLAG_RESTART

@@ -1792,7 +1792,7 @@ C     set THC for FockOTF subroutine
 C     generate LR-Cholesky integrals
 C     Note: full-range vectors are used to construct sr Coulomb
 C           and for sr kernel (optional)
-      If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4) Then
+      If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4.Or.IDBBSC.Eq.2) Then
 
       Write(lout,'(/1x,3a6)') ('******',i=1,3)
       Write(lout,'(1x,a)') 'Cholesky LR On-The-Fly'
@@ -2410,6 +2410,8 @@ C     PREPARE POINTERS: NOccup=num0+num1
 C     TRANSFORM J AND K
       UAux=transpose(UAOMO)
       If (IFunSR.Eq.0.Or.IFunSR.Eq.3.Or.IFunSR.Eq.5) Then
+      ! 0: no SR fun, 3: Gagliardi-Truhlar with PBE,
+      ! 5: CASPiDFT
       If (ICholesky==0) Then
 C
       Call tran4_gen(NBasis,
@@ -2507,7 +2509,11 @@ C
 C     TEST MITHAP
 C      call tran4_full(NBasis,UAux,UAux,'TWOMO','AOTWOSORT')
 C
-      Else ! IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4
+      EndIf ! IFunSR={0,3,5}
+C
+      If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4.Or.IDBBSC.Eq.2) Then
+c
+      print*, 'IFunSRKer =', IFunSRKer
 C
       If (ICholesky==0) Then
       Call tran4_gen(NBasis,
@@ -2567,7 +2573,11 @@ C     $                     num0+num1,OOErf,
 C     $                     NCholErf,NBasis,'FFOOERF')
 C
 C     dump LR integrals
-      open(newunit=iunit,file='cholvecs',form='unformatted')
+      if (IDBBSC .Eq. 2) then
+         open(newunit=iunit,file='cholvErf',form='unformatted')
+      else
+         open(newunit=iunit,file='cholvecs',form='unformatted')
+      endif
       write(iunit) NCholErf
       write(iunit) FFErf
       close(iunit)
@@ -2580,11 +2590,11 @@ C
       EndIf ! ICholesky OTF/BIN LR
       EndIf ! ICholesky LR
 C
-      EndIf
+      EndIf !???
 C
-      EndIf
+      EndIf !???
 C
-      EndIf
+      EndIf !???
 C
       EndIf ! IRes
 C
