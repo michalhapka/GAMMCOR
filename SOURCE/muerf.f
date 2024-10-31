@@ -38,8 +38,8 @@ C
       Print*, 'Entering DBBSCH subroutine...'
 
 C     Compute local mu(r): XMuMat(p,q) = <p|mu(r)|q>
-      Call LOC_MU_CBS_v2(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
-      Print*, 'LOC_MU_CBS_v2, XMuMat = ',norm2(XMuMat)
+      Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Print*, 'LOC_MU_CBS_CHOL: XMuMat = ',norm2(XMuMat)
 
 C     transform full-range (FR) cholesky vecs
 C     R(k,pq).(q|mu(r)|t) = R(k,pt)
@@ -91,7 +91,8 @@ C     save to disk
 C *End Subroutine DBBSCH
 
 *Deck LOC_MU_CBS_v2
-      Subroutine LOC_MU_CBS_v2(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Subroutine LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,
+     $                           UNOAO,Occ,NBasis)
 C
       use timing
       use read_external
@@ -516,5 +517,265 @@ C
 
       Deallocate(RDM2val)
 
-      End Subroutine LOC_MU_CBS_v2
+      End Subroutine LOC_MU_CBS_CHOL
+
+C     incore version
+*Deck LOC_MU_CBS
+      Subroutine LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoEl,
+     $ NBasis,NInte2)
+C
+C     COMPUTES A "BASIS-SET ERROR CORRECTION" WITH SR-PBE ONTOP CORRELATION from Giner et al. JCP 152, 174104 (2020)
+C     RETURNS XMuMAT USED TO COMPUTE CBS CORRECTION BY MODIFICATION OF H' IN AC0
+C
+      use read_external
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
+     $ Four=4.D0)
+C
+      Include 'commons.inc'
+C
+      Dimension NSymNO(NBasis),MultpC(15,15),NumOSym(15),IndInt(NBasis)
+C
+      Real*8, Allocatable :: RDM2Act(:),FPsiB(:,:,:,:),
+     $ OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),
+     $ Zk(:),RhoGrid(:),Sigma(:),WGrid(:),OnTop(:),XMuLoc(:)
+C
+      Dimension TwoEl(NInte2),URe(NBasis,NBasis),Occ(NBasis),
+     $ Ind1(NBasis),Ind2(NBasis),UNOAO(NBasis,NBasis),
+     $ XMuMAT(NBasis,NBasis)
+C
+      Dimension IAct(NBasis)
+C
+c      If(IFlCore.Eq.0) Then
+c      Do I=1,NInAcCAS
+c      Occ(I)=Zero
+c      EndDo
+c      EndIf
+C
+      Call molprogrid0(NGrid,NBasis)
+      Write(6,'(/,1X,"The number of Grid Points = ",I8)')
+     $ NGrid
+C
+      Allocate (WGrid(NGrid))
+      Allocate (OrbGrid(NGrid,NBasis))
+      Allocate (OrbXGrid(NGrid,NBasis))
+      Allocate (OrbYGrid(NGrid,NBasis))
+      Allocate (OrbZGrid(NGrid,NBasis))
+      Allocate(OnTop(NGrid),XMuLoc(NGrid))
+      Allocate(RhoGrid(NGrid))
+      Allocate(Sigma(NGrid))
+      Allocate(Zk(NGrid))
+C
+      Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
+      MxSym=NSym
+C
+      NSymNO(1:NBasis)=0
+      IStart=0
+      Do I=1,MxSym
+      Do J=IStart+1,IStart+NumOSym(I)
+C
+      Do IOrb=1,NBasis
+      If(Abs(UNOAO(IOrb,J)).Gt.1.D-1) NSymNO(IOrb)=I
+      EndDo
+C
+      EndDo
+      IStart=IStart+NumOSym(I)
+      EndDo
+C
+C     checking
+      Do I=1,MxSym
+      II=0
+      Do IOrb=1,NBasis
+      If(NSymNO(IOrb).Eq.I) II=II+1
+      EndDo
+      If(II.Ne.NumOSym(I))
+     $ Write(*,*) 'Symmetry of NO cannot be established!'
+      EndDo
+C
+      If(MxSym.Eq.1) Then
+      MultpC(1,1)=1
+      Else
+      Do I=1,MxSym
+      Do J=1,I
+      MultpC(I,J)=IEOR(I-1,J-1)+1
+      MultpC(J,I)=MultpC(I,J)
+      EndDo
+      EndDo
+      EndIf
+C
+C     load orbgrid, gradients, and wgrid
+C
+      Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     $ WGrid,UNOAO,NGrid,NBasis)
+C
+      NAct=NAcCAS
+      INActive=NInAcCAS
+      NOccup=INActive+NAct
+      Ind2(1:NBasis)=0
+      Do I=1,NAct
+      Ind1(I)=INActive+I
+      Ind2(INActive+I)=I
+      EndDo
+C
+      NRDM2Act = NAct**2*(NAct**2+1)/2
+      Allocate (RDM2Act(NRDM2Act))
+      RDM2Act(1:NRDM2Act)=Zero
+C
+      Open(10,File="rdm2.dat",Status='Old')
+C
+   10 Read(10,*,End=40)I,J,K,L,X
+C
+C     X IS DEFINED AS: < E(IJ)E(KL) > - DELTA(J,K) < E(IL) > = 2 GAM2(JLIK)
+C
+      RDM2Act(NAddrRDM(J,L,I,K,NAct))=Half*X
+C
+      I=Ind1(I)
+      J=Ind1(J)
+      K=Ind1(K)
+      L=Ind1(L)
+C
+      GoTo 10
+   40 Continue
+      Close(10)
+C
+      Do I=1,NBasis
+      IAct(I)=0
+      If(Occ(I).Ne.One.And.Occ(I).Ne.Zero) IAct(I)=1
+      EndDo
+C
+      Allocate (FPsiB(NBasis,NBasis,NOccup,NOccup))
+      FPsiB=Zero
+C
+      Do I=1,NBasis
+      Do J=1,NBasis
+      Do M=1,NOccup
+      Do N=1,NOccup
+C
+      FPsiB(I,J,M,N)=Zero
+      Do K=1,NOccup
+      Do L=1,NOccup
+      FPsiB(I,J,M,N)=FPsiB(I,J,M,N)+
+     $ TwoEl(NAddr3(K,I,L,J))
+     $ *Two*FRDM2(K,L,M,N,RDM2Act,Occ,Ind2,NAct,NBasis)
+      EndDo
+      EndDo
+C
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+C
+      Do I=1,NGrid
+C
+      Call DenGrid(I,RhoGrid(I),Occ,URe,OrbGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoX,Occ,URe,OrbGrid,OrbXGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoY,Occ,URe,OrbGrid,OrbYGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoZ,Occ,URe,OrbGrid,OrbZGrid,NGrid,NBasis)
+      Sigma(I)=RhoX**2+RhoY**2+RhoZ**2
+C
+      OnTop(I)=Zero
+      Do IP=1,NOccup
+      Do IQ=1,NOccup
+      Do IR=1,NOccup
+      Do IS=1,NOccup
+      OnTop(I)=OnTop(I)
+     $ +Two*FRDM2(IP,IQ,IR,IS,RDM2Act,Occ,Ind2,NAct,NBasis)
+     $ *OrbGrid(I,IP)*OrbGrid(I,IQ)*OrbGrid(I,IR)*OrbGrid(I,IS)
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+C
+      XMuLoc(I)=Zero
+C
+      If(OnTop(I).Gt.1.D-8) Then
+C
+      Do IP=1,NBasis
+      Do IQ=1,NBasis
+      Do IR=1,NOccup
+      Do IS=1,NOccup
+      XMuLoc(I)=XMuLoc(I)+FPsiB(IP,IQ,IR,IS)
+     $ *OrbGrid(I,IP)*OrbGrid(I,IQ)*OrbGrid(I,IR)*OrbGrid(I,IS)
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+C
+      XMuLoc(I)=SQRT(3.1415)/Two*XMuLoc(I)/OnTop(I)
+C
+      EndIf
+C
+      EndDo
+      Print*, 'OnTop', norm2(OnTop)
+      print*, 'XMuLoc',norm2(XMuLoc)
+C
+C     COMPUTE XMuMAT MATRIX in NO
+C
+      Do IP=1,NBasis
+      Do IQ=1,IP
+      XMuMAT(IP,IQ)=Zero
+C
+      ISym=MultpC(NSymNO(IP),NSymNO(IQ))
+      If(ISym.Eq.1) Then
+C
+      Do I=1,NGrid
+      XMuMAT(IP,IQ)=XMuMAT(IP,IQ)
+     $ +OrbGrid(I,IP)*OrbGrid(I,IQ)*WGrid(I)*Exp(-XMuLoc(I))
+      EndDo
+C
+      EndIf
+      XMuMAT(IQ,IP)=XMuMAT(IP,IQ)
+C
+      EndDo
+      EndDo
+C
+C     COMPUTE CBS CORRECTION
+C
+      Call PBECor(RhoGrid,Sigma,Zk,NGrid)
+C
+      SPi=SQRT(3.141592653589793)
+      Const=Three/Two/SPi/(One-SQRT(Two))
+C
+      AvMU=Zero
+      XEl=Zero
+      CorrMD=Zero
+      Do I=1,NGrid
+C
+      XMu=XMuLoc(I)
+C
+      AvMU=AvMU+XMu*RhoGrid(I)*WGrid(I)
+      XEl=XEl+RhoGrid(I)*WGrid(I)
+C
+      Bet=Zero
+      OnTopC=Zero
+      If(XMu.Gt.1.D-8) OnTopC=OnTop(I)/(One+Two/SPi/XMu)
+      If(OnTopC.Ne.Zero) Then
+      Bet=Const*Zk(I)/OnTopC
+      C=1.0
+      CorrMD=CorrMD+Zk(I)/(C*One+Bet*XMu**3)*WGrid(I)
+      EndIf
+C
+      EndDo
+C
+      AvMU=AvMU/XEl
+      Write(6,'(/," XEl",F15.2/)') XEl
+C
+c      If(IFlCore.Eq.0) Then
+c      Do I=1,NInAcCAS
+c      Occ(I)=One
+c      EndDo
+c      Write(6,'(/,1X,"*** CBS CORRECTION EXCLUDING CORE ORBITALS ***")')
+c      EndIf
+C
+      Write(6,'(/," CBS correction, average Mu",
+     $ F15.8,F15.2/)') CorrMD,AvMU
+C
+      Return
+      End
+C*End Subroutine LOC_MU_CBS
+
+
+
 
