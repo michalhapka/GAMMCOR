@@ -2095,6 +2095,9 @@ C     MODIFY integrals with 1/r TO ACCOUNT FOR CBS CORRECTION
 C
       Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
       Print*, 'LOC_MU_CBS, XMuMat =',norm2(XMuMAT)
+      Do I=1,NBasis
+         Print*, 'I=',I,XMuMat(I,1)
+      Enddo
 c      goto 999
 C
 C     COMPUTE 1st-ORDER ONE-ELECTRON HAMILTONIAN (USING 1/r INTEGRALS)
@@ -2130,7 +2133,7 @@ C
       TwoEl2=TwoNO-TwoEl2
 C
 C     ADD MODIFIED SR INTEGRALS TO FULL-COULOMB INTEGRALS
-C
+c
       NAddr=0
 C
       IPR=0
@@ -2159,6 +2162,7 @@ C
 C
       AuxSR=AuxSR/Four
       TwoNO(NAddr)=TwoNO(NAddr)+AuxSR
+C
 c comment out the line above and uncomment the lines below to
 c include in-active contribution to the CBS correction
 c which will be printed as "EIntra"; in practice it is always very small
@@ -2185,7 +2189,7 @@ C
       Call AB1_CAS(ABPLUS,ABMIN,URe,Occ,XOne,TwoNO,
      $ RDM2Act,NRDM2Act,IGFact,C,Ind1,Ind2,
      $ IndBlock,NoEig,NDimX,NBasis,NInte1,NInte2)
-C      Print*, 'AB1-KA',norm2(ABPLUS),norm2(ABMIN)
+       Print*, 'AB1-KA',norm2(ABPLUS),norm2(ABMIN)
 C
 C     ADD A SR KERNEL
 C

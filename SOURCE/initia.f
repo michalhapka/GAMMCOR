@@ -1584,6 +1584,12 @@ C
 C     READ/WRITE THE ONE- AND TWO-ELECTRON INTEGRALS
 C     INTERFACED WITH MOLPRO
 C
+C     Output:
+C     -- rdm2.dat file contains 2-RDM in NO (order?)
+C     -- UAOMO : contains U(NO,SAO) orbitals
+C                CAREFUL! CholeskyOTF: UAOMO=U(NO,AO) orbitals
+c                since they have to match GammCor intergrals
+C
       use memory
       use types
       use sorter
@@ -1796,7 +1802,8 @@ C           and for sr kernel (optional)
 
       Write(lout,'(/1x,3a6)') ('******',i=1,3)
       Write(lout,'(1x,a)') 'Cholesky LR On-The-Fly'
-      Write(lout,'(2x,a,f12.8)') 'MU = ',Alpha
+      !Alpha=1d4 test LR=FULL-RANGE
+      Write(lout,'(2x,a,f14.8)') 'MU = ',Alpha
       Write(lout,'(1x,3a6)') ('******',i=1,3)
 
       Call CholeskyOTF_ao_vecs(CholErfVecsOTF,AOBasis,System,IUnits,
@@ -2130,10 +2137,10 @@ C          load C(AO,MO) - already w/o symmety in MOs
 C           Do I=1,NBasis
 C              print*, 'i,it,jt',i,itsoao(i),jtsoao(i)
 C           EndDo
-C           Print*, 'CSAOMO w symmetry'
-C           do j=1,NBasis
-C              write(LOUT,'(*(f13.8))') (CSAOMO(i,j),i=1,NBasis)
-C           enddo
+            Print*, 'CSAOMO w symmetry'
+            do j=1,NBasis
+               write(LOUT,'(*(f13.8))') (CSAOMO(i,j),i=1,NBasis)
+            enddo
 C
 C           Print*, 'CAOMO w/o symmetry'
 C           do j=1,NBasis
@@ -2173,7 +2180,6 @@ C
 C
 C          obtain long-range Fmat and short-range Jmat
 c
-           CSAOMO = transpose(UAux)
            Call read_caomo_molpro(CAOMO,SAO,itsoao,jtsoao,
      &                           'MOLPRO.MOPUN','CASORBAO',NBasis)
 c          Monomer = 3 ! SYS_TOTAL in System
@@ -2342,6 +2348,17 @@ C              to match with gammcor-cholesky library
 C
       UAOMO = transpose(CAONO)
 C
+C      block
+C      Print*, 'CAONO =',norm2(CAONO)
+C      do j=1,NBasis
+C         write(6,'(*(f13.8))') (CAONO(i,j),i=1,NBasis)
+C      enddo
+C      Print*, 'CSAONO =',norm2(UAOMO)
+C      do j=1,NBasis
+C         write(6,'(*(f13.8))') (UAOMO(i,j),i=1,NBasis)
+C      enddo
+C      end block
+C
       If (IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4) Then
 C     transform short-range Jmat from MO to AO
       Call tranMO2AO('N',JMOsr,CAOMO,NBasis)
@@ -2354,16 +2371,6 @@ c         write(6,'(*(f13.8))') (JMOsr(i,j),i=1,NBasis)
 c      enddo
 c      end block
 C
-c      block
-c      Print*, 'CAONO =',norm2(CAONO)
-c      do i=1,NBasis
-c         write(6,'(*(f13.8))') (CAONO(i,j),j=1,NBasis)
-c      enddo
-c      Print*, 'CSAONO =',norm2(UAOMO)
-c      do j=1,NBasis
-c         write(6,'(*(f13.8))') (UAOMO(i,j),i=1,NBasis)
-c      enddo
-c      end block
 C
 C     dump short-range Jmat on disk
       open(newunit=iunit,file='jsrmat',form='unformatted')
@@ -2566,6 +2573,7 @@ C
       Call Chol_gammcor_Rkab(OOErf,UAux,1,num0+num1,UAux,1,num0+num1,
      $                   MemMOTransfMB, CholErfVecsOTF,
      $                   AOBasis, ORBITAL_ORDERING_MOLPRO)
+      Call gclock('cholErf_gammcor_Rkab',Tcpu,Twall)
 C
 CC     assemble FFOERF file (only for testing)
 C      Call chol_ffoo_batch(.false.,FFErf,num0+num1,
@@ -2735,6 +2743,7 @@ C
 C
       Return
       End
+Cc    End Subroutine LdInteg
 
 *Deck DimSym
       Subroutine DimSym(NBasis,NInte1,NInte2,MxHVec,MaxXV)

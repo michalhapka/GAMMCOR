@@ -40,6 +40,9 @@ C
 C     Compute local mu(r): XMuMat(p,q) = <p|mu(r)|q>
       Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
       Print*, 'LOC_MU_CBS_CHOL: XMuMat = ',norm2(XMuMat)
+      Do I=1,NBasis
+         Print*, 'I=',I,XMuMat(I,1)
+      Enddo
 
 C     transform full-range (FR) cholesky vecs
 C     R(k,pq).(q|mu(r)|t) = R(k,pt)
@@ -48,6 +51,23 @@ C     R(k,pq).(q|mu(r)|t) = R(k,pt)
       Allocate(CholVecs(NCholesky,NBasis**2),Work(NCholesky,NBasis**2))
       read(iunit) CholVecs
       close(iunit)
+
+C      ! try (k|p*q)
+C      block
+C      integer :: jj
+C      double precision :: Tmp(NBasis,NBasis)
+C      do i=1,NCholesky
+C         jj=0
+C         do l=1,NBasis
+C         do k=1,NBasis
+C            jj=jj+1
+C            Tmp(k,l) = CholVecs(i,jj)
+C         enddo
+C         enddo
+C         call dgemm('N','N',NBasis,NBasis,NBasis,1d0,
+C     $               XMuMat,NBasis,Tmp,NBasis,0d0,Work(i,:),NBasis)
+C      enddo
+C      end block
 
 C     SET TIMING FOR 3-ind transformations of Cholesky vecs
       Call gclock('START',Tcpu,Twall)
@@ -72,6 +92,22 @@ C     transform long-range (LR) cholesky vecs
      $           CholVecs,NCholErf*NBasis,XMuMat,NBasis,
      $           0d0,Work,NCholErf*NBasis)
       Call gclock('3-idx tran LR(k,pq)',Tcpu,Twall)
+C       block
+C       integer :: jj
+C       double precision :: Tmp(NBasis,NBasis)
+C       do i=1,NCholErf
+C          jj=0
+C          do l=1,NBasis
+C          do k=1,NBasis
+C             jj=jj+1
+C             Tmp(k,l) = CholVecs(i,jj)
+C          enddo
+C          enddo
+C         call dgemm('N','N',NBasis,NBasis,NBasis,1d0,
+C     $               XMuMat,NBasis,Tmp,NBasis,0d0,Work(i,:),NBasis)
+C       enddo
+C       end block
+
 C     save to disk
       open(newunit=iunit,file='chol1vLR',form='unformatted')
       write(iunit) NCholErf
@@ -79,13 +115,19 @@ C     save to disk
       close(iunit)
       deallocate(CholVecs,Work)
 
-      Call AC0CAS_FOFO(ECorr,ETot,Occ,URe,XOne,ABPLUS,ABMIN,
+      Call AC0CAS_FOFO(ECorr,ECASSCF,Occ,URe,XOne,ABPLUS,ABMIN,
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDimX,NInte1,
      $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
+      print*, 'ABPLUS-mu =',norm2(ABPLUS)
+      print*, 'ABMIN -mu =',norm2(ABMIN)
 
       Write
      $ (6,'(1X,''CASSCF+ENuc, AC0-CBS, Total'',6X,3F15.8)')
      $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
+       ETot=ECASSCF+ENuc+ECorr
+       Print*, 'ECASSCF = ', ECASSCF
+       Print*, 'ENuc = ', ENuc
+       Print*, 'ECorr = ', ECorr
 
       End
 C *End Subroutine DBBSCH
@@ -100,6 +142,9 @@ C
 C     RETURNS A "BASIS-SET ERROR CORRECTION" WITH SR-PBE ONTOP CORRELATION from Giner et al. JCP 152, 174104 (2020)
 C     RETURNS XMuMAT USED TO COMPUTE CBS CORRECTION BY MODIFICATION OF H' IN AC0
 C
+C     CAREFUL!
+C     UNOAO are U(NO,AO) not U(NO,SAO) orbitals!
+C
       Implicit Real*8 (A-H,O-Z)
 C
       Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
@@ -110,6 +155,7 @@ C
       Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
       Real*8 :: XMuMat(NBasis,NBasis)
 C
+      Real*8 :: UNOSAO(NBasis,NBasis)
       Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:)
       Real*8, Allocatable :: OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),
      $                       OrbZGrid(:,:)
@@ -153,6 +199,8 @@ C
       Write(6,'(/,1X,"************** ",
      $ " CBS Correction with local Mu ")')
 C
+      If (InternalGrid==0) then
+C
       If (IMOLPRO == 1) Then
          Call molprogrid0(NGrid,NBasis)
       ElseIf(IDALTON == 1) Then
@@ -166,6 +214,30 @@ C     ... symmetry
       Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
       MxSym=NSym
 C
+C     ...test prints
+      print*, 'NSym =',NSym
+      print*, 'NumOSym =', NumOSym(1:MxSym)
+CC    check orbitals
+C     print*, 'UAONO orbitals:',norm2(UNOAO)
+C     do j=1,NBasis
+C        write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
+C     enddo
+C      if (MxSym > 1) then
+C         Allocate(Work(NBasis,NBasis))
+C         Call read_mo_molpro(Work,'MOLPRO.MOPUN','CASORB  ',NBasis)
+CC        REORDER MOs TO NO SYMMETRY
+C         Do I=1,NBasis
+C         Do J=1,NBasis
+C         UNOAO(IndInt(I),J)=Work(J,I)
+C         EndDo
+C         EndDo
+C      endif
+C
+      print*, 'UNOSAO orbitals:',norm2(UNOAO)
+      do j=1,NBasis
+         write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
+      enddo
+C
       NSymNO(1:NBasis)=0
       IStart=0
       Do I=1,MxSym
@@ -178,6 +250,11 @@ C
       EndDo
       IStart=IStart+NumOSym(I)
       EndDo
+
+      Do IOrb=1,NBasis
+      Print*, 'I,NSymNO = ',IOrb,NSymNO(IOrb)
+      EndDo
+      Print*, ''
 C
 C     check...
       Do I=1,MxSym
@@ -224,7 +301,13 @@ CC     visualisation
 C        Allocate(RR(3,NGrid))
 C        Call dalton_grid_coord(NGrid,RR,griddalfile)
         Deallocate(Work)
-      EndIf
+      EndIf !Molpro/Dalton grid
+c
+      ElseIf (InternalGrid==1) then
+      Stop "DOes not work with Internal Grid yet!"
+C
+
+      EndIf ! InternalGrid
 C
       NAct=NAcCAS
       INActive=NInAcCAS
@@ -570,6 +653,14 @@ C
 C
       Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
       MxSym=NSym
+
+      print*, 'NSym =',NSym
+      print*, 'NumOSym =', NumOSym(1:MxSym)
+
+       print*, 'INCORE: UNOSAO',norm2(UNOAO)
+       do j=1,NBasis
+          write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
+       enddo
 C
       NSymNO(1:NBasis)=0
       IStart=0
@@ -583,6 +674,11 @@ C
       EndDo
       IStart=IStart+NumOSym(I)
       EndDo
+C
+      Do IOrb=1,NBasis
+      Print*, 'I,NSymNO = ',IOrb,NSymNO(IOrb)
+      EndDo
+      Print*, ''
 C
 C     checking
       Do I=1,MxSym
@@ -775,7 +871,4 @@ C
       Return
       End
 C*End Subroutine LOC_MU_CBS
-
-
-
 

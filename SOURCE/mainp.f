@@ -190,7 +190,7 @@ C
       IFlFCorr = Flags%IFlFCorr
 C
 C     IDBBSC   = 1 : compute density-based basis set correction (Giner et al., JCP 2018)
-C     IDBBSC   = 2 : compute density-based basis set correction (K. Pernal et al., XXXX )
+C     IDBBSC   = 2 : compute SR-based basis set correction (K. Pernal et al., XXXX )
 C
       IDBBSC = Flags%IDBBSC
 C
