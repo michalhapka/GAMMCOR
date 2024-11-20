@@ -1621,6 +1621,7 @@ C
       Integer(8) :: MemSrtSize
 C     binary
       Type(TCholeskyVecs) :: CholeskyVecs
+      Type(TCholeskyVecs) :: CholErfVecs
       Real*8, Allocatable :: MatFF(:,:)
       Real*8, Allocatable :: FFErf(:,:)
       Real*8, Allocatable :: FOErf(:,:),OOErf(:,:)
@@ -1773,6 +1774,17 @@ Cc     Call chol_CoulombMatrix(CholeskyVecs,'AOTWOSORT',ICholeskyAccu)
      &                         ICholeskyAccu)
        NCholesky=CholeskyVecs%NCholesky
 
+      If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4.Or.IDBBSC.Eq.2) Then
+C     generate LR-Cholesky integrals
+      Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
+      Write(lout,'(1x,a)') 'Cholesky LR Binary'
+      Write(lout,'(2x,a,f14.8)') 'MU = ',Alpha
+      Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
+       Call chol_CoulombMatrix(CholErfVecs,NBasis,'AOTWOINT.erf',2,
+     &                         ICholeskyAccu)
+       NCholErf=CholErfVecs%NCholesky
+      EndIf ! LR-Cholesky Binary
+
 C     compute Cholesky vectors OTF
       ElseIf(ICholeskyOTF==1) Then
 
@@ -1802,7 +1814,7 @@ C           and for sr kernel (optional)
 
       Write(lout,'(/1x,3a6)') ('******',i=1,3)
       Write(lout,'(1x,a)') 'Cholesky LR On-The-Fly'
-      !Alpha=1d4 test LR=FULL-RANGE
+      !Alpha=1d4 !test LR=FULL-RANGE
       Write(lout,'(2x,a,f14.8)') 'MU = ',Alpha
       Write(lout,'(1x,3a6)') ('******',i=1,3)
 
@@ -2137,10 +2149,10 @@ C          load C(AO,MO) - already w/o symmety in MOs
 C           Do I=1,NBasis
 C              print*, 'i,it,jt',i,itsoao(i),jtsoao(i)
 C           EndDo
-            Print*, 'CSAOMO w symmetry'
-            do j=1,NBasis
-               write(LOUT,'(*(f13.8))') (CSAOMO(i,j),i=1,NBasis)
-            enddo
+C           Print*, 'CSAOMO w symmetry'
+C           do j=1,NBasis
+C              write(LOUT,'(*(f13.8))') (CSAOMO(i,j),i=1,NBasis)
+C           enddo
 C
 C           Print*, 'CAOMO w/o symmetry'
 C           do j=1,NBasis
@@ -2208,6 +2220,8 @@ C
 C         unpack Fock in MO (work1) to triangle
           Call sq_to_triang2(work1,FockF,NBasis)
           ElseIf (ICholeskyBIN==1) Then
+          Call FockGen_CholR(FockF,CholErfVecs%R(1:NCholErf,1:NInte1),
+     &                       GammaAB,XKin,NInte1,NCholErf,NBasis)
              Stop "CholeskyBIN not ready with LR ints!"
           EndIf ! ICholeskyOTF/BIN
 C
@@ -2580,6 +2594,19 @@ C      Call chol_ffoo_batch(.false.,FFErf,num0+num1,
 C     $                     num0+num1,OOErf,
 C     $                     NCholErf,NBasis,'FFOOERF')
 C
+C
+      deallocate(OOErf)
+c
+      ElseIf (ICholeskyBIN==1) Then
+C
+      call mem_alloc(FFErf,NCholErf,NBasis**2)
+      Call chol_MOTransf_TwoStep(FFErf,CholErfVecs,
+     $             UAux,1,NBasis,
+     $             UAux,1,NBasis,
+     $             MemMOTransfMB)
+C
+      EndIf ! ICholesky OTF/BIN LR
+C
 C     dump LR integrals
       if (IDBBSC .Eq. 2) then
          open(newunit=iunit,file='cholvErf',form='unformatted')
@@ -2590,12 +2617,8 @@ C     dump LR integrals
       write(iunit) FFErf
       close(iunit)
 C
-      Deallocate(FFErf,OOErf)
+      Deallocate(FFErf)
 C
-C
-      ElseIf (ICholeskyBIN==1) Then
-        Stop "Cholesky ERF not ready with BIN"
-      EndIf ! ICholesky OTF/BIN LR
       EndIf ! ICholesky LR
 C
       EndIf !???

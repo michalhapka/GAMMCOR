@@ -605,7 +605,6 @@ call AB_CAS_FOFO(ABPLUS,ABMIN,val,URe,Occ,XOne,&
       print*, 'ABPLUS-mu =',norm2(ABPLUS)
       print*, 'ABMIN -mu =',norm2(ABMIN)
 
-
 !call gclock('AB(1)',Tcpu,Twall)
 
 allocate(work(NDimX,NDimX),Eig(NDimX))
@@ -670,6 +669,7 @@ if(ICholesky==0) then
 
    !! SR-AC0(fAC0) : dump Gamma^corr
    !open(newunit=iunit2,file='rdmcorr',form='unformatted')
+   Print*, 'ABPLUS-energy corr=',norm2(ABPLUS)
 
    open(newunit=iunit,file='FOFO',status='OLD', &
         access='DIRECT',recl=8*NBasis*NOccup)
@@ -732,6 +732,7 @@ elseif(ICholesky==1) then
 
    !! dump Gamma^corr
    !open(newunit=iunit,file='rdmcorr',form='unformatted')
+   Print*, 'ABPLUS-energy corr=',norm2(ABPLUS)
 
    ! set number of loops over integrals
    dimFO = NOccup*NBasis
@@ -855,6 +856,8 @@ elseif(ICholesky==1) then
          enddo
       enddo
 
+      Print*, 'ABPLUS-energy corr=',norm2(ABPLUS)
+
       ! set number of loops over integrals
       dimFO = NBasis*NOccup
       nloop = (dimFO - 1) / MaxBatchSize + 1
@@ -935,10 +938,8 @@ elseif(ICholesky==1) then
                     EAll = EAll + Aux*ints(j,i)
 
                     !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
+                    ! I think it should be SR here!
                     if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*intsSR(j,i)
-
-                    !! dump Gamma^corr
-                    !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit)ir,ip,is,iq,Aux
 
                   endif
                enddo

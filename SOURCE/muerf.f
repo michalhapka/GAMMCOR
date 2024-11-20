@@ -1,6 +1,6 @@
 *Deck DBBSCH
       Subroutine DBBSCH(ETot,ENuc,URe,Occ,XOne,UNOAO,
-     $                  NBasis,NInte1,IndN,IndX,NDimX)
+     $                  BasisSet,NBasis,NInte1,IndN,IndX,NDimX)
 C
 C     Compute the CBS[H] correction
 C     with SR integrals composed from Cholesky vectors
@@ -14,6 +14,7 @@ c     implicit none
 
       include 'commons.inc'
 
+      character(*)       :: BasisSet
       integer,intent(in) :: NBasis,NInte1,NDimX
       integer,intent(in) :: IndX(NDimX),IndN(2,NDimX)
 
@@ -38,11 +39,13 @@ C
       Print*, 'Entering DBBSCH subroutine...'
 
 C     Compute local mu(r): XMuMat(p,q) = <p|mu(r)|q>
-      Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,
+     $                     BasisSet,NBasis)
       Print*, 'LOC_MU_CBS_CHOL: XMuMat = ',norm2(XMuMat)
-      Do I=1,NBasis
-         Print*, 'I=',I,XMuMat(I,1)
-      Enddo
+C
+C     ... test : recover AC0!
+c      XMuMat=0d0
+c      print*, 'Use FR only !',norm2(XMuMat)
 
 C     transform full-range (FR) cholesky vecs
 C     R(k,pq).(q|mu(r)|t) = R(k,pt)
@@ -118,26 +121,35 @@ C     save to disk
       Call AC0CAS_FOFO(ECorr,ECASSCF,Occ,URe,XOne,ABPLUS,ABMIN,
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDimX,NInte1,
      $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
-      print*, 'ABPLUS-mu =',norm2(ABPLUS)
-      print*, 'ABMIN -mu =',norm2(ABMIN)
+
+      print*, 'ABPLUS-my =',norm2(ABPLUS)
+      print*, 'ABMIN -my =',norm2(ABMIN)
 
       Write
      $ (6,'(1X,''CASSCF+ENuc, AC0-CBS, Total'',6X,3F15.8)')
      $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
        ETot=ECASSCF+ENuc+ECorr
-       Print*, 'ECASSCF = ', ECASSCF
-       Print*, 'ENuc = ', ENuc
-       Print*, 'ECorr = ', ECorr
+
+c     ... delete transformed cholesky vecs
+      Open(newunit=iunit,file='chol1vFR',status='OLD')
+      Close(iunit,status='DELETE')
+      Open(newunit=iunit,file='chol1vLR',status='OLD')
+      Close(iunit,status='DELETE')
+c
+c      Print*, 'ECASSCF = ', ECASSCF
+c      Print*, 'ENuc = ', ENuc
+c      Print*, 'ECorr = ', ECorr
 
       End
 C *End Subroutine DBBSCH
 
 *Deck LOC_MU_CBS_v2
       Subroutine LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,
-     $                           UNOAO,Occ,NBasis)
+     $                           UNOAO,Occ,BasisSet,NBasis)
 C
-      use timing
       use read_external
+      use grid_internal
+      use timing
 C
 C     RETURNS A "BASIS-SET ERROR CORRECTION" WITH SR-PBE ONTOP CORRELATION from Giner et al. JCP 152, 174104 (2020)
 C     RETURNS XMuMAT USED TO COMPUTE CBS CORRECTION BY MODIFICATION OF H' IN AC0
@@ -147,18 +159,23 @@ C     UNOAO are U(NO,AO) not U(NO,SAO) orbitals!
 C
       Implicit Real*8 (A-H,O-Z)
 C
-      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
-     $ Four=4.D0)
+C     now defined in GammCor_Integrals
+      Parameter(Half=0.5D0)
+C     Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
+C    $ Four=4.D0)
 C
       Include 'commons.inc'
 C
       Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
       Real*8 :: XMuMat(NBasis,NBasis)
+      Character(*) :: BasisSet
 C
       Real*8 :: UNOSAO(NBasis,NBasis)
-      Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:)
-      Real*8, Allocatable :: OrbGrid(:,:),OrbXGrid(:,:),OrbYGrid(:,:),
-     $                       OrbZGrid(:,:)
+      Real*8, Allocatable :: FPsiB(:), OnTop(:), XMuLoc(:)
+      Real*8,allocatable,target :: PhiLDA(:,:)
+      Real*8,allocatable,target :: PhiGGA(:,:,:)
+      Real*8,pointer :: OrbGrid(:,:)
+      Real*8,pointer :: OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:)
       Real*8, Allocatable :: Zk(:),RhoGrid(:),Sigma(:),WGrid(:)
       Double Precision, Allocatable :: CHVCSAF(:,:),CHVCSIF(:,:)
       Double Precision, Allocatable :: Q(:,:),OrbGridP(:)
@@ -192,9 +209,9 @@ C     debug printlevel
 C
 C     set constants
 C
-      Pi = dacos(-1.d0)
-      SPi = SQRT(Pi)
-      Prefac = SQRT(3.1415)/Two ! SPi/Two
+C      Pi = dacos(-1.d0)
+C      SPi = SQRT(Pi)
+C      Prefac = SQRT(3.1415)/Two ! SPi/Two
 C
       Write(6,'(/,1X,"************** ",
      $ " CBS Correction with local Mu ")')
@@ -202,41 +219,87 @@ C
       If (InternalGrid==0) then
 C
       If (IMOLPRO == 1) Then
+         Write(LOUT,'(/1x,a)') 'MOLPRO GRID '
          Call molprogrid0(NGrid,NBasis)
       ElseIf(IDALTON == 1) Then
+         Write(LOUT,'(/1x,a)') 'DALTON GRID '
          Call daltongrid0(NGrid,griddalfile,doGGA,NBasis)
          If (.not.doGGA) stop "LOC_MU_CHOL: Run Dalton with SR-PBE!"
       EndIf
       Write(6,'(/,1X,"The number of Grid Points = ",I8)')
      $ NGrid
 C
+      Allocate (WGrid(NGrid))
+      Allocate(PhiGGA(NGrid,NBasis,4))
+      OrbGrid  => PhiGGA(:,:,1)
+      OrbXGrid => PhiGGA(:,:,2)
+      OrbYGrid => PhiGGA(:,:,3)
+      OrbZGrid => PhiGGA(:,:,4)
+C
+C     load orbgrid, gradients, and wgrid
+C
+      If (IMOLPRO == 1) Then
+         Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                   WGrid,UNOAO,NGrid,NBasis)
+      ElseIf (IDALTON == 1) Then
+         Allocate(Work(NBasis,NBasis))
+         Work = transpose(UNOAO)
+         Call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       WGrid,NGrid,griddalfile,NBasis)
+         Call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       Work,0,NGrid,NBasis,.false.)
+CC     visualisation
+C        Allocate(RR(3,NGrid))
+C        Call dalton_grid_coord(NGrid,RR,griddalfile)
+        Deallocate(Work)
+      EndIf !Molpro/Dalton grid
+c
+      ElseIf (InternalGrid==1) then
+         Write(6,'(1x,a,i3)') 'IFunSR       =',IFunSR
+         Write(6,'(1x,a,i3)') 'IGridType    =', IGridType
+         Write(6,'(1x,a,i3)') 'ORB_ORDERING =', IOrbOrder
+C
+         Call internal_gga_no_orbgrid(IGridType,BasisSet,
+     $                          IOrbOrder,transpose(UNOAO),
+     $                          WGrid,PhiGGA,NGrid,NBasis,NBasis,IUnits)
+         OrbGrid  => PhiGGA(:,:,1)
+         OrbXGrid => PhiGGA(:,:,2)
+         OrbYGrid => PhiGGA(:,:,3)
+         OrbZGrid => PhiGGA(:,:,4)
+C
+      EndIf ! InternalGrid
+      print*, ''
+      print*, 'NGrid    = ', NGrid
+      print*, 'WGrid    = ', norm2(Wgrid)
+      print*, 'OrbGrid  = ', norm2(OrbGrid)
+      print*, 'OrbXGrid = ', norm2(OrbXGrid)
+      print*, 'OrbYGrid = ', norm2(OrbYGrid)
+      print*, 'OrbZGrid = ', norm2(OrbZGrid)
+      print*, ''
+
 C     ... symmetry
-      Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
-      MxSym=NSym
+      If (InternalGrid==1) Then
+C     ... internal grid does not use symmetry
+         NSym=1
+         MxSym=1
+         NumOSym(1)=NBasis
+      ElseIf(InternalGrid==0) Then
+         If (IMOLPRO == 1) Then 
+            Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
+            MxSym=NSym
+         Else
+            Stop "Fix NSym in LOC_MU_CBS_CHOL!"
+         EndIf
+      EndIf
 C
 C     ...test prints
-      print*, 'NSym =',NSym
+      print*, 'NSym    =', NSym
       print*, 'NumOSym =', NumOSym(1:MxSym)
-CC    check orbitals
-C     print*, 'UAONO orbitals:',norm2(UNOAO)
-C     do j=1,NBasis
-C        write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
-C     enddo
-C      if (MxSym > 1) then
-C         Allocate(Work(NBasis,NBasis))
-C         Call read_mo_molpro(Work,'MOLPRO.MOPUN','CASORB  ',NBasis)
-CC        REORDER MOs TO NO SYMMETRY
-C         Do I=1,NBasis
-C         Do J=1,NBasis
-C         UNOAO(IndInt(I),J)=Work(J,I)
-C         EndDo
-C         EndDo
-C      endif
 C
-      print*, 'UNOSAO orbitals:',norm2(UNOAO)
-      do j=1,NBasis
-         write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
-      enddo
+C      print*, 'UNOSAO orbitals:',norm2(UNOAO)
+C      do j=1,NBasis
+C         write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
+C      enddo
 C
       NSymNO(1:NBasis)=0
       IStart=0
@@ -278,36 +341,7 @@ C
       EndIf
 C
 C     ... end symmetry
-C
-      Allocate (WGrid(NGrid))
-      Allocate (OrbGrid(NGrid,NBasis))
-      Allocate (OrbXGrid(NGrid,NBasis))
-      Allocate (OrbYGrid(NGrid,NBasis))
-      Allocate (OrbZGrid(NGrid,NBasis))
-C
-C     load orbgrid, gradients, and wgrid
-C
-      If (IMOLPRO == 1) Then
-         Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     &                   WGrid,UNOAO,NGrid,NBasis)
-      ElseIf (IDALTON == 1) Then
-         Allocate(Work(NBasis,NBasis))
-         Work = transpose(UNOAO)
-         Call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     &                       WGrid,NGrid,griddalfile,NBasis)
-         Call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     &                       Work,0,NGrid,NBasis,.false.)
-CC     visualisation
-C        Allocate(RR(3,NGrid))
-C        Call dalton_grid_coord(NGrid,RR,griddalfile)
-        Deallocate(Work)
-      EndIf !Molpro/Dalton grid
-c
-      ElseIf (InternalGrid==1) then
-      Stop "DOes not work with Internal Grid yet!"
-C
 
-      EndIf ! InternalGrid
 C
       NAct=NAcCAS
       INActive=NInAcCAS
