@@ -377,9 +377,9 @@ enddo
 
 deallocate(work1)
 
-Print*, 'from JK_Chol_loop'
-Print*, 'ABPLUS-after K',norm2(ABPLUS)
-Print*, 'ABMIN -after K',norm2(ABMIN)
+!Print*, 'from JK_Chol_loop'
+!Print*, 'ABPLUS-after K',norm2(ABPLUS)
+!Print*, 'ABMIN -after K',norm2(ABMIN)
 !ABPLUS = 0
 !ABMIN  = 0
 !HNO = HNO_save
@@ -669,8 +669,8 @@ do iloop=1,nloop
 
 enddo
 
-Print*, 'ABPLUS-after J',norm2(ABPLUS)
-Print*, 'ABMIN -after J',norm2(ABMIN)
+!Print*, 'ABPLUS-after J',norm2(ABPLUS)
+!Print*, 'ABMIN -after J',norm2(ABMIN)
 
 !ABPLUS = 0
 !ABMIN  = 0
@@ -678,6 +678,12 @@ Print*, 'ABMIN -after J',norm2(ABMIN)
 !WMAT = 0
 !AuxI = 0
 !AuxIO = 0
+
+!print*, 'HNO   on exit  =',norm2(HNO)
+!print*, 'WMAT  on exit  =',norm2(WMAT)
+!print*, '2*WMA on exit  =',2d0*norm2(WMAT)
+!print*, 'AuxI  on exit  =',norm2(AuxI)
+!print*, 'AuxIO on exit  =',norm2(AuxIO)
 
 deallocate(work2,work1,ints)
 
@@ -711,7 +717,7 @@ double precision :: AuxVal,HNOCoef
 double precision,allocatable :: FF(:,:),FFErf(:,:)
 double precision,allocatable :: FFTr(:,:),FFErfTr(:,:)
 double precision,allocatable :: TmpTr(:,:),TmpErfTr(:,:)
-double precision,allocatable :: ints(:,:)
+double precision,allocatable :: ints(:,:),intsFR(:,:)
 double precision,allocatable :: work1(:,:),work2(:,:)
 double precision,allocatable :: work3(:,:),work4(:,:)
 double precision,allocatable :: work6(:,:),work8(:,:)
@@ -738,7 +744,7 @@ allocate(FF(NCholesky,NBasis**2))
 read(iunit) FF
 close(iunit)
 
-! read transformed cholesky (k|r|FF) vecs
+! read transformed cholesky (k|r|FF*) vecs
 open(newunit=iunit,file='chol1vFR',form='unformatted')
 read(iunit) NCholesky
 allocate(FFTr(NCholesky,NBasis**2))
@@ -752,7 +758,7 @@ allocate(FFErf(NCholErf,NBasis**2))
 read(iunit) FFErf
 close(iunit)
 
-! read transformed LR cholesky (k|erf|FF) vecs
+! read transformed LR cholesky (k|erf|FF*) vecs
 open(newunit=iunit,file='chol1vLR',form='unformatted')
 read(iunit) NCholErf
 allocate(FFErfTr(NCholErf,NBasis**2))
@@ -779,14 +785,17 @@ dimFO = NBasis*NOccup
 nloop = (dimFO - 1) / MaxBatchSize + 1
 
 allocate(work1(dimFO,MaxBatchSize),work2(dimFO,MaxBatchSize))
-allocate(work3(dimFO,MaxBatchSize),work4(dimFO,MaxBatchSize))
 allocate(ints(NBasis,NBasis))
+allocate(intsFR(NBasis,NBasis))
 
 off = 0
 k   = 0
 l   = 1
+
+  kk = 0
+  ll = 1
 ! exchange loop (FO|FO)
-print*,'exchange loop (FO|FO)'
+!print*,'exchange loop (FO|FO)'
 do iloop=1,nloop
 
    ! batch size for each iloop; last one is smaller
@@ -825,7 +834,8 @@ do iloop=1,nloop
 
    ! regular
    call dgemm('T','N',dimFO,BatchSize,NCholesky,1d0,FF,NCholesky, &
-              FF(:,off+1:off+BatchSize),NCholesky,1d0,work1,dimFO)
+              FF(:,off+1:off+BatchSize),NCholesky,0d0,work2,dimFO)
+   work1 = work1 + work2
    ! work1 = regular + short-range* 
 
    ! loop over integrals
@@ -839,12 +849,14 @@ do iloop=1,nloop
 
       do j=1,NOccup
          do i=1,NBasis
-            ints(i,j) = work1((j-1)*NBasis+i,iBatch)
+            ints(i,j)   = work1((j-1)*NBasis+i,iBatch)
+            intsFR(i,j) = work2((j-1)*NBasis+i,iBatch)
          enddo
       enddo
 
       if(l>NOccup) cycle
       ints(:,NOccup+1:NBasis) = 0
+      intsFR(:,NOccup+1:NBasis) = 0
       !kl = (l-1)*NBasis + k
       !print*, 'k,l,kl = ',k,l,kl
       !print*, 'ints',norm2(ints)
@@ -857,11 +869,13 @@ do iloop=1,nloop
          if(IGem(l)==1) then
             if(IGem(k)==2) then
                do i=INActive+1,NOccup
-                  HNO(i,k) = HNO(i,k) - val*ints(i,l)
+                  HNO(i,k) = HNO(i,k) - val*intsFR(i,l)
+                  !HNO(i,k) = HNO(i,k) - val*ints(i,l)
                enddo
             elseif(IGem(k)==3) then
                do i=NOccup+1,NBasis
-                  HNO(i,k) = HNO(i,k) - val*ints(i,l)
+                  HNO(i,k) = HNO(i,k) - val*intsFR(i,l)
+                  !HNO(i,k) = HNO(i,k) - val*ints(i,l)
                enddo
             endif
          endif
@@ -869,11 +883,13 @@ do iloop=1,nloop
          if(IGem(l)==2) then
             if(IGem(k)==1) then
                do i=1,INActive
-                  HNO(i,k) = HNO(i,k) - val*ints(i,l)
+                  HNO(i,k) = HNO(i,k) - val*intsFR(i,l)
+                  !HNO(i,k) = HNO(i,k) - val*ints(i,l)
                enddo
             elseif(IGem(k)==3) then
                do i=NOccup+1,NBasis
-                  HNO(i,k) = HNO(i,k) - val*ints(i,l)
+                  HNO(i,k) = HNO(i,k) - val*intsFR(i,l)
+                  !HNO(i,k) = HNO(i,k) - val*ints(i,l)
                enddo
             endif
          endif
@@ -1124,7 +1140,7 @@ do iloop=1,nloop
 
 enddo
 
-deallocate(work1,work2,work3,work4)
+deallocate(work1,work2)
 deallocate(TmpErfTr,TmpTr)
 
 !Print*, 'from JK_SR_Chol_loop'
@@ -1165,7 +1181,7 @@ off = 0
 k   = 0
 l   = 1
 ! Coulomb loop (FF|OO)
-print*, 'Coulomb loop (FF|OO)...'
+!print*, 'Coulomb loop (FF|OO)...'
 do iloop=1,nloop
 
    ! batch size
@@ -1223,7 +1239,8 @@ do iloop=1,nloop
 
    ! regular
    call dgemm('T','N',NBasis**2,BatchSize,NCholesky,1d0,FF,NCholesky, &
-              work2,NCholesky,1d0,work1,NBasis**2)
+              work2,NCholesky,0d0,work3,NBasis**2)
+   work1 = work1 + work3
    !! work1 = regular + short-range* 
 
    ! loop over integrals
@@ -1238,6 +1255,7 @@ do iloop=1,nloop
       do j=1,NBasis
          do i=1,NBasis
             ints(i,j) = work1((j-1)*NBasis+i,iBatch)
+            intsFR(i,j) = work3((j-1)*NBasis+i,iBatch)
          enddo
       enddo
 
@@ -1259,20 +1277,23 @@ do iloop=1,nloop
          if(k>INActive) then
             do j=1,INActive
                do i=1,INActive
-                  HNO(i,j) = HNO(i,j) + val*ints(i,j)
+                  HNO(i,j) = HNO(i,j) + val*intsFR(i,j)
+                  !HNO(i,j) = HNO(i,j) + val*ints(i,j)
                enddo
             enddo
          endif
          if(k<=INActive) then
             do j=INActive+1,NOccup
                do i=INActive+1,NOccup
-                  HNO(i,j) = HNO(i,j) + val*ints(i,j)
+                  HNO(i,j) = HNO(i,j) + val*intsFR(i,j)
+                  !HNO(i,j) = HNO(i,j) + val*ints(i,j)
                enddo
             enddo
          endif
          do j=NOccup+1,NBasis
             do i=NOccup+1,NBasis
-               HNO(i,j) = HNO(i,j) + val*ints(i,j)
+               HNO(i,j) = HNO(i,j) + val*intsFR(i,j)
+               !HNO(i,j) = HNO(i,j) + val*ints(i,j)
             enddo
          enddo
 
@@ -1482,15 +1503,20 @@ enddo
 deallocate(work4,Work2,work1)
 deallocate(work6,work8)
 deallocate(ints)
+deallocate(intsFR)
 
-Print*, 'from JK_SR_Chol_loop'
-Print*, 'ABPLUS-after JK',norm2(ABPLUS)
-Print*, 'ABMIN -after JK',norm2(ABMIN)
+!Print*, 'from JK_SR_Chol_loop'
+!Print*, 'ABPLUS-after JK',norm2(ABPLUS)
+!Print*, 'ABMIN -after JK',norm2(ABMIN)
 
 deallocate(FF,FFErf)
 deallocate(FFTr,FFErfTr)
 
-!stop "JK_SR_Chol_loop"
+!print*, 'HNO   on exit  =',norm2(HNO)
+!print*, 'WMAT  on exit  =',norm2(WMAT)
+!print*, '2*WMA on exit  =',2d0*norm2(WMAT)
+!print*, 'AuxI  on exit  =',norm2(AuxI)
+!print*, 'AuxIO on exit  =',norm2(AuxIO)
 
 end subroutine JK_SR_Chol_loop
 

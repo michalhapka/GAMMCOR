@@ -3824,6 +3824,7 @@ C
      $ RDM2Act,NRDM2Act,IGFact,C,Ind1,Ind2,
      $ IndBlock,NoEig,NDimX,NBasis,NInte1,NInte2)
 C
+c     use tran
 C     COMPUTE THE ALPHA-DEPENDENT PARTS OF A+B AND A-B MATRICES
 C
 C     RDM2 IS IN NO REPRESENTATION. IT IS PARTIALLY SPIN-SUMMED
@@ -3854,6 +3855,18 @@ C
       ABPLUS(I)=Zero
       ABMIN(I)=Zero
       EndDo
+C
+c     IHNO1=1
+c     print*, 'set IHNO1=1 in AB1_CAS!'
+c     IHNO1=0
+
+      If(IHNO1.Eq.1) Then
+C
+C     XOne contains 1st-order one-electron hamiltonian
+C
+      HNO=XOne
+C
+      Else
 C
 C     ONE-ELECTRON MATRIX IN A NO REPRESENTATION
 C   
@@ -3896,6 +3909,15 @@ C
 C
       EndDo
       EndDo
+C
+      EndIf !IHNO1
+C
+C      block
+CC     ... check HNO
+C      double precision :: HNOsq(NBasis,NBasis)
+C      call triang_to_sq2(HNO,HNOsq,NBasis)
+C      print*, 'HNO on entry =',norm2(HNOsq)
+C      end block
 C
       NAct=NAcCAS
       INActive=NInAcCAS
@@ -3949,6 +3971,16 @@ C
       EndDo
       EndDo
       EndDo
+C
+Cc     ...mh test
+C      Print*, 'WMAT on exit   = ',norm2(WMAT)
+C      block
+C      double precision :: tmp(NBasis,NBasis)
+C      call triang_to_sq2(AuxI,tmp,NBasis)
+C      print*, 'AuxI  on exit  =',norm2(tmp)
+C      call triang_to_sq2(AuxIO,tmp,NBasis)
+C      print*, 'AuxIO on exit  =',norm2(tmp)
+C      end block
 C
       icount=0
       Call CPU_TIME(START_TIME)

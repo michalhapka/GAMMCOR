@@ -601,9 +601,9 @@ end associate
 call AB_CAS_FOFO(ABPLUS,ABMIN,val,URe,Occ,XOne,&
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
               NInte1,IntJFile,IntKFile,ICholesky,IDBBSC,1d0,.true.)
-      print*,'after AB_CAS_FOFO-my'
-      print*, 'ABPLUS-mu =',norm2(ABPLUS)
-      print*, 'ABMIN -mu =',norm2(ABMIN)
+
+      print*, 'ABPLUS =',norm2(ABPLUS)
+      print*, 'ABMIN  =',norm2(ABMIN)
 
 !call gclock('AB(1)',Tcpu,Twall)
 
@@ -937,9 +937,9 @@ elseif(ICholesky==1) then
                     Aux = Crs*Cpq*ABPLUS(ipq,irs)
                     EAll = EAll + Aux*ints(j,i)
 
-                    !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
+                    if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
                     ! I think it should be SR here!
-                    if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*intsSR(j,i)
+                    !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*intsSR(j,i)
 
                   endif
                enddo
@@ -961,6 +961,7 @@ elseif(ICholesky==1) then
    endif ! IDBBSC
 endif ! ICholesky
 
+print*, 'EAll,Einta',EAll,Eintra
 ECorr = EAll - EIntra
 
 deallocate(ints)

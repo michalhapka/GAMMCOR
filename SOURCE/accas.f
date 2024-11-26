@@ -181,7 +181,7 @@ C
 C this is a version of AC0 with CBS basis set corrections (SR integrals are required)
 C
       Call DBBSCH(ETot,ENuc,URe,Occ,XOne,UNOAO,
-     $   NBasis,NInte1,IndN,IndX,NDimX)
+     $   BasisSet,NBasis,NInte1,IndN,IndX,NDimX)
 
       Call delfile('cholvecs')
       Call delfile('cholvErf')
@@ -208,7 +208,8 @@ c      stop
       EndIf
 C
       If (IDBBSC.Eq.1) Then
-      Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,BasisSet,
+     $                     NBasis)
       EndIf
 C
       EndIf
@@ -1145,7 +1146,21 @@ C
 C
       ElseIf(ITWoEl.Eq.1) Then
 C
+      Print*, "XOne before(NInte1) = ", norm2(XOne)
+C
       If (IDBBSC.Eq.1) Then
+C
+C     ... testing...
+C      Print*, "       VSR (NInte1) = ", norm2(VSR)
+C      block
+C      double precision :: VHsr(NBasis,NBasis)
+C      Print*, 'VSR  ='
+C      call triang_to_sq2(VSR,VHsr,NBasis)
+C      call tranMO2AO('N',VHsr,transpose(UNOAO),NBasis)
+C      do j=1,NBasis
+C         write(6,'(*(f13.8))') (VHsr(i,j),i=1,NBasis)
+C      enddo
+C      end block
 C
       Do I=1,NInte1
       XOne(I)=XOne(I)-VSR(I)
@@ -1512,6 +1527,7 @@ C
 C     A ROUTINE FOR COMPUTING AC INTEGRAND
 C
       use timing
+c      use tran ! for HNO etc. checks
 C      use abmat
 C
       Implicit Real*8 (A-H,O-Z)
@@ -2128,11 +2144,19 @@ C
       EndDo
       EndDo
 C
+C
 C     COMPUTE SR INTEGRALS
 C
       TwoEl2=TwoNO-TwoEl2
 C
 C     ADD MODIFIED SR INTEGRALS TO FULL-COULOMB INTEGRALS
+C     XmuMat=0d0
+C     Do I=1,NBasis
+C      XMuMat(I,I)=1d0
+C     EndDo
+C     print*, 'Use FR+SR not SR*!',norm2(XMuMat)
+      XmuMat=0d0
+      print*, 'Use FR only!',norm2(XMuMat)
 c
       NAddr=0
 C
@@ -2180,12 +2204,18 @@ C
 c uncomment to include in-active contribution to the CBS correction (see above)
 c      IGFact=0
 c comment out to include in-active contribution to the CBS correction (see above)
-      IHNO1=0
+c     IHNO1=0
 C
       EndIf
   999 continue
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 C
+c      block
+c      double precision :: XOneSq(NBasis,NBasis)
+c      call triang_to_sq2(XOne,XOneSq,NBasis)
+c      Print*, 'HNO with FR ints =',norm2(XOneSq)
+c      end block
+      Print*, 'IHNO1 before AB1_CAS = ', IHNO1
       Call AB1_CAS(ABPLUS,ABMIN,URe,Occ,XOne,TwoNO,
      $ RDM2Act,NRDM2Act,IGFact,C,Ind1,Ind2,
      $ IndBlock,NoEig,NDimX,NBasis,NInte1,NInte2)
@@ -2433,6 +2463,8 @@ C
       EndDo
 C
 C     FINALLY THE ENERGY CORRECTION
+C
+      Print*, 'ABPLUS-energy corr=',norm2(ABPLUS)
 C
       EAll=Zero
       EIntra=Zero

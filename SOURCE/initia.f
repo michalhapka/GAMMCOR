@@ -1776,10 +1776,10 @@ Cc     Call chol_CoulombMatrix(CholeskyVecs,'AOTWOSORT',ICholeskyAccu)
 
       If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4.Or.IDBBSC.Eq.2) Then
 C     generate LR-Cholesky integrals
-      Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
+      Write(LOUT,'(/1x,3a6)') ('*******',i=1,3)
       Write(lout,'(1x,a)') 'Cholesky LR Binary'
-      Write(lout,'(2x,a,f14.8)') 'MU = ',Alpha
-      Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
+      Write(lout,'(2x,a,f12.6)') 'MU = ',Alpha
+      Write(LOUT,'(/1x,3a6)') ('*******',i=1,3)
        Call chol_CoulombMatrix(CholErfVecs,NBasis,'AOTWOINT.erf',2,
      &                         ICholeskyAccu)
        NCholErf=CholErfVecs%NCholesky
@@ -1788,9 +1788,9 @@ C     generate LR-Cholesky integrals
 C     compute Cholesky vectors OTF
       ElseIf(ICholeskyOTF==1) Then
 
-      Write(LOUT,'(/1x,3a6)') ('******',i=1,3)
+      Write(LOUT,'(/1x,3a6)') ('*******',i=1,3)
       Write(LOUT,'(1x,a)') 'Cholesky On-The-Fly'
-      Write(LOUT,'(1x,3a6)') ('******',i=1,3)
+      Write(LOUT,'(1x,3a6)') ('*******',i=1,3)
 
       Call auto2e_init()
 
@@ -1812,11 +1812,11 @@ C     Note: full-range vectors are used to construct sr Coulomb
 C           and for sr kernel (optional)
       If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4.Or.IDBBSC.Eq.2) Then
 
-      Write(lout,'(/1x,3a6)') ('******',i=1,3)
+      Write(lout,'(/1x,3a6)') ('*******',i=1,3)
       Write(lout,'(1x,a)') 'Cholesky LR On-The-Fly'
       !Alpha=1d4 !test LR=FULL-RANGE
       Write(lout,'(2x,a,f14.8)') 'MU = ',Alpha
-      Write(lout,'(1x,3a6)') ('******',i=1,3)
+      Write(lout,'(1x,3a6)') ('*******',i=1,3)
 
       Call CholeskyOTF_ao_vecs(CholErfVecsOTF,AOBasis,System,IUnits,
      $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu,
@@ -2168,7 +2168,7 @@ C     $                          MemType,MemVal,NInte1,NBasis,
 C     $                          JMO,KMO)
 C
 c          Monomer = 3 ! SYS_TOTAL in System
-           Print*, 'Monomer =',Monomer
+c          Print*, 'Monomer =',Monomer
 c          IH0Test=0
 c          Print*, 'IH0Test =',IH0Test
            Call CholeskyOTF_Fock_MO_v2(work1,CholeskyVecsOTF,
@@ -2534,8 +2534,6 @@ C
 C
       If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4.Or.IDBBSC.Eq.2) Then
 c
-      print*, 'IFunSRKer =', IFunSRKer
-C
       If (ICholesky==0) Then
       Call tran4_gen(NBasis,
      $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),

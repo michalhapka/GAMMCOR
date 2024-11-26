@@ -36,8 +36,15 @@ C
 C
       double precision :: Tcpu,Twall
 
-      Print*, 'Entering DBBSCH subroutine...'
+      If (ITwoEl.eq.1) then
+         stop "DBBSCH not ready with INCORE!"
 
+        ! Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
+        ! Print*, 'LOC_MU_CBS, XMuMat =',norm2(XMuMAT)
+ 
+      ElseIf (ITwoEl.eq.3.and.ICholesky.ne.0) Then
+
+C
 C     Compute local mu(r): XMuMat(p,q) = <p|mu(r)|q>
       Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,
      $                     BasisSet,NBasis)
@@ -122,11 +129,13 @@ C     save to disk
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDimX,NInte1,
      $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
 
-      print*, 'ABPLUS-my =',norm2(ABPLUS)
-      print*, 'ABMIN -my =',norm2(ABMIN)
+      EndIf ! ITwoEl
+
+c     print*, 'ABPLUS-my =',norm2(ABPLUS)
+c     print*, 'ABMIN -my =',norm2(ABMIN)
 
       Write
-     $ (6,'(1X,''CASSCF+ENuc, AC0-CBS, Total'',6X,3F15.8)')
+     $ (6,'(/1X,''CASSCF+ENuc, AC0-CBS, Total'',6X,3F15.8)')
      $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
        ETot=ECASSCF+ENuc+ECorr
 
@@ -213,8 +222,9 @@ C      Pi = dacos(-1.d0)
 C      SPi = SQRT(Pi)
 C      Prefac = SQRT(3.1415)/Two ! SPi/Two
 C
-      Write(6,'(/,1X,"************** ",
-     $ " CBS Correction with local Mu ")')
+      Write(lout,'(/1x,3a6)') ('******',i=1,3)
+      Write(lout,'(1x,a)') "CBS Correction with local Mu"
+      Write(lout,'(1x,3a6)') ('******',i=1,3)
 C
       If (InternalGrid==0) then
 C
@@ -255,9 +265,9 @@ C        Call dalton_grid_coord(NGrid,RR,griddalfile)
       EndIf !Molpro/Dalton grid
 c
       ElseIf (InternalGrid==1) then
-         Write(6,'(1x,a,i3)') 'IFunSR       =',IFunSR
-         Write(6,'(1x,a,i3)') 'IGridType    =', IGridType
-         Write(6,'(1x,a,i3)') 'ORB_ORDERING =', IOrbOrder
+c        Write(6,'(1x,a,i3)') 'IFunSR       =',IFunSR
+c        Write(6,'(1x,a,i3)') 'IGridType    =', IGridType
+c        Write(6,'(1x,a,i3)') 'ORB_ORDERING =', IOrbOrder
 C
          Call internal_gga_no_orbgrid(IGridType,BasisSet,
      $                          IOrbOrder,transpose(UNOAO),
@@ -268,18 +278,20 @@ C
          OrbZGrid => PhiGGA(:,:,4)
 C
       EndIf ! InternalGrid
-      print*, ''
-      print*, 'NGrid    = ', NGrid
-      print*, 'WGrid    = ', norm2(Wgrid)
-      print*, 'OrbGrid  = ', norm2(OrbGrid)
-      print*, 'OrbXGrid = ', norm2(OrbXGrid)
-      print*, 'OrbYGrid = ', norm2(OrbYGrid)
-      print*, 'OrbZGrid = ', norm2(OrbZGrid)
-      print*, ''
-
+C
+c      print*, ''
+c      print*, 'NGrid    = ', NGrid
+c      print*, 'WGrid    = ', norm2(Wgrid)
+c      print*, 'OrbGrid  = ', norm2(OrbGrid)
+c      print*, 'OrbXGrid = ', norm2(OrbXGrid)
+c      print*, 'OrbYGrid = ', norm2(OrbYGrid)
+c      print*, 'OrbZGrid = ', norm2(OrbZGrid)
+c      print*, ''
+C
 C     ... symmetry
       If (InternalGrid==1) Then
 C     ... internal grid does not use symmetry
+c        write(lout,'(/1x,a)') "Internal grid does not use symmetry!"
          NSym=1
          MxSym=1
          NumOSym(1)=NBasis
@@ -293,8 +305,8 @@ C     ... internal grid does not use symmetry
       EndIf
 C
 C     ...test prints
-      print*, 'NSym    =', NSym
-      print*, 'NumOSym =', NumOSym(1:MxSym)
+c     print*, 'NSym    =', NSym
+c     print*, 'NumOSym =', NumOSym(1:MxSym)
 C
 C      print*, 'UNOSAO orbitals:',norm2(UNOAO)
 C      do j=1,NBasis
@@ -314,10 +326,10 @@ C
       IStart=IStart+NumOSym(I)
       EndDo
 
-      Do IOrb=1,NBasis
-      Print*, 'I,NSymNO = ',IOrb,NSymNO(IOrb)
-      EndDo
-      Print*, ''
+C      Do IOrb=1,NBasis
+C      Print*, 'I,NSymNO = ',IOrb,NSymNO(IOrb)
+C      EndDo
+C      Print*, ''
 C
 C     check...
       Do I=1,MxSym
@@ -395,7 +407,6 @@ C
       Allocate(WorkD(NCholesky,NBasis**2))
       read(iunit) WorkD
       close(iunit)
-      print*,'NCholesky',NCholesky
 C
 C     truncate CHOLVECS
 C
@@ -561,7 +572,7 @@ C
       EndIf
 C
       EndDo ! NGrid
-      print*, 'NGrid',NGRid
+C
       Print*, 'OnTop', norm2(OnTop)
       print*, 'XMuLoc',norm2(XMuLoc)
 C

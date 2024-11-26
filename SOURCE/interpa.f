@@ -279,8 +279,8 @@ C
      $            NActive,NELE,NBasis,NDim,NDimX,NInte1,NGem,
      $            'TWOMO','FFOO','FOFO',0,ACAlpha,1)
 
-      print*, 'ABPLUS-my',norm2(ABPLUS)
-      print*, 'ABMIN -my',norm2(ABMIN)
+c     print*, 'ABPLUS-my',norm2(ABPLUS)
+c     print*, 'ABMIN -my',norm2(ABMIN)
 
       Call EneGVB_FOFO(NActive,NELE,ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'FOFO',NDimX,NGem)
