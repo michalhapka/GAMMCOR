@@ -523,8 +523,10 @@ C
 C     binary Cholesky
       Type(TCholeskyVecs) :: CholeskyVecs
       Real*8, Allocatable :: MatFF(:,:)
+      Real*8, Allocatable :: FFErf(:,:)
 C     on-the-fly Cholesky
       type(TCholeskyVecsOTF) :: CholeskyVecsOTF
+      Type(TCholeskyVecsOTF) :: CholErfVecsOTF
       type(TSystem)          :: System
       type(TAOBasis)         :: AOBasis
       integer :: NA, NB, a0, a1, b0, b1
@@ -838,11 +840,25 @@ C
       Call CholeskyOTF_ao_vecs(CholeskyVecsOTF,AOBasis,System,IUnits,
      $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu)
       Call sys_NuclearRepulsion(ENuc,System)
+
+      If (IDBBSC.Eq.2) Then
+C     generate LR-Cholesky integrals
+      Write(lout,'(/1x,3a6)') ('*******',i=1,3)
+      Write(lout,'(1x,a)') 'Cholesky LR On-The-Fly'
+      !Alpha=1d4 !test LR=FULL-RANGE
+      Write(lout,'(2x,a,f14.8)') 'MU = ',Alpha
+      Write(lout,'(1x,3a6)') ('*******',i=1,3)
+      Call CholeskyOTF_ao_vecs(CholErfVecsOTF,AOBasis,System,IUnits,
+     $            XYZPath,BasisSetPath,SortAngularMomenta,ICholeskyAccu,
+     $            Alpha)
+      NCholErf = CholErfVecsOTF%Chol2Data%NVecs
+C
+      EndIf ! IDBBSC
       end block
 
-      EndIf
+      EndIf ! ICholesky, OTF, BIN
 C
-      EndIf
+      EndIf ! ITwoEl ?
 C
 c     If(IBin.Eq.0)
       EndIf
@@ -1222,6 +1238,15 @@ C      close(iunt)
      $                   AOBasis, ORBITAL_ORDERING_ORCA)
 
       deallocate(CMOAO)
+
+      If (IDBBSC.Eq.2) Then
+      print*, 'IOrbRelax = ',IOrbRelax
+
+      Allocate(FFErf(NCholErf,NBasis**2))
+      Call chol_gammcor_Rkab(FFErf,UAONO,1,NBasis,UAONO,1,NBasis,
+     $                   MemMOTransfMB, CholErfVecsOTF,
+     $                   AOBasis, ORBITAL_ORDERING_ORCA)
+      EndIf ! IDDBSC
 C
       EndIf ! Cholesky BIN/OTF
 C
@@ -1258,7 +1283,16 @@ C
       close(iunt)
 
       Deallocate(MatFF)
-      EndIf
+
+      If (IDBBSC.Eq.2) Then
+C     dump LR integrals
+      open(newunit=iunt,file='cholvErf',form='unformatted')
+      write(iunt) NCholErf
+      write(iunt) FFErf
+      close(iunt)
+      EndIf ! IDBBSC
+C
+      EndIf ! ICholesky
 CC
       EndIf
 C

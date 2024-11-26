@@ -135,7 +135,7 @@ c     print*, 'ABPLUS-my =',norm2(ABPLUS)
 c     print*, 'ABMIN -my =',norm2(ABMIN)
 
       Write
-     $ (6,'(/1X,''CASSCF+ENuc, AC0-CBS, Total'',6X,3F15.8)')
+     $ (6,'(/1X,''CASSCF+ENuc, AC0-CBS[H], Total'',6X,3F15.8)')
      $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
        ETot=ECASSCF+ENuc+ECorr
 
@@ -222,9 +222,9 @@ C      Pi = dacos(-1.d0)
 C      SPi = SQRT(Pi)
 C      Prefac = SQRT(3.1415)/Two ! SPi/Two
 C
-      Write(lout,'(/1x,3a6)') ('******',i=1,3)
+      Write(lout,'(/1x,5a6)') ('******',i=1,5)
       Write(lout,'(1x,a)') "CBS Correction with local Mu"
-      Write(lout,'(1x,3a6)') ('******',i=1,3)
+      Write(lout,'(1x,5a6)') ('******',i=1,5)
 C
       If (InternalGrid==0) then
 C
@@ -363,12 +363,18 @@ C
       Ind2(INActive+I)=I
       EndDo
 C
+C     ... more test prints
+C      print*, 'NAct    =', NAct
+C      print*, 'INActive=', INActive
+C      print*, 'NOccup  =', NOccup
+C      print*, 'ICore   =', ICore
+C
       if (IFlCore.Eq.0) Then
          INActiveC=INactive-ICore ! skip core within inactive
       else
          INActiveC = INActive
       endif
-C     PRint*, 'INActiveC =', INActiveC
+c     PRint*, 'INActiveC =', INActiveC
 C
       NRDM2Act = NAct**2*(NAct**2+1)/2
       Allocate (RDM2Act(NRDM2Act))
@@ -421,6 +427,7 @@ C
             EndDo
          EndDo
       EndDo
+      If (INActiveC.Gt.0) Then
       Allocate (CHVCSIF(NCholesky,INActiveC*NBasis))
       ! use WorkD instead?
       Do K=1,NCholesky
@@ -433,18 +440,19 @@ C
             EndDo
          EndDo
       EndDo
+      EndIf !INActive.gt.0
 
       Deallocate(WorkD)
 C
 C     COMPUTE f(r)
 C
       Allocate (FPsiB(NGrid))
+      Allocate (OrbGridP(NAct))
       Allocate (Q(NAct,NAct))
       Allocate (Oa(NCholesky,NAct))
-      Allocate (Oi(NCholesky,INActiveC))
       Allocate (Oaa(NAct,NAct))
       Allocate (tOi(NCholesky),tOa(NCholesky))
-      Allocate (OrbGridP(NAct))
+      if (INActiveC.gt.0) Allocate (Oi(NCholesky,INActiveC))
 c
 C     Allocate (Oii(INActive,INActive))
 c     Allocate (OOai(NAct,INActive))
@@ -486,6 +494,7 @@ C
 c     print*, '1st FPsiB =', IG, FPsiB(IG)
 C
 c     If(IFlCore.Ne.0) Then
+      If (INActiveC.Gt.0) Then
 C
 C     inactive-inactive
 C
@@ -529,10 +538,12 @@ C     ver2 : NChol*NOccup scaling
 C
 C     If(IFlCore.Ne.0)
 c     EndIf
+      EndIf ! INActiveC.Gt.0
 C
       EndDo ! IG=1,NGrid
 C
-      Deallocate(CHVCSIF,CHVCSAF)
+      Deallocate(CHVCSAF)
+      If (INActiveC.Gt.0) Deallocate(CHVCSIF)
 C
       FPsiB = 2d0*FPsiB
       If (IIPRINT.GT.1) Print*, 'Total FPsiB =', norm2(FPsiB)
