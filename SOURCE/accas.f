@@ -207,9 +207,8 @@ c      stop
       call gclock('LOC_MU_CHOL_v2',Tcpu,Twall)
       EndIf
 C
-      If (IDBBSC.Eq.1) Then
-      Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,BasisSet,
-     $                     NBasis)
+      If (IDBBSC.Eq.1.And.ITwoEl.Eq.1) Then
+      Call LOC_MU_CBS(XMuMat,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
       EndIf
 C
       EndIf

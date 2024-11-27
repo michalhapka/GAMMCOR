@@ -46,7 +46,7 @@ C
 C     Compute local mu(r): XMuMat(p,q) = <p|mu(r)|q>
       Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,
      $                     BasisSet,NBasis)
-      Print*, 'LOC_MU_CBS_CHOL: XMuMat = ',norm2(XMuMat)
+c     Print*, 'LOC_MU_CBS_CHOL: XMuMat = ',norm2(XMuMat)
 C
 C     ... test : recover AC0!
 c      XMuMat=0d0
