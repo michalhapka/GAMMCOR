@@ -34,11 +34,28 @@ C
       Integer Points
       real*8 :: XMuMat(NBasis,NBasis)
 C
+C     analysis of AC
+      Dimension ECorrIJ(6,6),ECorrIJA(6,6),IGIJ(4,4),IGemNo(6,2)
+C
       Double precision,Allocatable :: WorkVec(:),WorkEig(:),MYAP(:) 
 C
       real*8, dimension(:), allocatable :: ABPLUS_tmp, ABMIN_tmp
       real*8, dimension(:), allocatable :: EigVecR_tmp, Eig_tmp
-
+      real*8, dimension(:,:), allocatable :: ECorrIJA_tmp
+      Real*8, Dimension(:), Allocatable :: TwoEl2,TwoAux
+C
+      ECorrIJ=0.0d0
+      NGem=MAXVAL(IGem)
+      IJ=0
+      Do I=1,NGem
+      Do J=1,I
+      IJ=IJ+1
+      IGIJ(I,J)=IJ
+      IGIJ(J,I)=IJ
+      IGemNo(IJ,1)=I
+      IGemNo(IJ,2)=J
+      EndDo
+      EndDo
 C
       If(IFlSnd.Eq.1) Then
 C
@@ -4005,8 +4022,10 @@ C
       IQQ=IndBlock(2,ICol)
 C
       If( .NOT.(IGem(IR).Eq.IGem(IS).And.IGem(IR).Eq.IGem(IPP)
-     $ .And.IGem(IR).Eq.IGem(IQQ)) ) Then
-CC
+     $ .And.IGem(IR).Eq.IGem(IQQ))
+     $ .Or.IHNO1.Eq.1
+     $  ) Then
+C
       If( (Occ(IR)*Occ(IS).Eq.Zero.And.Occ(IPP)*Occ(IQQ).Eq.Zero
      $ .And.Abs(TwoNO(NAddr3(IR,IS,IPP,IQQ))).Lt.1.D-25)
      $.Or.
@@ -7593,6 +7612,11 @@ C
 C
       Write(6,'(1X,A,3f12.8,/)') 'Total Dipole Moment     ',
      $                            NUC_DMX+DM_X,NUC_DMY+DM_Y,NUC_DMZ+DM_Z
+C
+      DXYZ=SQRT((NUC_DMX+DM_X)**2+(NUC_DMY+DM_Y)**2+(NUC_DMZ+DM_Z)**2)
+C
+      Write(6,'(1X,A,2f12.8,/)') '|dipole moment| a.u./D', DXYZ,
+     $ DXYZ/0.393456
 
       Deallocate(XYZ,Charg)
       Return

@@ -1789,11 +1789,23 @@ C     memory allocation for sorter
       MemSrtSize=MemVal*1024_8**MemType
 C     KP: If IFunSR=6 integrals are not needed and are not loaded
       If (IFunSR.Eq.0.Or.IFunSR.Eq.3.Or.IFunSR.Eq.5) Then
-         Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
-         If(ITwoEl.Eq.1) Call LoadSaptTwoEl(3,TwoEl,NBasis,NInte2)
-      ElseIf(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4) Then
-         Call readtwoint(NBasis,2,'AOTWOINT.erf','AOERFSORT',MemSrtSize)
-         If(ITwoEl.Eq.1) Call LoadSaptTwoEl(4,TwoEl,NBasis,NInte2)
+        Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
+        If(ITwoEl.Eq.1) Call LoadSaptTwoEl(3,TwoEl,NBasis,NInte2)
+c KP 23.11.2024
+c      ElseIf(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4) Then
+c      Call readtwoint(NBasis,2,'AOTWOINT.erf','AOERFSORT',MemSrtSize)
+c      If(ITwoEl.Eq.1) Call LoadSaptTwoEl(4,TwoEl,NBasis,NInte2)
+
+      ElseIf((IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4).
+     $ And.(IDBBSC.Eq.0)) Then
+      Call readtwoint(NBasis,2,'AOTWOINT.erf','AOERFSORT',MemSrtSize)
+      If(ITwoEl.Eq.1) Call LoadSaptTwoEl(4,TwoEl,NBasis,NInte2)
+C
+C     this case is run if CBS[H] is computed for AC0 and incore
+      ElseIf(IFunSR.Eq.4.And.IDBBSC.Eq.2.And.ITwoEl.Eq.1) Then
+      Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
+      Call LoadSaptTwoEl(3,TwoEl,NBasis,NInte2)
+C
       EndIf
 C
 C     compute Cholesky vectors from binary file
@@ -1806,7 +1818,7 @@ c     If(ICholeskyBIN==1) Then
 Cc     Call chol_CoulombMatrix(CholeskyVecs,'AOTWOSORT',ICholeskyAccu)
        Call chol_CoulombMatrix(CholeskyVecs,NBasis,'AOTWOINT.mol',2,
      &                         ICholeskyAccu)
-       NCholesky=CholeskyVecs%NCholesky
+      NCholesky=CholeskyVecs%NCholesky
 
       If(IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4.Or.IDBBSC.Eq.2) Then
 C     generate LR-Cholesky integrals
@@ -2220,8 +2232,16 @@ C
       ElseIf (IFunSR.Eq.1.Or.IFunSR.Eq.2.Or.IFunSR.Eq.4) Then
 C
           If(ICholesky==0) Then
-             Call FockGen_mithap(FockF,GammaAB,XKin,NInte1,NBasis,
+C KP 23.11.2024
+C            Call FockGen_mithap(FockF,GammaAB,XKin,NInte1,NBasis,
+C    &                           'AOERFSORT')
+            If (IDBBSC.Eq.0)
+     &            Call FockGen_mithap(FockF,GammaAB,XKin,NInte1,NBasis,
      &                           'AOERFSORT')
+C     this case is run if CBS[H] is computed for AC0 and incore
+            If (IFunSR.Eq.4.And.IDBBSC.Eq.2.And.ITwoEl.Eq.1)
+     &            Call FockGen_mithap(FockF,GammaAB,XKin,NInte1,NBasis,
+     &                           'AOTWOSORT')
           ElseIf(ICholesky==1.and.ICholeskyOTF==1) Then
 C
 C          obtain long-range Fmat and short-range Jmat

@@ -951,15 +951,25 @@ C      FName(K:K+10)='.reg.integ'
 C      Call Int2_AO(TwoEl2,NumOSym,MultpC,FName,NInte1,NInte2,NBasis)
       MemSrtSize=MemVal*1024_8**MemType
       If (ICholesky==0) Then
+c     this case is run if CBS[H] is computed for AC0 and incore
+      If (IDBBSC.Eq.2.And.ITwoEl.Eq.1) Then
+      Call readtwoint(NBasis,2,'AOTWOINT.erf','AOERFSORT',MemSrtSize)
+      Call LoadSaptTwoEl(4,TwoEl2,NBasis,NInte2)
+      Else ! regular LR-AC0 calculation
       If (IMOLPRO==1) Then
          Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
       ElseIf (IDALTON==1) Then
          Call readtwoint(NBasis,1,'AOTWOINT','AOTWOSORT',MemSrtSize)
       EndIf
       If(ITwoEl.Eq.1) Call LoadSaptTwoEl(3,TwoEl2,NBasis,NInte2)
+      EndIf
 C
       If(ITwoEl.Eq.1) Then
+      If(IDBBSC.Eq.2) Then
+      Write(6,'(" Transforming two-electron erf integrals ...")')
+      Else
       Write(6,'(" Transforming full two-electron integrals ...")')
+      EndIf
       Call TwoNO1(TwoEl2,UNOAO,NBasis,NInte2)
 C
       ElseIf(ITwoEl.Eq.3) Then
@@ -1144,33 +1154,20 @@ C
      $ NGrid,NDimX,NBasis,NDimX,NInte1,NoSt,
      $ 'FOFO','FFOOERF','FOFOERF',ICholesky,0,IFunSRKer,ECASSCF,ECorr)
 C
-      ElseIf(ITWoEl.Eq.1) Then
+      ElseIf(ITwoEl.Eq.1) Then
 C
-      Print*, "XOne before(NInte1) = ", norm2(XOne)
+      If (IDBBSC.Eq.2) Then
 C
-      If (IDBBSC.Eq.1) Then
-C
-C     ... testing...
-C      Print*, "       VSR (NInte1) = ", norm2(VSR)
-C      block
-C      double precision :: VHsr(NBasis,NBasis)
-C      Print*, 'VSR  ='
-C      call triang_to_sq2(VSR,VHsr,NBasis)
-C      call tranMO2AO('N',VHsr,transpose(UNOAO),NBasis)
-C      do j=1,NBasis
-C         write(6,'(*(f13.8))') (VHsr(i,j),i=1,NBasis)
-C      enddo
-C      end block
-C
-      Do I=1,NInte1
-      XOne(I)=XOne(I)-VSR(I)
-      EndDo
-      Call AC0CASLR(ECorr,ECASSCF,TwoEl2,Occ,URe,UNOAO,XOne,
+c KP 23.11.2024
+c if CBS[H] is computed: XOne contains h0 without vrs
+c                        TwoNO contains 1/r integrals, TwoEl2: erf/r
+      Call AC0CASLR(ECorr,ECASSCF,TwoNO,Occ,URe,UNOAO,XOne,
      $ ABPLUS,ABMIN,EigVecR,Eig,
      $ IndN,IndX,NDimX,NBasis,NDim,NInte1,NInte2,
-     $ TwoNO,OrbGrid,Work,NSymNO,MultpC,NGrid)
+     $ TwoEl2,OrbGrid,Work,NSymNO,MultpC,NGrid)
+
       Write
-     $ (6,'(1X,''CASSCF+ENuc, AC0-CBS, Total'',6X,3F15.8)')
+     $ (6,'(1X,''CASSCF+ENuc, AC0-CBS[H], Total'',6X,3F15.8)')
      $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
 C
       Return
@@ -1527,7 +1524,6 @@ C
 C     A ROUTINE FOR COMPUTING AC INTEGRAND
 C
       use timing
-c      use tran ! for HNO etc. checks
 C      use abmat
 C
       Implicit Real*8 (A-H,O-Z)
@@ -1559,7 +1555,23 @@ C
      $ AuxI(NInte1),AuxIO(NInte1),IPair(NBasis,NBasis),
      $ EigX(NDimX*NDimX),
      $ IEigAddY(2,NDimX),IEigAddInd(2,NDimX),IndBlock(2,NDimX),
-     $ XMAux(NDimX*NDimX),XMuMAT(NBasis,NBasis)
+     $ XMAux(NDimX*NDimX),XMuMAT(NBasis,NBasis),work1(NBasis,NBasis)
+! analysis of AC0
+       double precision :: ECorrIJ(6,6)
+       integer          :: IGIJ(4,4),IGemNo(6,2)
+C
+      NGem=MAXVAL(IGem)
+      ECorrIJ=0.0d0
+      IJ=0
+      Do I=1,NGem
+         Do J=1,I
+            IJ=IJ+1
+            IGIJ(I,J)=IJ
+            IGIJ(J,I)=IJ
+            IGemNo(IJ,1)=I
+            IGemNo(IJ,2)=J
+        EndDo
+      EndDo
 C
       IPair(1:NBasis,1:NBasis)=0
       Do II=1,NDimX
@@ -2062,6 +2074,18 @@ C     Do IP
 C
 C     FIND THE 0TH-ORDER SOLUTION FOR THE VIRTUAL-INACTIVE BLOCKS
 C
+      if(idalton.eq.0) then
+      open(10,file='fock.dat')
+      work1=0
+      Do IP=NOccup+1,NBasis
+      Do IQ=1,INActive
+      read(10,*)iip,iiq,xx
+      work1(iip,iiq)=xx
+      EndDo
+      EndDo
+      close(10)
+      endif
+C
       Do IP=NOccup+1,NBasis
       Do IQ=1,INActive
 C
@@ -2083,6 +2107,12 @@ C
      $ NInte1,NInte2,NBasis)
 C
       Eig(NFree1)=ABP
+C
+      If(IDALTON.Eq.0) Then
+      If(ABS(ABP-work1(IP,IQ)).Gt.1.d-7)
+     $Write(*,*)'ABP inconsistent with eps_a-eps_i for',IP,IQ
+      EndIf
+C
       EigY(NFree2)=One/Sqrt(Two)
       EigX(NFree2)=One/Sqrt(Two)
 C
@@ -2110,10 +2140,6 @@ C
 C     MODIFY integrals with 1/r TO ACCOUNT FOR CBS CORRECTION
 C
       Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
-      Print*, 'LOC_MU_CBS, XMuMat =',norm2(XMuMAT)
-      Do I=1,NBasis
-         Print*, 'I=',I,XMuMat(I,1)
-      Enddo
 c      goto 999
 C
 C     COMPUTE 1st-ORDER ONE-ELECTRON HAMILTONIAN (USING 1/r INTEGRALS)
@@ -2144,20 +2170,12 @@ C
       EndDo
       EndDo
 C
-C
 C     COMPUTE SR INTEGRALS
 C
       TwoEl2=TwoNO-TwoEl2
 C
 C     ADD MODIFIED SR INTEGRALS TO FULL-COULOMB INTEGRALS
-C     XmuMat=0d0
-C     Do I=1,NBasis
-C      XMuMat(I,I)=1d0
-C     EndDo
-C     print*, 'Use FR+SR not SR*!',norm2(XMuMat)
-      XmuMat=0d0
-      print*, 'Use FR only!',norm2(XMuMat)
-c
+C
       NAddr=0
 C
       IPR=0
@@ -2204,18 +2222,12 @@ C
 c uncomment to include in-active contribution to the CBS correction (see above)
 c      IGFact=0
 c comment out to include in-active contribution to the CBS correction (see above)
-c     IHNO1=0
+      IHNO1=0
 C
       EndIf
   999 continue
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 C
-c      block
-c      double precision :: XOneSq(NBasis,NBasis)
-c      call triang_to_sq2(XOne,XOneSq,NBasis)
-c      Print*, 'HNO with FR ints =',norm2(XOneSq)
-c      end block
-      Print*, 'IHNO1 before AB1_CAS = ', IHNO1
       Call AB1_CAS(ABPLUS,ABMIN,URe,Occ,XOne,TwoNO,
      $ RDM2Act,NRDM2Act,IGFact,C,Ind1,Ind2,
      $ IndBlock,NoEig,NDimX,NBasis,NInte1,NInte2)
@@ -2490,6 +2502,10 @@ C
      $ And.IGem(IP).Eq.IGem(IQ))
      $ EIntra=EIntra+Aux*TwoNO(NAddr3(IP,IR,IQ,IS))
 C
+      ECorrIJ(IGIJ(IGem(IP),IGem(IR)),IGIJ(IGem(IQ),IGem(IS)))= 
+     $ ECorrIJ(IGIJ(IGem(IP),IGem(IR)),IGIJ(IGem(IQ),IGem(IS)))
+     $              +Aux*TwoNO(NAddr3(IP,IR,IQ,IS))
+C
 C     endinf of If(IP.Gt.IR.And.IQ.Gt.IS)
       EndIf
 C
@@ -2499,6 +2515,63 @@ C
       Print*, "EAll EIntra", EAll,EIntra
 C
       ECorr=EAll-EIntra
+C
+!PRINT CONTRIBUTIONS TO ECorr FROM BLOCKS
+      Write(6,'(/,X,
+     $ "Contributions to AC0 from (Mu)(Nu) pairs of blocks")')
+      IJ=0
+      Do I=1,NGem
+      Do J=1,I
+      IJ=IJ+1
+! NGem=3 case
+       If(NGem.Eq.3) Then
+       IOO=0
+       If(IGemNo(IJ,1).Eq.1.And.IGemNo(IJ,2).Eq.1) IOO=1
+       IVV=0
+       If(IGemNo(IJ,1).Eq.3.And.IGemNo(IJ,2).Eq.3) IVV=1
+       IAA1=0
+       If(IGemNo(IJ,1).Eq.2.And.IGemNo(IJ,2).Eq.2) IAA1=1
+! NGem=2 case (zero inactive orbitals)
+       ElseIf(NGem.Eq.2) Then
+       IOO=0
+       IVV=0
+       If(IGemNo(IJ,1).Eq.2.And.IGemNo(IJ,2).Eq.2) IVV=1
+       IAA1=0
+       If(IGemNo(IJ,1).Eq.1.And.IGemNo(IJ,2).Eq.1) IAA1=1
+       EndIf
+
+       If(IVV==0.And.IOO==0) Then
+       KL=0
+       Do K=1,NGem
+       Do L=1,K
+         KL=KL+1
+         If(NGem.Eq.3) Then
+             IOO=0
+             If(IGemNo(KL,1).Eq.1.And.IGemNo(KL,2).Eq.1) IOO=1
+             IVV=0
+             If(IGemNo(KL,1).Eq.3.And.IGemNo(KL,2).Eq.3) IVV=1
+             IAA2=0
+             If(IGemNo(KL,1).Eq.2.And.IGemNo(KL,2).Eq.2) IAA2=1
+         ElseIf(NGem.Eq.2) Then
+             IOO=0
+             IVV=0
+             If(IGemNo(KL,1).Eq.2.And.IGemNo(KL,2).Eq.2) IVV=1
+             IAA2=0
+             If(IGemNo(KL,1).Eq.1.And.IGemNo(KL,2).Eq.1) IAA2=1
+         EndIf
+         If(IVV==0.And.IOO==0.And.IAA1+IAA2.Ne.2) Then
+         If(IJ.Ge.KL) Then
+           EE=ECorrIJ(IJ,KL)
+           If(IJ.Ne.KL)EE=EE+ECorrIJ(KL,IJ)
+           Write(6,'(X,"(",2I1,")","(",2I1,")",F15.8)')
+     $           IGemNo(IJ,1),IGemNo(IJ,2),IGemNo(KL,1),IGemNo(KL,2),EE
+         EndIf
+         EndIf
+      EndDo
+      EndDo
+      EndIf
+      EndDo
+      EndDo
 C
       Return
       End

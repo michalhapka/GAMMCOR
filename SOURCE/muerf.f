@@ -37,11 +37,9 @@ C
       double precision :: Tcpu,Twall
 
       If (ITwoEl.eq.1) then
-         stop "DBBSCH not ready with INCORE!"
+         write(6,'(1x,a)') "Set PostCAS=.true. and DFunc for DBBSCH!"
+         stop "Fix keywords in the Calculation block!"
 
-        ! Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
-        ! Print*, 'LOC_MU_CBS, XMuMat =',norm2(XMuMAT)
- 
       ElseIf (ITwoEl.eq.3.and.ICholesky.ne.0) Then
 
 C
@@ -710,13 +708,13 @@ C
       Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
       MxSym=NSym
 
-      print*, 'NSym =',NSym
-      print*, 'NumOSym =', NumOSym(1:MxSym)
+!     print*, 'NSym =',NSym
+!     print*, 'NumOSym =', NumOSym(1:MxSym)
 
-       print*, 'INCORE: UNOSAO',norm2(UNOAO)
-       do j=1,NBasis
-          write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
-       enddo
+!      print*, 'INCORE: UNOSAO',norm2(UNOAO)
+!      do j=1,NBasis
+!         write(LOUT,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
+!      enddo
 C
       NSymNO(1:NBasis)=0
       IStart=0
@@ -731,10 +729,10 @@ C
       IStart=IStart+NumOSym(I)
       EndDo
 C
-      Do IOrb=1,NBasis
-      Print*, 'I,NSymNO = ',IOrb,NSymNO(IOrb)
-      EndDo
-      Print*, ''
+c     Do IOrb=1,NBasis
+c     Print*, 'I,NSymNO = ',IOrb,NSymNO(IOrb)
+c     EndDo
+c     Print*, ''
 C
 C     checking
       Do I=1,MxSym
