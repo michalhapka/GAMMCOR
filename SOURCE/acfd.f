@@ -44,6 +44,7 @@ C
       real*8, dimension(:,:), allocatable :: ECorrIJA_tmp
       Real*8, Dimension(:), Allocatable :: TwoEl2,TwoAux
 C
+      If (ICASSCF.Eq.1) Then
       ECorrIJ=0.0d0
       NGem=MAXVAL(IGem)
       IJ=0
@@ -56,6 +57,7 @@ C
       IGemNo(IJ,2)=J
       EndDo
       EndDo
+      EndIf
 C
       If(IFlSnd.Eq.1) Then
 C
