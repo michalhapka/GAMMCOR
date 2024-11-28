@@ -304,6 +304,13 @@ SAPT%monB%NDim = NBasis*(NBasis-1)/2
        SAPT%NCholesky  = CholeskyVecsOTF%Chol2Data%NVecs
        SAPT%monA%NChol = SAPT%NCholesky
        SAPT%monB%NChol = SAPT%NCholesky
+       ! set THC for FockOTF
+       NGridTHC = 1
+       NCholeskyTHC=1
+
+    elseif(Flags%ICholeskyTHC==1) then
+
+       stop "SAPT not ready with THC!"
 
     endif ! CholeskyOTF
 
