@@ -2246,6 +2246,7 @@ C     this case is run if CBS[H] is computed for AC0 and incore
 C
 C          obtain long-range Fmat and short-range Jmat
 c
+           CSAOMO = transpose(UAux)
            Call read_caomo_molpro(CAOMO,SAO,itsoao,jtsoao,
      &                           'MOLPRO.MOPUN','CASORBAO',NBasis)
 c          Monomer = 3 ! SYS_TOTAL in System

@@ -2085,6 +2085,8 @@ C
       close(10)
       endif
 C
+C     counter for testing if Fock matrix is diagonal...
+      icount=0
       Do IP=NOccup+1,NBasis
       Do IQ=1,INActive
 C
@@ -2108,8 +2110,10 @@ C
       Eig(NFree1)=ABP
 C
       If(IDALTON.Eq.0) Then
-      If(ABS(ABP-work1(IP,IQ)).Gt.1.d-7)
-     $Write(*,*)'ABP inconsistent with eps_a-eps_i for',IP,IQ
+      If(ABS(ABP-work1(IP,IQ)).Gt.1.d-7) then
+      Write(*,*)'ABP inconsistent with eps_a-eps_i for',IP,IQ
+      icount=icount+1
+      EndIf
       EndIf
 C
       EigY(NFree2)=One/Sqrt(Two)
@@ -2123,6 +2127,8 @@ C
 C
       EndDo
       EndDo
+
+      if(icount.eq.0) write(6,'("ABP consistent with eps_a-eps_i")')
 C
       Write(6,'(/," *** DONE WITH 0TH-ORDER IN AC0-CASSCF ***")')
 C
