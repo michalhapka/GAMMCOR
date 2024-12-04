@@ -29,7 +29,7 @@ C
       integer :: iunit
       integer :: NCholesky,NCholErf
       double precision :: ECASSCF,ECorr
-      double precision :: AvMu,CorrMD
+      double precision :: AvMu,ECorrMD
       double precision :: XMuMat(NBasis,NBasis)
       double precision :: ABMIN(NDimX,NDimX),ABPLUS(NDimX,NDimX)
       double precision, allocatable :: CholVecs(:,:),Work(:,:)
@@ -40,8 +40,21 @@ C
          write(6,'(1x,a)') "Set PostCAS=.true. and DFunc for DBBSCH!"
          stop "Fix keywords in the Calculation block!"
 
-      ElseIf (ITwoEl.eq.3.and.ICholesky.ne.0) Then
+      ElseIf (IDBBSC.eq.1.and.ITwoEl.eq.3.and.ICholesky.ne.0) Then
+C
+      Call LOC_MU_CBS_CHOL(XMuMat,ECorrMD,AvMU,URe,UNOAO,Occ,
+     $                     BasisSet,NBasis)
 
+      Call AC0CAS_FOFO(ECorr,ECASSCF,Occ,URe,XOne,ABPLUS,ABMIN,
+     $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDimX,NInte1,
+     $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
+C
+      Write
+     $ (6,'(/1X,''CASSCF+ENuc, AC0-CBS[DFT], Total'',6X,3F15.8)')
+     $ ECASSCF+ENuc,ECorr+ECorrMD,ECASSCF+ENuc+ECorr+ECorrMD
+       ETot=ECASSCF+ENuc+ECorr
+C
+      ElseIf (IDBBSC.eq.2.and.ITwoEl.eq.3.and.ICholesky.ne.0) Then
 C
 C     Compute local mu(r): XMuMat(p,q) = <p|mu(r)|q>
       Call LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,UNOAO,Occ,
@@ -127,7 +140,6 @@ C     save to disk
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDimX,NInte1,
      $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
 
-      EndIf ! ITwoEl
 
 c     print*, 'ABPLUS-my =',norm2(ABPLUS)
 c     print*, 'ABMIN -my =',norm2(ABMIN)
@@ -146,6 +158,8 @@ c
 c      Print*, 'ECASSCF = ', ECASSCF
 c      Print*, 'ENuc = ', ENuc
 c      Print*, 'ECorr = ', ECorr
+
+      EndIf ! ITwoEl, IDBBSC
 
       End
 C *End Subroutine DBBSCH
@@ -647,7 +661,7 @@ c     Do I=1,NInAcCAS
       EndIf
 C
       Write(6,'(/,
-     $" CBS-my correction, average Mu",
+     $" CBS[DFT] correction, average Mu",
      $ F15.8,F15.3/)') CorrMD,AvMU
 C
       call gclock('Esrcmd CBS ',Tcpu,Twall)
