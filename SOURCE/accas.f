@@ -176,7 +176,7 @@ C
 C
       call gclock('ACD model',Tcpu,Twall)
 
-      ElseIf(IDBBSC.Eq.2) Then
+      ElseIf(IDBBSC.Gt.0) Then
 C
 C this is a version of AC0 with CBS basis set corrections (SR integrals are required)
 C
