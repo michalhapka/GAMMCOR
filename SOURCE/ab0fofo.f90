@@ -465,7 +465,7 @@ double precision,intent(out) :: ABPLUS(NDimX,NDimX),ABMIN(NDimX,NDimX)
 
 integer          :: iunit,iunit2
 integer          :: NOccup,NCholesky
-integer          :: i,j,k,l,kl,ii,ip,iq,ir,is,ipq,irs
+integer          :: ij,i,j,k,l,kl,ii,ip,iq,ir,is,ipq,irs
 integer          :: ipos,jpos,iblk,jblk,nblk
 integer          :: IGem(NBasis),Ind(NBasis),pos(NBasis,NBasis)
 integer          :: nAA,nAI(INActive),nAV(INActive+NAct+1:NBasis),nIV
@@ -486,6 +486,10 @@ double precision :: C(NBasis)
 double precision,allocatable :: work1(:),ints(:,:)
 double precision,allocatable :: work(:,:),Eig(:)
 double precision,allocatable :: MatFF(:,:)
+! analysis of AC0
+double precision :: ECorrIJ(6,6),EE
+integer          :: NGem,IGIJ(4,4),IGemNo(6,2),IOO,IVV,IAA1,IAA2
+!
 
 type(EblockData),allocatable :: Eblock(:)
 type(EblockData) :: EblockIV
@@ -497,6 +501,19 @@ if(IFlFCorr==1) then
   write(lout,*) 'Error! Disabled CorrFun=fAC0 in AC0CAS_FOFO!'
   stop
 endif
+
+ECorrIJ=0.0d0
+NGem=MAXVAL(IGemIN)
+IJ=0
+Do I=1,NGem
+  Do J=1,I
+    IJ=IJ+1
+    IGIJ(I,J)=IJ
+    IGIJ(J,I)=IJ
+    IGemNo(IJ,1)=I
+    IGemNo(IJ,2)=J
+  EndDo
+EndDo
 
 !if(IDBBSC.Ne.2) then
 !  write(lout,*) 'Error: DBBSC /= 2 in AC0CAS_FOFO!'
@@ -704,6 +721,10 @@ if(ICholesky==0) then
 
                    if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
 
+                   ECorrIJ(IGIJ(IGemIN(IP),IGemIN(IQ)),IGIJ(IGemIN(IR),IGemIN(IS)))= &
+                   ECorrIJ(IGIJ(IGemIN(IP),IGemIN(IQ)),IGIJ(IGemIN(IR),IGemIN(IS)))  &
+                   +Aux*ints(j,i)
+
                    !! dump Gamma^corr
                    !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit2)ir,ip,is,iq,Aux
 
@@ -789,6 +810,10 @@ elseif(ICholesky==1) then
                  EAll = EAll + Aux*ints(j,i)
 
                  if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*ints(j,i)
+
+                   ECorrIJ(IGIJ(IGemIN(IP),IGemIN(IQ)),IGIJ(IGemIN(IR),IGemIN(IS)))= &
+                   ECorrIJ(IGIJ(IGemIN(IP),IGemIN(IQ)),IGIJ(IGemIN(IR),IGemIN(IS)))  &
+                   +Aux*ints(j,i)
 
                  !! dump Gamma^corr
                  !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is)).ne.1.and.abs(Aux).gt.1.d-8)  write(iunit)ir,ip,is,iq,Aux
@@ -941,6 +966,10 @@ elseif(ICholesky==1) then
                     ! I think it should be SR here!
                     !if(AuxCoeff(IGem(ip),IGem(iq),IGem(ir),IGem(is))==1) EIntra = EIntra + Aux*intsSR(j,i)
 
+                 ECorrIJ(IGIJ(IGemIN(IP),IGemIN(IQ)),IGIJ(IGemIN(IR),IGemIN(IS)))= &
+                 ECorrIJ(IGIJ(IGemIN(IP),IGemIN(IQ)),IGIJ(IGemIN(IR),IGemIN(IS)))  &
+                 +Aux*ints(j,i)
+
                   endif
                enddo
             enddo
@@ -963,6 +992,61 @@ endif ! ICholesky
 
 print*, 'EAll,Einta',EAll,Eintra
 ECorr = EAll - EIntra
+
+!PRINT CONTRIBUTIONS TO ECorr FROM BLOCKS
+Write(6,'(/,X,"Contributions to AC0 from (Mu)(Nu) pairs of blocks")')
+IJ=0
+Do I=1,NGem
+Do J=1,I
+   IJ=IJ+1
+! NGem=3 case
+   If(NGem.Eq.3) Then
+       IOO=0
+       If(IGemNo(IJ,1).Eq.1.And.IGemNo(IJ,2).Eq.1) IOO=1
+       IVV=0
+       If(IGemNo(IJ,1).Eq.3.And.IGemNo(IJ,2).Eq.3) IVV=1
+       IAA1=0
+       If(IGemNo(IJ,1).Eq.2.And.IGemNo(IJ,2).Eq.2) IAA1=1
+! NGem=2 case (zero inactive orbitals)
+   ElseIf(NGem.Eq.2) Then
+       IOO=0
+       IVV=0
+       If(IGemNo(IJ,1).Eq.2.And.IGemNo(IJ,2).Eq.2) IVV=1
+       IAA1=0
+       If(IGemNo(IJ,1).Eq.1.And.IGemNo(IJ,2).Eq.1) IAA1=1
+   EndIf
+
+   If(IVV==0.And.IOO==0) Then
+      KL=0
+      Do K=1,NGem
+      Do L=1,K
+         KL=KL+1
+         If(NGem.Eq.3) Then
+             IOO=0
+             If(IGemNo(KL,1).Eq.1.And.IGemNo(KL,2).Eq.1) IOO=1
+             IVV=0
+             If(IGemNo(KL,1).Eq.3.And.IGemNo(KL,2).Eq.3) IVV=1
+             IAA2=0
+             If(IGemNo(KL,1).Eq.2.And.IGemNo(KL,2).Eq.2) IAA2=1
+         ElseIf(NGem.Eq.2) Then
+             IOO=0
+             IVV=0
+             If(IGemNo(KL,1).Eq.2.And.IGemNo(KL,2).Eq.2) IVV=1
+             IAA2=0
+             If(IGemNo(KL,1).Eq.1.And.IGemNo(KL,2).Eq.1) IAA2=1
+         EndIf
+         If(IVV==0.And.IOO==0.And.IAA1+IAA2.Ne.2) Then
+         If(IJ.Ge.KL) Then
+           EE=ECorrIJ(IJ,KL)
+           If(IJ.Ne.KL)EE=EE+ECorrIJ(KL,IJ)
+           Write(6,'(X,"(",2I1,")","(",2I1,")",F15.8)') IGemNo(IJ,1),IGemNo(IJ,2),IGemNo(KL,1),IGemNo(KL,2),EE
+         EndIf
+         EndIf
+      EndDo
+      EndDo
+    EndIf
+EndDo
+EndDo
 
 deallocate(ints)
 
