@@ -147,7 +147,8 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
   case(TWOMO_FOFO)
      call ACABMAT0_FOFO(ABPlus,ABMin,URe,Mon%Occ,XOne,&
                    Mon%IndN,Mon%IndX,Mon%IGem,Mon%CICoef,&
-                   Mon%NAct,Mon%NELE,NBas,Mon%NDim,Mon%NDimX,NInte1,Mon%NGem,&
+                   Mon%NISHT_G,Mon%NASHT_G,NBas,&
+                   Mon%NDim,Mon%NDimX,NInte1,Mon%NGem,&
                    twofile,twojfile,twokfile,0,ACAlpha,1)
 
   case(TWOMO_FFFF,TWOMO_INCORE)

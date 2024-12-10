@@ -237,6 +237,7 @@ C
 C     IGVB   = 1  - APSG WITH ONLY TWO ORBITALS PER GEMINAL
 C
       IGVB=Flags%IGVB
+      ISAPSG=Flags%ISAPSG
 C
       IFun=Flags%IFun
 C

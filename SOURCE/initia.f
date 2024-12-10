@@ -254,22 +254,29 @@ C                                    with L accuracy
 CC
       If(ICASSCF.Eq.0) Then
 C
-C     read geminal coefficients
-      Call ReadCGemDal(CICoef,NELE,INActive,NActive,NBasis)
+C     read geminal info for GVB/APSG
+      Call ReadGemDalton(CICoef,IGem,ISAPSG,
+     &                   NELE,NISHT_G,NASHT_G,NGem,NBasis)
 C
-C     set IGem and Occ
-      Do I=1,INActive
-      IGem(I)=I
-      EndDo
-      Do I=INActive+1,NELE
-      IGem(I)=I
-      IGem(NELE+I-INActive)=I
-      EndDo
-      NGem=NELE+1
-      Do I=1,NBasis
-      If(CICoef(I).Eq.0.D0) IGem(I)=NGem
-      Occ(I)=CICoef(I)**2
-      EndDo
+C      mh 07.12.24 - discarded to enable both GVB and APSG
+CC     set IGem and Occ for GVB-PP
+C      Do I=1,INActive
+C      IGem(I)=I
+C      EndDo
+C      Do I=INActive+1,NELE
+C      IGem(I)=I
+C      IGem(NELE+I-INActive)=I
+C      EndDo
+C      NGem=NELE+1
+C      Do I=1,NBasis
+C      If(CICoef(I).Eq.0.D0) IGem(I)=NGem
+C      Occ(I)=CICoef(I)**2
+C      EndDo
+C
+C      set Occ
+       Do I=1,NBasis
+       Occ(I)=CICoef(I)**2
+       EndDo
 C
       ElseIf(ICASSCF.Eq.1) Then
 C
@@ -314,6 +321,7 @@ C     OUT-OF-CORE INTEGRAL TRANSFORMATIONS
       If(ITwoEl.Ne.1) Then
 C     PREPARE POINTERS: NOccup=num0+num1
       Call prepare_nums(Occ,Num0,Num1,NBasis)
+
       If(ISwitch.Eq.1) Num0=NInAC
       If(ISwitch.Eq.1) Num1=NAc
       EndIf
@@ -3763,7 +3771,7 @@ C
 C
       Dimension TwoEl(NInte2),UMOAO(NBasis,NBasis)
 C
-      parameter (mxbuf = 10000)  ! KP
+      parameter (mxbuf = 100000)  ! KP
       double precision  dbuf(mxbuf)
       integer ibuf(mxbuf*2)
       integer iunit77,iunit88, iunit99, ndim, norb, nbas, nfone
@@ -4914,25 +4922,39 @@ C     transfer to GammCor variables
 
       End
 
-      Subroutine ReadCGemDal(CICoef,NELE,INActive,NActive,NBasis)
+      Subroutine ReadGemDalton(CICoef,IGem,ISAPSG,NELE,NISHT_G,NASHT_G,
+     &                         NGem,NBasis)
 C
-C     Purpose: read geminal coefficients either from Dalton output (coeff.dat)
-C              or SIRIFC file
+C     Purpose: read geminal info:
+C              number of geminals (NGem), coefficients and geminal table
+C              either from Dalton output (coeff.dat) or SIRIFC file
+C
+C     Comment : ISAPSG  : APSG (not GVB-PP) job
+C               NASHT_G : number of active orbitals in geminals
+C                         (in GVB-PP: NASHT_G = 2*NGEM)
+C               NISHT_G : number of inactive orbitals
 C
       implicit none
 C
       integer,intent(in)  :: NELE,NBasis
-      integer,intent(out) :: INActive,NActive
+      integer,intent(inout) :: ISAPSG
+      integer,intent(out) :: NISHT_G,NASHT_G,NGem
+      integer,intent(out) :: IGem(NBasis)
       double precision,intent(out) :: CICoef(NBasis)
 C
       integer :: i
+      integer :: NActive,INActive
       logical :: FileCoeff, FileSIRIFC
 
       Inquire(file="coeff.dat", EXIST=FileCoeff)
       Inquire(file="SIRIFC",EXIST=FileSIRIFC)
 C
       If (FileCoeff) Then
+C
 C        read coefficients from Dalton output...
+         print*, 'reading from coeff.dat disabled!'
+         stop "error in Dalton/GVB interface"
+
          CICoef(1:NBasis)=0.D0
          Open(10,File='coeff.dat',Form='Formatted',Status='Old')
          Read(10,*) NActive
@@ -4942,9 +4964,11 @@ C        read coefficients from Dalton output...
          EndDo
          Read(10,*) (CICoef(I+INActive),I=1,2*NActive)
          Close(10)
+         stop "IGEM not set in ReadCGemDal!"
       ElseIf(FileSIRIFC) Then
-C        read coefficients from Dalton SIRIFC file...
-         call read_CGEM_dalton(CICoef,INActive,NActive,NBasis)
+C        read coefficients and IGem from Dalton SIRIFC file...
+         call read_geminfo_dalton(CICoef,IGem,ISAPSG,NGem,
+     &                    NISHT_G,NASHT_G,NBasis,'SIRIFC')
       Else
          Write(6,'(1x,a)') 'Geminal coefficients from Dalton not found!'
          Stop
@@ -4952,41 +4976,101 @@ C        read coefficients from Dalton SIRIFC file...
 C
       End
 
-      Subroutine read_CGEM_dalton(CICoef,INActive,NActive,NBasis)
+      Subroutine read_geminfo_dalton(CICoef,IGem,ISAPSG,NGem,
+     &                                 INActive,NActive,NBasis,ifcfle)
 C
-C     Purpose: read geminal coefficients from Dalton SIRIFC file
-C              set the number of (in)active geminals
+C     Purpose: read the number of geminals (NGem)
+C              read geminal coefficients from Dalton SIRIFC file
+C              read IGemAc(NASHT_G) that assigns active orbitals to geminals
+C              set IGem(NISHT+G+NASHT_G)
+C              set the number of (in)active orbitals
+c
+C    Comment:
+C             in Dalton NGEM    is the number of active geminals
+C                       NASHT_G is the number of active orbitals
+C             GVB-PP: NASHT_G = 2*NGemAc
+C             APSG  : NASHT_G > 2*NGemAc
 C
       use read_external
       implicit none
 
       integer,intent(in)  :: NBasis
-      integer,intent(out) :: INActive,NActive
+      character(*),intent(in) :: ifcfle
+      integer,intent(inout) :: ISAPSG
+      integer,intent(out) :: NGem,INActive,NActive
+      integer,intent(out) :: IGem(NBasis)
       double precision,intent(out) :: CICoef(NBasis)
 C
-      integer :: isirifc
-      integer :: NGEM,NISHT_G,NASHT_G
+C     LOCAL
+C
+      integer :: isirifc,i
+      integer :: ISAPSG_save
+      integer :: NISHT_G,NASHT_G
+      integer :: NGemAc,IGemAc(NBasis)
       double precision :: CGEM(NBasis)
 
-      CGEM(1:NBasis) = 0.D0
-      CICoef(1:NBasis)=0.D0
+      IGemAc(1:NBasis) = 0.D0
+      CGEM(1:NBasis)   = 0.D0
+      CICoef(1:NBasis) = 0.D0
 
-      open(newunit=isirifc,file='SIRIFC',status='OLD',
+      open(newunit=isirifc,file=trim(ifcfle),status='OLD',
      &     access='SEQUENTIAL',form='UNFORMATTED')
 
       call readlabel(isirifc,'CI+APSG ')
-      read(isirifc) NGEM,NISHT_G,NASHT_G
+      read(isirifc) NGemAc,NISHT_G,NASHT_G
       read(isirifc) CGEM(1:NASHT_G)
+      read(isirifc) IGemAc(1:NASHT_G)
 
-C     print*, 'NGEM',   NGEM
-C     print*, 'NISHT_G',NISHT_G
-C     print*, 'NASHT_G',NASHT_G
       close(isirifc)
 
-      ! set no of (in)active geminals
-      INActive = NISHT_G
-      NActive  = NASHT_G / 2
+      ! check if APSG
+      ISAPSG_save = ISAPSG
+      ISAPSG = 0
+      if ( NASHT_G .ne. 2*NGemAc ) Then
+        ISAPSG = 1
+        write(6,'(1x,"APSG calculation with ", I3 ," active geminals")')
+     &   NGemAc
+      endif
+      ! ISAPSG does not match the declared RDMType
+      if (ISAPSG_save .ne. ISAPSG) then
+         select case (ISAPSG_save)
+         case (0)
+            write(6,'(1x,"Changed from GVB-PP RDMType to APSG.")')
+         case (1)
+            write(6,'(1x,"Changed from APSG RDMType to GVB-PP.")')
+         end select
+      endif
+C      Write(6,'(2X,"Sum of Occupancies: ",F5.2)') Sum
 
+      ! set no of (in)active orbitals (stored in common block)
+      INActive = NISHT_G
+      NActive  = NASHT_G
+
+c     .. test print
+C      print*, 'NGemAc  =', NGemAc
+C      print*, 'NISHT_G =',NISHT_G
+C      print*, 'NASHT_G =',NASHT_G
+C      print*, 'IGEM in active geminals:'
+C      do i=1,NASHT_G
+C         print*, i, IGemAc(i)
+C      enddo
+
+C     set NGem in GammCor convention:
+C     NGem = Inactive + Active + 1
+      NGem = INactive + NGemAc + 1
+C     set IGem GVB/APSG
+      do i=1,INActive
+         IGem(i) = i
+      enddo
+      do i=1,NASHT_G
+         IGem(INActive+I) = INActive+IGemAc(I)
+      enddo
+C     set the last geminal
+      IGem(INActive+NASHT_G+1:NBasis) = NGem
+      !print*,'NGem = ',NGem
+      !print*,'IGem = ',IGem(1:NBasis)
+
+C     set CICoef GVB/APSG
       CICoef(1:INActive) = 1.d0
       CICoef(INActive+1:INActive+NASHT_G) = CGEM(1:NASHT_G)
       ! print*,'CICoef-1',CICOef(1:NBasis)

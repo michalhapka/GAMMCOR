@@ -12,6 +12,7 @@
       Common/DFTSR/ Alpha,Cmix,IFunSR2
       Common/Sym/ FMultTab,NoSym,MxSym
       Common/APSG/ IGem(5000),CICoef(5000)
+      Common/DALTON/ NISHT_G,NASHT_G,ISAPSG
       Common/EMBEDD/ IFrag,NGemSave,IAuxGem(5000),
      $ IGemSave(5000), IOrbA(5000),NGemB, NActive,
      $ IConnect(5000,5000)

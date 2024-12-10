@@ -70,7 +70,7 @@ C
       Call EneGVB_FFFF(ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'TWOMO',NDimX,NGem)
       ElseIf(ITwoEl.Eq.3) Then
-      Call EneGVB_FOFO(NActive,NELE,ETot,URe,Occ,CICoef,XOne,
+      Call EneGVB_FOFO(NISHT_G,NASHT_G,ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'FOFO',NDimX,NGem)
       EndIf
 C
@@ -222,7 +222,7 @@ C
       Else 
 C
       If(ITwoEl.Eq.3) Then
-      Call EneGVB_FOFO(NActive,NELE,ETot,URe,Occ,CICoef,XOne,
+      Call EneGVB_FOFO(NISHT_G,NASHT_G,ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'FOFO',NDimX,NGem)
       EndIf
 C
@@ -4681,7 +4681,7 @@ C
 C
       Call ACABMAT0_FOFO(ABPLUS,ABMIN,URe,Occ,XOne,
      $            IndN,IndX,IGem,CICoef,
-     $            NActive,NELE,NBasis,NDim,NDimX,NInte1,NGem,
+     $            NISHT_G,NASHT_G,NBasis,NDim,NDimX,NInte1,NGem,
      $            'TWOMO','FFOO','FOFO',0,ACAlpha,1)
 C
       EndIf
@@ -4731,7 +4731,7 @@ C      Print*, 'ACAlpha',ACAlpha
 C
       Call ACABMAT0_FOFO(ABPLUS,ABMIN,URe,Occ,XOne,
      $            IndN,IndX,IGem,CICoef,
-     $            NActive,NELE,NBasis,NDim,NDimX,NInte1,NGem,
+     $            NISHT_G,NASHT_G,NBasis,NDim,NDimX,NInte1,NGem,
      $            'TWOMO','FFOO','FOFO',0,ACAlpha,1)
 C 
       EndIf
@@ -4855,12 +4855,11 @@ C
       ElseIf(ITwoEl.Eq.3) Then
 
       Call ECorrAC0GVB_FOFO(ECorr0,ECorr,AMAT,BMAT,ABPLUS,
-     $                      EigVY2,Occ,C,Eig,
-     $                      IndP,IndN,IndX,IGem,
-     $                      'FOFO',NActive,NELE,NDim,NDimX,NGem,NBasis)
+     $                   EigVY2,Occ,C,Eig,
+     $                   IndP,IndN,IndX,IGem,
+     $                   'FOFO',NISHT_G,NASHT_G,
+     $                   NDim,NDimX,NGem,NBasis)
 C
-C      Write(6,'(1x,a)') "SORRY!"
-C      Stop
       EndIf
 
       ECorr=ECorr+ECorr0
@@ -6074,13 +6073,13 @@ C
 
       Subroutine ECorrAC0GVB_FOFO(ECorr0,ECorr,AMAT,BMAT,ABPLUS,
      $                 EigVY2,Occ,C,Eig,IndP,IndN,IndX,IGem,
-     $                 IntKFile,NAct,NElHlf,NDim,NDimX,NGem,NBasis)
+     $                 IntKFile,InAct,NAct,NDim,NDimX,NGem,NBasis)
 C
       use tran
 C
       Implicit None
 
-      Integer :: NAct,NElHlf,NDim,NDimX,NGem,NBasis
+      Integer :: InAct,NAct,NDim,NDimX,NGem,NBasis
       Integer :: IndX(NDim),IndN(2,NDim),IndP(NBasis,NBasis),
      $           IGem(NBasis)
       Character(*) :: IntKFile
@@ -6099,8 +6098,11 @@ C
       Double Precision :: Cpq,Crs,Aux,EPSJI
       Double Precision,Allocatable :: Work(:),ints(:,:)
 
-      INActive = NElHlf - NAct
-      NOccup = 2*NAct + INActive
+C     set dimensions
+      NOccup = INact + NAct
+      ! old GVB-PP settings
+      !INActive = NElHlf - NAct
+      !NOccup = 2*NAct + INActive
 
       pos = 0
       Do I=1,NDimX
