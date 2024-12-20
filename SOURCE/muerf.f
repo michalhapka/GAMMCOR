@@ -50,7 +50,11 @@ C
      $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
 C
       Write
-     $ (6,'(/1X,''CASSCF+ENuc, AC0-CBS[DFT], Total'',6X,3F15.8)')
+     $ (6,'(/1X,''CASSCF+ENuc, AC0-Corr, Total'',6X,3F15.8)')
+     $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
+C
+      Write
+     $ (6,'(1X,''CASSCF+ENuc, AC0-CBS[DFT], Total'',2X,3F15.8)')
      $ ECASSCF+ENuc,ECorr+ECorrMD,ECASSCF+ENuc+ECorr+ECorrMD
        ETot=ECASSCF+ENuc+ECorr
 C
