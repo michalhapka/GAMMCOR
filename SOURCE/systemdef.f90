@@ -131,10 +131,11 @@ else
   ! set TwoEl type
    Flags%ITwoEl = Input%CalcParams%TwoMoInt
 
-  ! set Cholesky decomposition
+  ! set Cholesky decomposition and THC (tensor hypercontraction)
    Flags%ICholesky     = Input%CholeskyParams%Cholesky
    Flags%ICholeskyBIN  = Input%CholeskyParams%CholeskyBIN
    Flags%ICholeskyOTF  = Input%CholeskyParams%CholeskyOTF
+   Flags%ICholeskyTHC  = Input%CholeskyParams%CholeskyTHC
    Flags%ICholeskyAccu = Input%CholeskyParams%CholeskyAccu
    Flags%IH0Test       = Input%CholeskyParams%H0Test
 
@@ -175,6 +176,7 @@ else
 
   case(INTER_TYPE_MOL)
      Flags%IDALTON = 0
+     Flags%IMOLPRO = 1
      Flags%IAO     = 1
      Flags%INO     = 1
      !Flags%NoSym   = Input%CalcParams%SymType
@@ -204,10 +206,12 @@ else
   select case(Input%CalcParams%RDMType)
   case(RDM_TYPE_GVB)
      Flags%IGVB = 1
+     Flags%ISAPSG  = 0
      Flags%ICASSCF = 0
 
   case(RDM_TYPE_APSG)
-     FLags%IGVB = 0
+     Flags%IGVB    = 0
+     Flags%ISAPSG  = 1
      Flags%ICASSCF = 0
 
   case(RDM_TYPE_CAS)
@@ -222,6 +226,13 @@ else
      FLags%IGVB = 0
      Flags%ICASSCF = 1
      Flags%ISHF = 1
+
+  case(RDM_TYPE_UKS)
+     Flags%IUKS = 1
+     Flags%ISHF = 1
+     Flags%IGVB = 0
+     Flags%ICASSCF = 1
+
   case default
      write(LOUT,'(1x,a)') 'RDMType not declared! Assuming ICASSCF=1!'
      FLags%IGVB    = 0
@@ -262,12 +273,13 @@ else
   case(JOB_TYPE_RESPONSE)
      Flags%IFlRESPONSE = 1
 
-  case(JOB_TYPE_AC0)
+  case(JOB_TYPE_AC0,JOB_TYPE_SRAC0)
     ! HERE WILL BE CHANGED TO:
     !Flags%IFlAC = 0
      Flags%IFlAC   = 1
      Flags%IFlSnd  = 1
      Flags%IFlAC0D = 0
+     Flags%IDBBSC  = Input%CalcParams%DBBSC
      print*,'Input%CalcParams%PostCAS', Input%CalcParams%PostCAS
      print*,'Input%CalcParams%DFApp  ', Input%CalcParams%DFApp
      print*,'Flags%IFunSRKer         ', Input%CalcParams%Kernel
@@ -287,6 +299,10 @@ else
         elseif(Input%CalcParams%DFApp==2) then
            Flags%IFunSR2 = 2
         endif
+     endif
+     if(Input%CalcParams%JobType==JOB_TYPE_SRAC0) then
+       Flags%ICorrMD  = 1
+       Flags%IFlFCorr = Input%CalcParams%FunCorr ! set fCAS/fCAS+fAC0
      endif
 !     if(Input%CalcParams%DFApp==2) Flags%IFunSRKer = 1
 
@@ -458,6 +474,7 @@ if(Flags%ISAPT.Eq.0) then
    System%ZNucl  = Input%SystemInput(1)%ZNucl
    System%Charge = Input%SystemInput(1)%Charge
    System%NBasis = Input%CalcParams%NBasis
+   System%NCoreOrb = Input%SystemInput(1)%NCoreOrb
    System%Omega  = Input%SystemInput(1)%Omega
    System%PerVirt= Input%SystemInput(1)%PerVirt
    System%EigFCI = Input%SystemInput(1)%EigFCI
@@ -493,7 +510,11 @@ elseif(Flags%ISAPT.Eq.1) then
  SAPT%ic6 = Input%CalcParams%vdWCoef
  SAPT%Max_Cn = Input%CalcParams%Max_Cn
  SAPT%CAlpha = Input%CalcParams%CAlpha
+
+ SAPT%Visual = Input%CalcParams%Visual
+
  SAPT%IPrint = Input%CalcParams%IPrint
+
  if(SAPT%InterfaceType==2) SAPT%HFCheck = .false.
  ! temporary RSH
  if(Flags%IFunSR<3.and.Flags%IFunSR>0) then

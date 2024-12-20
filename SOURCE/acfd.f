@@ -32,12 +32,32 @@ C     LOCAL ARRAYS
 C
       Dimension XGrid(100), WGrid(100)
       Integer Points
-C     HAP
+      real*8 :: XMuMat(NBasis,NBasis)
+C
+C     analysis of AC
+      Dimension ECorrIJ(6,6),ECorrIJA(6,6),IGIJ(4,4),IGemNo(6,2)
+C
       Double precision,Allocatable :: WorkVec(:),WorkEig(:),MYAP(:) 
 C
       real*8, dimension(:), allocatable :: ABPLUS_tmp, ABMIN_tmp
       real*8, dimension(:), allocatable :: EigVecR_tmp, Eig_tmp
-
+      real*8, dimension(:,:), allocatable :: ECorrIJA_tmp
+      Real*8, Dimension(:), Allocatable :: TwoEl2,TwoAux
+C
+      If (ICASSCF.Eq.1) Then
+      ECorrIJ=0.0d0
+      NGem=MAXVAL(IGem)
+      IJ=0
+      Do I=1,NGem
+      Do J=1,I
+      IJ=IJ+1
+      IGIJ(I,J)=IJ
+      IGIJ(J,I)=IJ
+      IGemNo(IJ,1)=I
+      IGemNo(IJ,2)=J
+      EndDo
+      EndDo
+      EndIf
 C
       If(IFlSnd.Eq.1) Then
 C
@@ -50,7 +70,7 @@ C
       Call EneGVB_FFFF(ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'TWOMO',NDimX,NGem)
       ElseIf(ITwoEl.Eq.3) Then
-      Call EneGVB_FOFO(NActive,NELE,ETot,URe,Occ,CICoef,XOne,
+      Call EneGVB_FOFO(NISHT_G,NASHT_G,ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'FOFO',NDimX,NGem)
       EndIf
 C
@@ -71,7 +91,7 @@ C
 C
       Call AC0CAS_FOFO(ECorr,ETot,Occ,URe,XOne,ABPLUS,ABMIN,
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDim,NInte1,
-     $ NoSt,'FFOO','FOFO',ICholesky)
+     $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
 C
 C     now Y01CAS_FOFO is used in SAPT only
 C      Call Y01CAS_FOFO(Occ,URe,XOne,ABPLUS,ABMIN,
@@ -202,7 +222,7 @@ C
       Else 
 C
       If(ITwoEl.Eq.3) Then
-      Call EneGVB_FOFO(NActive,NELE,ETot,URe,Occ,CICoef,XOne,
+      Call EneGVB_FOFO(NISHT_G,NASHT_G,ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'FOFO',NDimX,NGem)
       EndIf
 C
@@ -2663,7 +2683,7 @@ C
       CICoef(I)=C(I)
       EndDo
 C
-      Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+      Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 C
       NoStMx=0
       Write(6,'(X,"**** SA-CAS FROM MOLPRO ****",/)')
@@ -3823,6 +3843,7 @@ C
      $ RDM2Act,NRDM2Act,IGFact,C,Ind1,Ind2,
      $ IndBlock,NoEig,NDimX,NBasis,NInte1,NInte2)
 C
+c     use tran
 C     COMPUTE THE ALPHA-DEPENDENT PARTS OF A+B AND A-B MATRICES
 C
 C     RDM2 IS IN NO REPRESENTATION. IT IS PARTIALLY SPIN-SUMMED
@@ -3853,6 +3874,18 @@ C
       ABPLUS(I)=Zero
       ABMIN(I)=Zero
       EndDo
+C
+c     IHNO1=1
+c     print*, 'set IHNO1=1 in AB1_CAS!'
+c     IHNO1=0
+
+      If(IHNO1.Eq.1) Then
+C
+C     XOne contains 1st-order one-electron hamiltonian
+C
+      HNO=XOne
+C
+      Else
 C
 C     ONE-ELECTRON MATRIX IN A NO REPRESENTATION
 C   
@@ -3895,6 +3928,15 @@ C
 C
       EndDo
       EndDo
+C
+      EndIf !IHNO1
+C
+C      block
+CC     ... check HNO
+C      double precision :: HNOsq(NBasis,NBasis)
+C      call triang_to_sq2(HNO,HNOsq,NBasis)
+C      print*, 'HNO on entry =',norm2(HNOsq)
+C      end block
 C
       NAct=NAcCAS
       INActive=NInAcCAS
@@ -3949,6 +3991,16 @@ C
       EndDo
       EndDo
 C
+Cc     ...mh test
+C      Print*, 'WMAT on exit   = ',norm2(WMAT)
+C      block
+C      double precision :: tmp(NBasis,NBasis)
+C      call triang_to_sq2(AuxI,tmp,NBasis)
+C      print*, 'AuxI  on exit  =',norm2(tmp)
+C      call triang_to_sq2(AuxIO,tmp,NBasis)
+C      print*, 'AuxIO on exit  =',norm2(tmp)
+C      end block
+C
       icount=0
       Call CPU_TIME(START_TIME)
 C
@@ -3972,8 +4024,10 @@ C
       IQQ=IndBlock(2,ICol)
 C
       If( .NOT.(IGem(IR).Eq.IGem(IS).And.IGem(IR).Eq.IGem(IPP)
-     $ .And.IGem(IR).Eq.IGem(IQQ)) ) Then
-CC
+     $ .And.IGem(IR).Eq.IGem(IQQ))
+     $ .Or.IHNO1.Eq.1
+     $  ) Then
+C
       If( (Occ(IR)*Occ(IS).Eq.Zero.And.Occ(IPP)*Occ(IQQ).Eq.Zero
      $ .And.Abs(TwoNO(NAddr3(IR,IS,IPP,IQQ))).Lt.1.D-25)
      $.Or.
@@ -4627,7 +4681,7 @@ C
 C
       Call ACABMAT0_FOFO(ABPLUS,ABMIN,URe,Occ,XOne,
      $            IndN,IndX,IGem,CICoef,
-     $            NActive,NELE,NBasis,NDim,NDimX,NInte1,NGem,
+     $            NISHT_G,NASHT_G,NBasis,NDim,NDimX,NInte1,NGem,
      $            'TWOMO','FFOO','FOFO',0,ACAlpha,1)
 C
       EndIf
@@ -4677,7 +4731,7 @@ C      Print*, 'ACAlpha',ACAlpha
 C
       Call ACABMAT0_FOFO(ABPLUS,ABMIN,URe,Occ,XOne,
      $            IndN,IndX,IGem,CICoef,
-     $            NActive,NELE,NBasis,NDim,NDimX,NInte1,NGem,
+     $            NISHT_G,NASHT_G,NBasis,NDim,NDimX,NInte1,NGem,
      $            'TWOMO','FFOO','FOFO',0,ACAlpha,1)
 C 
       EndIf
@@ -4801,12 +4855,11 @@ C
       ElseIf(ITwoEl.Eq.3) Then
 
       Call ECorrAC0GVB_FOFO(ECorr0,ECorr,AMAT,BMAT,ABPLUS,
-     $                      EigVY2,Occ,C,Eig,
-     $                      IndP,IndN,IndX,IGem,
-     $                      'FOFO',NActive,NELE,NDim,NDimX,NGem,NBasis)
+     $                   EigVY2,Occ,C,Eig,
+     $                   IndP,IndN,IndX,IGem,
+     $                   'FOFO',NISHT_G,NASHT_G,
+     $                   NDim,NDimX,NGem,NBasis)
 C
-C      Write(6,'(1x,a)') "SORRY!"
-C      Stop
       EndIf
 
       ECorr=ECorr+ECorr0
@@ -6020,13 +6073,13 @@ C
 
       Subroutine ECorrAC0GVB_FOFO(ECorr0,ECorr,AMAT,BMAT,ABPLUS,
      $                 EigVY2,Occ,C,Eig,IndP,IndN,IndX,IGem,
-     $                 IntKFile,NAct,NElHlf,NDim,NDimX,NGem,NBasis)
+     $                 IntKFile,InAct,NAct,NDim,NDimX,NGem,NBasis)
 C
       use tran
 C
       Implicit None
 
-      Integer :: NAct,NElHlf,NDim,NDimX,NGem,NBasis
+      Integer :: InAct,NAct,NDim,NDimX,NGem,NBasis
       Integer :: IndX(NDim),IndN(2,NDim),IndP(NBasis,NBasis),
      $           IGem(NBasis)
       Character(*) :: IntKFile
@@ -6045,8 +6098,11 @@ C
       Double Precision :: Cpq,Crs,Aux,EPSJI
       Double Precision,Allocatable :: Work(:),ints(:,:)
 
-      INActive = NElHlf - NAct
-      NOccup = 2*NAct + INActive
+C     set dimensions
+      NOccup = INact + NAct
+      ! old GVB-PP settings
+      !INActive = NElHlf - NAct
+      !NOccup = 2*NAct + INActive
 
       pos = 0
       Do I=1,NDimX
@@ -7457,13 +7513,14 @@ C
       End
 
 *Deck ReadDip
-      Subroutine ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+      Subroutine ReadDip(DipX,DipY,DipZ,UNOAO,filename,NBasis)
 C
 C     Read dipole moment matrices and transform them to NO
 C
       use read_external
 C
       Implicit Real*8 (A-H,O-Z)
+      Character(*), Intent(In) :: filename
 C
       Include 'commons.inc'
 C
@@ -7472,7 +7529,7 @@ C
       Dimension DipX(NBasis,NBasis),DipY(NBasis,NBasis),
      $ DipZ(NBasis,NBasis),UNOAO(NBasis,NBasis),AUXM(NBasis,NBasis)
 C
-      Call read_dip_molpro(DipX,DipY,DipZ,'DIP',NBasis)
+      Call read_dip_molpro(DipX,DipY,DipZ,filename,NBasis)
 C
       Call dgemm('N','N',NBasis,NBasis,NBasis,1d0,UNOAO,NBasis,
      $           dipz,NBasis,0d0,AUXM,NBasis)
@@ -7491,12 +7548,14 @@ C
       End
 
 *Deck ComputeDipoleMom
-      Subroutine ComputeDipoleMom(UNOAO,Occ,NOccup,NBasis)
+      Subroutine ComputeDipoleMom(UNOAO,Occ,filedip,filegeom,
+     $                            NOccup,NBasis)
 C
 C     compute electronic part of the DM
 C     using occupation numbers
 C
       Implicit Real*8 (A-H,O-Z)
+      Character(*),Intent(In) :: filedip,filegeom
 C
       Include 'commons.inc'
 C
@@ -7512,11 +7571,11 @@ C
       Real*8 NUC_DMX,NUC_DMY,NUC_DMZ
       Character(8) label
 
-      Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+      Call ReadDip(DipX,DipY,DipZ,UNOAO,filedip,NBasis)
 
 C     Nuclear
 C
-      Open(newunit=ione,file='AOONEINT.mol',access='sequential',
+      Open(newunit=ione,file=filegeom,access='sequential',
      $     form='unformatted',status='old')
 C
       Do
@@ -7557,6 +7616,11 @@ C
 C
       Write(6,'(1X,A,3f12.8,/)') 'Total Dipole Moment     ',
      $                            NUC_DMX+DM_X,NUC_DMY+DM_Y,NUC_DMZ+DM_Z
+C
+      DXYZ=SQRT((NUC_DMX+DM_X)**2+(NUC_DMY+DM_Y)**2+(NUC_DMZ+DM_Z)**2)
+C
+      Write(6,'(1X,A,2f12.8,/)') '|dipole moment| a.u./D', DXYZ,
+     $ DXYZ/0.393456
 
       Deallocate(XYZ,Charg)
       Return
@@ -7615,7 +7679,7 @@ C
       EndDo
 C
       If(IStCAS(1,ICAS).Eq.1.And.IStCAS(2,ICAS).Eq.1) 
-     $ Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+     $ Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 C
 C     AUXILIARY STUFF LATER NEEDED TO GET A+ AND A- MATRICES FOR ALPHA=0
 C

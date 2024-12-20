@@ -21,8 +21,6 @@ allocate(MatFF(NCholesky,NBasis**2))
 read(iunit) MatFF
 close(iunit)
 
-print*,'NCholesky',NCholesky
-
 allocate(work2(NCholesky,NCholesky))
 allocate(work1(NCholesky,NDimX))
 
@@ -109,6 +107,7 @@ use systemdef
 ! only to use Y01CAS_FOFO
 !use ab0fofo
 use sapt_utils
+use memory
 
 implicit none
 integer,intent(in) :: AC1,NGOcc,NBasis,NInte1,NDim,NGem,NDimX
@@ -175,7 +174,9 @@ twojfile = 'FFOO'
 twokfile = 'FOFO'
 IntKFile = twokfile
 
-allocate(ABPLUS1(NDimX*NDimX),ABMIN1(NDimX*NDimX))
+!allocate(ABPLUS1(NDimX*NDimX),ABMIN1(NDimX*NDimX))
+call mem_alloc(ABPLUS1,NDimX*NDimX)
+call mem_alloc(ABMIN1,NDimX*NDimX)
 
 if(NAct==1) then
   ! active-virtual block
@@ -195,7 +196,7 @@ Call AC0BLOCK(Occ,URe,XOne, &
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,ABMIN1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,ICholesky,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,ICholesky,0,ACAlpha,.false.)
 
 Call sq_symmetrize(ABPLUS1,NDimX)
 Call sq_symmetrize(ABMIN1,NDimX)
@@ -207,7 +208,8 @@ call add_blk_right(ABMIN1, A0Block,A0BlockIV,-1d0,.true., nblk,NDimX)
 !print*, 'add_blk_right: ABMIN1 ',norm2(ABMIN1)
 
 !Calc: A1=ABPLUS0*ABMIN1+ABPLUS1*ABMIN0
-allocate(A1(NDimX*NDimX))
+!allocate(A1(NDimX*NDimX))
+call mem_alloc(A1,NDimX*NDimX)
 call ABPM_HALFTRAN_GEN_L(ABMIN1, A1,0.0d0,A0Block,A0BlockIV,nblk,NDimX,NDimX,'Y')
 call ABPM_HALFTRAN_GEN_R(ABPLUS1,A1,1.0d0,A0Block,A0BlockIV,nblk,NDimX,NDimX,'X')
 !print*, 'A1',norm2(A1)
@@ -215,11 +217,13 @@ call ABPM_HALFTRAN_GEN_R(ABPLUS1,A1,1.0d0,A0Block,A0BlockIV,nblk,NDimX,NDimX,'X'
 EGOne(1)=ECASSCF
 
 !Calc: APLUS0Tilde=ABPLUS0.DChol
-allocate(APLUS0Tilde(NDimX*NCholesky))
+!allocate(APLUS0Tilde(NDimX*NCholesky))
+call mem_alloc(APLUS0Tilde,NDimX*NCholesky)
 call ABPM_HALFTRAN_GEN_L(DCholT,APLUS0Tilde,0.0d0,A0Block,A0BlockIV,nblk,NDimX,NCholesky,'Y')
 
 !Calc: APLUS1Tilde=ABPLUS1.DChol
-allocate(APLUS1Tilde(NDimX*NCholesky))
+!allocate(APLUS1Tilde(NDimX*NCholesky))
+call mem_alloc(APLUS1Tilde,NDimX*NCholesky)
 Call dgemm('N','N',NDimX,NCholesky,NDimX,1d0,ABPLUS1,NDimX,DCholT,NDimX,0.0d0,APLUS1Tilde,NDimX)
 
 deallocate(A0block)
@@ -234,11 +238,17 @@ Call AC0BLOCK(Occ,URe,XOne, &
      IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,NInte1,'FFOO','FOFO', &
      ICholesky,A0BlockIV,A0Block,nblk,1,'A0BLK',0)
 
-allocate(COMTilde(NDimX*NCholesky))
+!allocate(COMTilde(NDimX*NCholesky))
+call mem_alloc(COMTilde,NDimX*NCholesky)
 COMTilde=0.0
 
-allocate(C0Tilde(NDimX*NCholesky),C1Tilde(NDimX*NCholesky),C2Tilde(NDimX*NCholesky),WORK0(NDimX*NCholesky))
-allocate(WORK1(NDimX*NCholesky))
+!allocate(C0Tilde(NDimX*NCholesky),C1Tilde(NDimX*NCholesky),C2Tilde(NDimX*NCholesky),WORK0(NDimX*NCholesky))
+!allocate(WORK1(NDimX*NCholesky))
+call mem_alloc(C0Tilde,NDimX*NCholesky)
+call mem_alloc(C1Tilde,NDimX*NCholesky)
+call mem_alloc(C2Tilde,NDimX*NCholesky)
+call mem_alloc(WORK0,NDimX*NCholesky)
+call mem_alloc(WORK1,NDimX*NCholesky)
 allocate(Lambda(nblk))
 associate(A => A0BlockIV, L => LambdaIV)
   L%n = A%n
@@ -295,9 +305,22 @@ Do IGL=1,NGrid
    If(IGL.Eq.1) ErrMax=XNorm1
 EndDo
 
-deallocate(A1,WORK0,C0Tilde,C1Tilde,C2Tilde,Lambda,APLUS0Tilde,APLUS1Tilde)
-deallocate(ABMIN1,ABPLUS1,WORK1)
-allocate(WorkD(NDimX,NCholesky))
+!deallocate(A1,WORK0,C0Tilde,C1Tilde,C2Tilde,Lambda,APLUS0Tilde,APLUS1Tilde)
+!deallocate(ABMIN1,ABPLUS1,WORK1)
+deallocate(Lambda)
+call mem_dealloc(WORK1)
+call mem_dealloc(WORK0)
+call mem_dealloc(C2tilde)
+call mem_dealloc(C1tilde)
+call mem_dealloc(C0tilde)
+call mem_dealloc(A1)
+call mem_dealloc(APLUS0Tilde)
+call mem_dealloc(APLUS1Tilde)
+call mem_dealloc(ABMIN1)
+call mem_dealloc(ABPLUS1)
+
+!allocate(WorkD(NDimX,NCholesky))
+call mem_alloc(WorkD,NDimX,NCholesky)
 WorkD=0
 WorkD = RESHAPE(COMTilde, (/NDimX, NCholesky/))
 ECorr=0
@@ -307,7 +330,9 @@ do j=1,NDimX
    enddo
 enddo
 
-deallocate(WorkD,COMTilde)
+!deallocate(WorkD,COMTilde)
+call mem_dealloc(WorkD)
+call mem_dealloc(COMTilde)
 
 Call RELEASE_AC0BLOCK(A0Block,A0blockIV,nblk)
 
@@ -316,6 +341,8 @@ Call RELEASE_AC0BLOCK(A0Block,A0blockIV,nblk)
 !   open(newunit=iunit,file='rdm2.dat',status='old')
 !   close(iunit,status='delete')
 !endif
+
+!call mem_report
 
 end subroutine WIter_D12Chol
 
@@ -394,12 +421,12 @@ allocate(ABPLUS0(NDimX*NDimX),ABMIN0(NDimX*NDimX),ABPLUS1(NDimX*NDimX),ABMIN1(ND
 ACAlpha=0.D0
 call AB_CAS_FOFO(ABPLUS0,ABMIN0,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,ABMIN1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ABPLUS1=ABPLUS1-ABPLUS0
 ABMIN1 =ABMIN1 -ABMIN0
@@ -581,12 +608,12 @@ IntKFile = twokfile
 ACAlpha=0.D0
 call AB_CAS_FOFO(ABPLUS0,WORK0,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,WORK1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 
 ABPLUS1=ABPLUS1-ABPLUS0
 WORK1=WORK1-WORK0
@@ -769,7 +796,7 @@ IntKFile = twokfile
 
 call AB_CAS_FOFO(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,0,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,0,0,ACAlpha,.false.)
 EGOne(1)=ECASSCF
 
 !     Frequency integration of CMAT
@@ -932,12 +959,12 @@ IntKFile = twokfile
 ACAlpha0=0.D0
 call AB_CAS_FOFO(ABPLUS0,WORK0,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha0,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha0,.false.)
 Call dgemm('N','N',NDimX,NDimX,NDimX,1d0,ABPLUS0,NDimX,WORK0,NDimX,0d0,A0,NDimX)
 
 call AB_CAS_FOFO(ABPLUS1,WORK1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
 EGOne(1)=ECASSCF
 !A2=ABPLUS1*ABMIN1
 Call dgemm('N','N',NDimX,NDimX,NDimX,1d0,ABPLUS1,NDimX,WORK1,NDimX,0d0,A2,NDimX)
@@ -1200,7 +1227,7 @@ subroutine CIter_FOFO(PMat,ECorr,ACAlpha,XOne,URe,Occ,EGOne,NGOcc,&
 
    call AB_CAS_FOFO(ABPLUS1,WORK1,ECASSCF,URe,Occ,XOne, &
                   IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-                  NInte1,twojfile,twokfile,1,ACAlpha,.false.)
+                  NInte1,twojfile,twokfile,1,0,ACAlpha,.false.)
    EGOne(1)=ECASSCF
    ! Calc A2=ABPLUS1*ABMIN1
    Call dgemm('N','N',NDimX,NDimX,NDimX,1d0,ABPLUS1,NDimX,WORK1,NDimX,0d0,A2,NDimX)
@@ -1360,132 +1387,6 @@ subroutine read_D_array(NCholesky, DChol, DCholAct, NDimX, NBasis, IndN, Occ, In
    deallocate(WorkD)
 
 end subroutine read_D_array
-
-subroutine pack_AC0BLOCK(ABPlus,ABMin,A0Block,A0blockIV,nblk,IndN,INActive,NAct,NDimX,NBasis,ver,dumpfile)
-!
-!     A ROUTINE FOR PACKING : a) ver=0  ABPLUS^{(0)} and ABMIN^{(0)}
-!                                       (stored in matY and matX, respectively)
-!                             b) ver=1  A0=ABPLUS^{(0)}.ABMIN^{(0)}
-
-use abfofo
-use blocktypes
-
-implicit none
-
-integer,intent(in) :: NAct,INActive
-integer,intent(in) :: NDimX,NBasis
-integer,intent(in) :: ver
-integer            :: nblk
-integer,intent(in) :: IndN(2,NDimX)
-double precision,intent(in) :: ABPlus(NDimX,NDimX),ABMin(NDimX,NDimX)
-character(*),optional       :: dumpfile
-
-type(EblockData) :: A0block(nblk), A0blockIV
-
-integer :: NOccup
-integer :: i,ii,ip,iq
-integer :: IGem(NBasis),Ind(NBasis)
-integer :: pos(NBasis,NBasis)
-
-integer :: iblk
-integer :: iunit
-
-integer :: nAA,nAI(INActive),nAV(INActive+NAct+1:NBasis),nIV
-integer :: tmpAA(NAct*(NAct-1)/2),tmpAI(NAct,1:INActive),&
-           tmpAV(NAct,INActive+NAct+1:NBasis),&
-           tmpIV(INActive*(NBasis-NAct-INActive))
-integer :: limAA(2),limAI(2,1:INActive),&
-           limAV(2,INActive+NAct+1:NBasis),limIV(2)
-
-! set dimensions
-NOccup = NAct + INActive
-
-Ind = 0
-do i=1,NAct
-   Ind(INActive+i) = i
-enddo
-
-! fix IGem
-do i=1,INActive
-   IGem(i) = 1
-enddo
-do i=INActive+1,NOccup
-   IGem(i) = 2
-enddo
-do i=NOccup+1,NBasis
-   IGem(i) = 3
-enddo
-
-call create_blocks_ABPL0(nAA,nAI,nAV,nIV,tmpAA,tmpAI,tmpAV,tmpIV,&
-                         limAA,limAI,limAV,limIV,pos,&
-                         IGem,IndN,INActive,NAct,NBasis,NDimX)
-
-nblk = 0
-
-!pack AA
-if(nAA>0) then
-   nblk = nblk + 1
-   call pack_A0block(ABPLUS,ABMIN,nAA,limAA(1),limAA(2),tmpAA,A0block(nblk),NDimX,ver)
-endif
-!pack AI
-do iq=1,INActive
-   if(nAI(iq)>0) then
-      nblk = nblk + 1
-      call pack_A0block(ABPLUS,ABMIN,nAI(iq),limAI(1,iq),limAI(2,iq),tmpAI(1:nAI(iq),iq),&
-                        A0block(nblk),NDimX,ver)
-   endif
-enddo
-!pack AV
-do ip=NOccup+1,NBasis
-   if(nAV(ip)>0) then
-      nblk = nblk + 1
-      call pack_A0block(ABPLUS,ABMIN,nAV(ip),limAV(1,ip),limAV(2,ip),tmpAV(1:nAV(ip),ip),&
-                        A0block(nblk),NDimX,ver)
-    endif
-enddo
-!pack IV
-associate(B => A0blockIV)
-
-  B%l1 = limIV(1)
-  B%l2 = limIV(2)
-  B%n  = B%l2-B%l1+1
-  allocate(B%pos(B%n))
-  B%pos(1:B%n) = tmpIV(1:B%n)
-
-  allocate(B%vec(B%n))
-
-  if(ver==0) then
-     do i=1,B%n
-        ii = B%l1+i-1
-        B%vec(i) = ABPLUS(ii,ii)
-     enddo
-  elseif(ver==1) then
-     do i=1,B%n
-        ii = B%l1+i-1
-        B%vec(i) = ABPLUS(ii,ii)*ABMIN(ii,ii)
-     enddo
-  endif
-
-end associate
-
-if(present(dumpfile)) then
-  ! dump to file
-  open(newunit=iunit,file=dumpfile,form='unformatted')
-  write(iunit) nblk
-  do iblk=1,nblk
-     associate(B => A0Block(iblk))
-       write(iunit) iblk, B%n, B%l1, B%l2
-       write(iunit) B%pos,B%matX
-     end associate
-  enddo
-  associate(B => A0BlockIV)
-    write(iunit) B%n,B%l1,B%l2
-    write(iunit) B%pos,B%vec
-  end associate
-  close(iunit)
-endif
-
-end subroutine pack_AC0BLOCK
 
 !subroutine pack_AC0LRBLOCK(ABPlus,ABMin,nblk,IndN,INActive,NAct,NDimX,NBasis,ver,dumpfile)
 !!
@@ -1653,6 +1554,7 @@ subroutine AC0BLOCK(Occ,URe,XOne, &
 !                 (FOFO VERSION)
 !
 use abfofo
+use ab0fofo
 !use types,only : EblockData
 use blocktypes
 !
@@ -2086,9 +1988,9 @@ integer :: I,J,IJ,inf,ICholesky,NOccup
 Om=FreqOm
 
 NOccup=NAct+INActive
-Call ComputeDipoleMom(UNOAO,Occ,NOccup,NBasis)
+Call ComputeDipoleMom(UNOAO,Occ,'DIP','AOONEINT.mol',NOccup,NBasis)
 
-Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 
 do i=1,NBasis
 CICoef(i) = sign(sqrt(Occ(i)),Occ(i)-0.5d0)
@@ -2108,7 +2010,7 @@ twokfile = 'FOFO'
 Alpha=1.0
 Call AB_CAS_FOFO(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,ICholesky,Alpha,.false.)
+              NInte1,twojfile,twokfile,ICholesky,0,Alpha,.false.)
 AIN=0d0
 Do I=1,NDimX
     AIN((I-1)*NDimX+I)=1.0
@@ -2168,9 +2070,9 @@ integer :: I,J,IJ,inf,ICholesky,NOccup
 Om=FreqOm
 
 NOccup=NAct+INActive
-Call ComputeDipoleMom(UNOAO,Occ,NOccup,NBasis)
+Call ComputeDipoleMom(UNOAO,Occ,'DIP','AOONEINT.mol',NOccup,NBasis)
 
-Call ReadDip(DipX,DipY,DipZ,UNOAO,NBasis)
+Call ReadDip(DipX,DipY,DipZ,UNOAO,'DIP',NBasis)
 
 do i=1,NBasis
 CICoef(i) = sign(sqrt(Occ(i)),Occ(i)-0.5d0)
@@ -2286,7 +2188,7 @@ Call AC0BLOCK(Occ,URe,XOne, &
 ACAlpha=1.D0
 call AB_CAS_FOFO(ABPLUS1,ABMIN1,ECASSCF,URe,Occ,XOne, &
               IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,twojfile,twokfile,ICholesky,ACAlpha,.false.)
+              NInte1,twojfile,twokfile,ICholesky,0,ACAlpha,.false.)
 
 Call sq_symmetrize(ABPLUS1,NDimX)
 Call sq_symmetrize(ABMIN1,NDimX)

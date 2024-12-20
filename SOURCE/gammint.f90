@@ -6,8 +6,9 @@ use Cholesky, only : chol_CoulombMatrix, TCholeskyVecs, &
 use basis_sets
 use sys_definitions
 use CholeskyOTF_interface
-use CholeskyOTF, only : TCholeskyVecsOTF
-use Cholesky_driver, only : chol_Rkab_OTF
+use Cholesky_GammCor, only : TCholeskyVecsOTF, chol_gammcor_Rkab
+
+use THC_Gammcor, only : thc_gammcor_XZ, thc_gammcor_Xga, thc_gammcor_Rkab_2
 
 use BeckeGrid
 use GridFunctions
