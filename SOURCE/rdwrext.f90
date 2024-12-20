@@ -557,6 +557,222 @@ character(8) :: label
 
 end subroutine read_caomo_molpro
 
+subroutine read_umo_molpro(umo,nbasis,text,infile)
+!
+! this subroutine reads C(SAO,MO,:) alpha/beta coefficients
+! these are dumped in Molpro through CA and CB
+! labels
+!
+implicit none
+
+integer,intent(in) :: nbasis
+character(*),intent(in) :: infile,text
+double precision,intent(out) :: umo(nbasis,nbasis,2)
+
+character(8) :: label
+integer :: iunit,ios
+integer :: nsym,nbas(8),offs(8),ncmot
+integer :: i,j,idx,irep,ioff
+double precision ::tmp_a(nbasis**2),tmp_b(nbasis**2)
+
+ open(newunit=iunit,file=infile,status='OLD', &
+      access='SEQUENTIAL',form='UNFORMATTED')
+
+ !rewind(iunit)
+ do
+   read(iunit,iostat=ios) label
+   if(ios<0) then
+      write(6,*) 'ERROR!!! LABEL '//text//' not found!'
+      stop
+   endif
+   if(label==text) then
+      read(iunit) nsym,nbas(1:nsym),offs(1:nsym)
+      ncmot = sum(nbas(1:nsym)**2)
+      !print*, nsym,nbas(1:nsym),offs(1:nsym)
+      read(iunit) tmp_a(1:ncmot)
+      read(iunit) tmp_b(1:ncmot)
+      exit
+   endif
+ enddo
+
+ umo = 0d0
+ idx = 0
+ do irep=1,nsym
+    ioff = offs(irep)
+    do j=1,nbas(irep)
+       do i=1,nbas(irep)
+          idx = idx + 1
+          umo(ioff+i,ioff+j,1) = tmp_a(idx)
+          umo(ioff+i,ioff+j,2) = tmp_b(idx)
+       enddo
+    enddo
+ enddo
+
+ !write(LOUT,*) 'readm_umo_molpro: Calpha'
+ !do j=1,NBasis
+ !   print*, j
+ !   write(*,'(14f11.6)') (umo(i,j,1),i=1,nbasis)
+ !end do
+ !write(LOUT,*) 'readm_umo_molpro: Cbeta '
+ !do j=1,NBasis
+ !   print*, j
+ !   write(*,'(14f11.6)') (umo(i,j,2),i=1,nbasis)
+ !end do
+
+ close(iunit)
+
+end subroutine read_umo_molpro
+
+subroutine read_uocc_molpro(uocc,nbasis,text,infile)
+!
+! this subroutine reads alpha/beta occupation numbers
+! these are dumped in Molpro through CA and CB
+! labels
+!
+implicit none
+
+integer,intent(in) :: nbasis
+character(*),intent(in) :: infile,text
+double precision,intent(out) :: uocc(nbasis,2)
+
+character(8) :: label
+integer :: iunit,ios
+integer :: nsym,nbas(8),offs(8),nmo
+integer :: i,j,idx,irep,ioff
+double precision :: val
+
+ open(newunit=iunit,file=infile,status='OLD', &
+      access='SEQUENTIAL',form='UNFORMATTED')
+
+ !rewind(iunit)
+ do
+   read(iunit,iostat=ios) label
+   if(ios<0) then
+      write(6,*) 'ERROR!!! LABEL '//text//' not found!'
+      stop
+   endif
+   if(label==text) then
+      read(iunit) nsym,nbas(1:nsym),offs(1:nsym)
+      nmo = sum(nbas(1:nsym))
+      if(nsym.gt.1) stop 'sym not ready in read_uocc_molpro!'
+      read(iunit)
+      read(iunit)
+      read(iunit) uocc(1:nmo,1)
+      read(iunit) uocc(1:nmo,2)
+      exit
+   endif
+ enddo
+
+ !print*, 'read_uocc_molpro'
+ !print*, 'Occupations alpha'
+ !do i=1,nmo
+ !   val = uocc(i,1)
+ !   if (val.gt.1d-12) write(6,'(1x,i3,f11.6)') i,val
+ !enddo
+ !print*, 'Occupations beta '
+ !do i=1,nmo
+ !   val = uocc(i,2)
+ !   if (val.gt.1d-12) write(6,'(1x,i3,f11.6)') i,val
+ !enddo
+
+end subroutine read_uocc_molpro
+
+subroutine read_uorbe_molpro(uorbe,nbasis,text,infile)
+!
+! this subroutine reads alpha/beta occupation numbers
+! these are dumped in Molpro through CA and CB
+! labels
+!
+implicit none
+
+integer,intent(in) :: nbasis
+character(*),intent(in) :: infile,text
+double precision,intent(out) :: uorbe(nbasis,2)
+
+character(8) :: label
+integer :: iunit,ios
+integer :: nsym,nbas(8),offs(8),nmo
+integer :: i,j,idx,irep,ioff
+double precision :: val
+
+ open(newunit=iunit,file=infile,status='OLD', &
+      access='SEQUENTIAL',form='UNFORMATTED')
+
+ !rewind(iunit)
+ do
+   read(iunit,iostat=ios) label
+   if(ios<0) then
+      write(6,*) 'ERROR!!! LABEL '//text//' not found!'
+      stop
+   endif
+   if(label==text) then
+      read(iunit) nsym,nbas(1:nsym),offs(1:nsym)
+      nmo = sum(nbas(1:nsym))
+      if(nsym.gt.1) stop 'sym not ready in read_uorbe_molpro!'
+      read(iunit)
+      read(iunit)
+      read(iunit)
+      read(iunit)
+      read(iunit) uorbe(1:nmo,1)
+      read(iunit) uorbe(1:nmo,2)
+      exit
+   endif
+ enddo
+
+ !print*, 'read_uorbe_molpro'
+ !print*, 'Orbital energies alpha'
+ !do i=1,nmo
+ !   write(6,'(1x,i3,f11.6)') i,uorbe(i,1)
+ !enddo
+ !print*, 'Orbital energies beta '
+ !do i=1,nmo
+ !   write(6,'(1x,i3,f11.6)') i,uorbe(i,2)
+ !enddo
+
+end subroutine read_uorbe_molpro
+
+subroutine read_aosao_map_molpro(jtsoao,infile,text,nbasis)
+!
+! this subroutine reads AO-->SAO map
+! transition from SAO-->AO is done in Molpro
+!
+implicit none
+
+integer,intent(in)           :: nbasis
+integer,intent(out)          :: jtsoao(nbasis)
+character(*),intent(in)      :: infile,text
+
+integer      :: iunit,ios
+integer      :: i,j,ntg
+integer      :: itsoao(nbasis)
+character(8) :: label
+
+ open(newunit=iunit,file=infile,status='OLD', &
+      access='SEQUENTIAL',form='UNFORMATTED')
+
+ do
+   read(iunit,iostat=ios) label
+   if(ios<0) then
+      write(6,*) 'ERROR!!! LABEL '//text//' not found!'
+      stop
+   endif
+   if(label==text) then
+      read(iunit) ntg
+      read(iunit) itsoao(1:ntg),jtsoao(1:ntg)
+      exit
+   endif
+ enddo
+
+ if(NBasis /= ntg) then
+   write(lout,'(1x,a)') 'ERROR! NBasis .ne. ntg in read_caomo_molpro!'
+   write(lout,'(1x,a,i4,a,i4)') 'NBasis = ', NBasis, 'ntg = ', ntg
+   stop
+ endif
+
+ close(iunit)
+
+end subroutine read_aosao_map_molpro
+
 subroutine dump_CAONO_SAO(CAONO,CSAONO,SAO,infile,NBasis)
 !
 ! THIS IS FOR TEST ONLY & SHOULD BE REMOVED
@@ -800,6 +1016,46 @@ character(8) :: label
  close(iunit)
 
 end subroutine read_NoSt_molpro
+
+subroutine read_Ene_molpro(ECasscf,nstates,infile)
+!
+! read CASSCF energies from Molpro
+! NStates is obtained by summing nstats(mxstsy)
+!         (from common/cstate in Molpro)
+!
+! probably fails for symmetry!
+!
+implicit none
+
+integer,intent(out) :: nstates
+double precision,intent(out) :: ECasscf(8)
+character(*),intent(in) :: infile
+
+integer :: iunit, ios
+character(8) :: label
+
+ open(newunit=iunit,file=infile,status='OLD', &
+      access='SEQUENTIAL',form='UNFORMATTED')
+
+ fileloop: do
+           read(iunit,iostat=ios) label
+           if(ios<0) then
+              write(LOUT,*) 'ERROR!!! LABEL ENEINFO  not found!'
+              stop
+           endif
+           if(label=='ENEINFO ') then
+              read(iunit) nstates
+              read(iunit) ECasscf(1:nstates)
+              exit fileloop
+           endif
+         enddo fileloop
+
+ close(iunit)
+
+! print*, 'NStates Molpro  = ', nstates
+! print*, 'CASSCF Energies = ', ECasscf(1:nstates)
+
+end subroutine read_Ene_molpro
 
 subroutine read_dip_molpro(matdx,matdy,matdz,infile,nbasis)
 !
@@ -1205,7 +1461,7 @@ subroutine read_mo_dalton(cmo,nbasis,nsym,nbas,norb,nsiri,nmopun)
 !
 ! reads MOs either from SIRIUS.RST or DALTON.MOPUN
 ! unpacks symmetry blocks to (NBasis,NOrb) form
-! in SAPT orbitals kept in AOMO order!
+! in SAPT, orbitals kept in AOMO order!
 !
 implicit none
 
@@ -1323,6 +1579,34 @@ endif
 
 end subroutine read_orbinf_dalton
 
+subroutine read_sym_dalton(NSym,NSymBas,NSymOrb,infile,text)
+!
+! Purpose  : read irreps of orbitals (NSymMO)
+!            and how many orbitals in each irrep (nbas)
+! Requires : SIRIUS.RST
+!
+implicit none
+
+character(*),intent(in) :: infile,text
+integer,intent(out) :: nsym
+integer,intent(out) :: NSymBas(8),NSymOrb(8)
+
+integer :: iunit
+integer :: nrhf(8),ioprhf
+logical :: ex
+
+inquire(file='SIRIUS.RST',EXIST=ex)
+if(ex) then
+   open(newunit=iunit,file=infile,status='OLD',access='SEQUENTIAL',form='UNFORMATTED')
+   call readlabel(iunit,text)
+!  call readlabel(iunit,'BASINFO ')
+   read (iunit) NSym,NSymBas,NSymOrb,nrhf,ioprhf
+   close(iunit)
+else
+   stop 'WARNING: SIRIUS.RST NOT FOUND!'
+endif
+
+end subroutine read_sym_dalton
 
 subroutine read_syminf_dalton(ANSym,BNSym,BUcen,ANSymOrb,BNSymOrb,ANMonBas,BNMonBas)
 !

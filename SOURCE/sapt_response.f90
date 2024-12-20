@@ -14,31 +14,34 @@ implicit none
 contains
 
 subroutine calc_resp_casgvb(Mon,MO,Flags,NBas,EChck)
+!
+! solve ERPA equations for monomer Mon:
+!   CASSCF or GVB-PP wave functions
+!
 implicit none
 
-type(SystemBlock) :: Mon
-type(FlagsData) :: Flags
-double precision :: MO(:)
-integer :: NBas
+type(SystemBlock)  :: Mon
+type(FlagsData)    :: Flags
+double precision   :: MO(:)
+integer,intent(in) :: NBas
 logical :: EChck
-integer :: NSq,NInte1,NInte2
-double precision, allocatable :: work1(:),work2(:),XOne(:),TwoMO(:)
-double precision, allocatable :: ABPlus(:), ABMin(:), URe(:,:), &
-                                 CMAT(:),EMAT(:),EMATM(:), &
-                                 DMAT(:),DMATK(:), &
-                                 EigVecR(:), Eig(:), &
-                                 ABPlusT(:), ABMinT(:)
+
+double precision, allocatable :: XOne(:),TwoMO(:),URe(:,:)
+double precision, allocatable :: ABPlus(:),ABMin(:), &
+                                 EigVecR(:),Eig(:)
+double precision, allocatable :: CMAT(:),EMAT(:),EMATM(:), &
+                                 DMAT(:),DMATK(:)
 double precision, allocatable :: Eig0(:),Eig1(:),EigY0(:),EigY1(:)
+double precision, allocatable :: work1(:),work2(:)
 double precision,allocatable  :: workSq(:,:)
 
+integer :: NInte1,NInte2
 integer :: dimOcc
 integer :: i,j,k,l,ii,jj,ij,ij1,ione,itwo
 integer :: ip,iq,pq
 integer :: iunit
 integer :: DimEx
 integer :: INegExcit
-!test
-integer :: iter
 
 double precision :: ACAlpha
 double precision :: ECASSCF,ETot,ECorr
@@ -47,6 +50,7 @@ character(8) :: label
 character(:),allocatable :: onefile,twofile,propfile,rdmfile
 character(:),allocatable :: twojfile,twokfile
 character(:),allocatable :: propfile0,propfile1
+character(:),allocatable :: propbatch
 character(:),allocatable :: y01file,xy0file
 character(:),allocatable :: abpm0file
 character(:),allocatable :: abfile,testfile
@@ -67,10 +71,7 @@ double precision,allocatable :: COMTilde(:)
 double precision,allocatable :: ABPlus0(:,:),ABMin0(:,:)
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
-
-! test iterative
-iter = 1
+call gclock('START',Tcpu,Twall)
 
 ! set filenames
 if(Mon%Monomer==1) then
@@ -81,6 +82,7 @@ if(Mon%Monomer==1) then
    propfile   = 'PROP_A'
    propfile0  = 'PROP_A0'
    propfile1  = 'PROP_A1'
+   propbatch  = 'PROB_A'
    y01file    = 'Y01_A'
    xy0file    = 'XY0_A'
    abpm0file  = 'A0BLK_A'
@@ -95,6 +97,7 @@ elseif(Mon%Monomer==2) then
    propfile   = 'PROP_B'
    propfile0  = 'PROP_B0'
    propfile1  = 'PROP_B1'
+   propbatch  = 'PROB_B'
    y01file    = 'Y01_B'
    xy0file    = 'XY0_B'
    abpm0file  = 'A0BLK_B'
@@ -126,6 +129,8 @@ if(Mon%TwoMoInt==TWOMO_INCORE) call LoadSaptTwoNO(Mon%Monomer,TwoMO,NBas,NInte2)
 ! response is obtained either for GVB or CASSCF functions
 
 ACAlpha=One
+ !print*, 'UNCOUPLED:'
+ !ACAlpha=1d-6
 ! GVB
 if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
 
@@ -142,7 +147,8 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
   case(TWOMO_FOFO)
      call ACABMAT0_FOFO(ABPlus,ABMin,URe,Mon%Occ,XOne,&
                    Mon%IndN,Mon%IndX,Mon%IGem,Mon%CICoef,&
-                   Mon%NAct,Mon%NELE,NBas,Mon%NDim,Mon%NDimX,NInte1,Mon%NGem,&
+                   Mon%NISHT_G,Mon%NASHT_G,NBas,&
+                   Mon%NDim,Mon%NDimX,NInte1,Mon%NGem,&
                    twofile,twojfile,twokfile,0,ACAlpha,1)
 
   case(TWOMO_FFFF,TWOMO_INCORE)
@@ -280,7 +286,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
   case(TWOMO_FOFO)
      call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                  Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-                 NInte1,twojfile,twokfile,Flags%ICholesky,ACAlpha,.false.)
+                 NInte1,twojfile,twokfile,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
   case(TWOMO_FFFF)
 
      call AB_CAS_mithap(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
@@ -311,7 +317,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
   !                due to poor quality of deexcitation energies from ERPA (in general)
   !if(Mon%InSt(1,1)<0.or.Mon%InSt(1,1)==1) then
 
-  if(iter==1) then
+  if(Flags%ICholesky==1) then
      ! dump matrices for iterative C-ERPA
      open(newunit=iunit,file=abfile,form='unformatted')
      write(iunit) ABPlus
@@ -326,7 +332,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
 !               ABMin0(Mon%NDimX,Mon%NDimX))
 !      call AB_CAS_FOFO(ABPlus0,ABMin0,ECASSCF,URe,Mon%Occ,XOne, &
 !                  Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-!                  NInte1,twojfile,twokfile,Flags%ICholesky,1d-9,.false.)
+!                  NInte1,twojfile,twokfile,Flags%ICholesky,0,1d-9,.false.)
 !      ! dump matrices for iterative C-ERPA
 !      open(newunit=iunit,file=testfile,form='unformatted')
 !      write(iunit) ABPlus0
@@ -355,7 +361,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
      enddo
   enddo
 
-  call clock('ERPA response',Tcpu,Twall)
+  call gclock('ERPA response',Tcpu,Twall)
 
   !print*, 'EigVecR',norm2(EigVecR)
   !print*, 'Eig    ',norm2(Mon%Eig)
@@ -364,7 +370,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
   !allocate(Mon%PP(Mon%NDimX**2))
   !call AB_CAS_FOFO(ABPlus,Mon%PP,ECASSCF,URe,Mon%Occ,XOne, &
   !              Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-  !              NInte1,twojfile,twokfile,Flags%ICholesky,1d0,.true.)
+  !              NInte1,twojfile,twokfile,Flags%ICholesky,Flags%IDBBSC,1d0,.true.)
 
   !print*, 'Mon%PP',norm2(Mon%PP)
 
@@ -476,15 +482,15 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
             NBas,Mon%NDimX,NInte1,Mon%NoSt,twofile,twojfile,twokfile,&
             Flags%IFlag0,Flags%ICholesky)
 
-  if(Flags%ICholesky==1) then
-     nblk = 1 + NBas - Mon%NAct
-     allocate(A0Block(nblk))
-     ! maybe just include blocks in Mon%...?
-     call AC0BLOCK(Mon%Occ,URe,XOne, &
-          Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX, &
-          NBas,Mon%NDimX,NInte1,twojfile,twokfile,Flags%ICholesky, &
-          A0BlockIV,A0Block,nblk,1,abpm0file,1)
-  endif
+     if(Flags%ICholesky==1) then
+        nblk = 1 + NBas - Mon%NAct
+        allocate(A0Block(nblk))
+        ! maybe just include blocks in Mon%...?
+        call AC0BLOCK(Mon%Occ,URe,XOne, &
+             Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX, &
+             NBas,Mon%NDimX,NInte1,twojfile,twokfile,Flags%ICholesky, &
+             A0BlockIV,A0Block,nblk,1,abpm0file,1)
+     endif
   case(TWOMO_FFFF)
      call Y01CAS_mithap(Mon%Occ,URe,XOne,ABPlus,ABMin, &
             propfile0,propfile1, &
@@ -551,7 +557,7 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
 
   end select
 
-  call clock('ERPA unc response',Tcpu,Twall)
+  call gclock('ERPA unc response',Tcpu,Twall)
 
   !! test CAlpha
 !   NGOcc = 0
@@ -573,6 +579,12 @@ endif
 
 ! dump response
  call writeresp(EigVecR,Eig,propfile)
+
+!block
+!! dump response in batches
+! integer,parameter :: MaxBatchSize = 120
+! call WriteRespBatch(Mon%NDimX,MaxBatchSize,Eig,EigVecR,propbatch)
+!end block
 
  deallocate(work1,work2,XOne,URe)
  !if(Mon%TwoMoInt==1) deallocate(TwoMO)
@@ -680,7 +692,7 @@ select case(Mon%TwoMoInt)
 case(TWOMO_FOFO)
    call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-               NInte1,twojfile,twokfile,Flags%ICholesky,ACAlpha,.false.)
+               NInte1,twojfile,twokfile,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
 case(TWOMO_FFFF)
 
    call AB_CAS_mithap(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
@@ -812,7 +824,7 @@ case(TWOMO_FOFO)
 
    call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-               NInte1,FNam%twojfile,FNam%twokfile,ICholesky,ACAlpha,.false.)
+               NInte1,FNam%twojfile,FNam%twokfile,ICholesky,0,ACAlpha,.false.)
 case(TWOMO_FFFF)
 
    call AB_CAS_mithap(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
@@ -1121,6 +1133,10 @@ double precision, allocatable :: ABPlus(:),ABMin(:),DMAT(:),DMATK(:),&
 end subroutine calc_resp_pino
 
 subroutine calc_resp_unc(Mon,MO,Flags,NBas)
+!
+! calculate uncoupled response
+! either for GVB-PP or CASSCF wave function
+!
 implicit none
 
 type(SystemBlock) :: Mon
@@ -1130,7 +1146,14 @@ integer,intent(in)            :: NBas
 double precision,intent(in)   :: MO(:)
 
 integer          :: i,ione
+integer          :: iunit
 integer          :: NSq,NInte1,NInte2
+
+! Cholesky OTF, A0 blocks stored in abpm0file
+integer          :: nblk
+type(EblockData),allocatable :: A0block(:)
+type(EblockData) :: A0blockIV
+
 double precision :: ETot
 double precision, allocatable :: work1(:),work2(:),XOne(:),TwoMO(:)
 double precision, allocatable :: ABPlus(:), ABMin(:), URe(:,:),      &
@@ -1138,7 +1161,7 @@ double precision, allocatable :: ABPlus(:), ABMin(:), URe(:,:),      &
 character(8)                  :: label
 character(:),allocatable      :: twojfile,twokfile
 character(:),allocatable      :: onefile,twofile,propfile0,propfile1,rdmfile
-character(:),allocatable      :: y01file,xy0file
+character(:),allocatable      :: y01file,xy0file,abpm0file
 
 ! set filenames
 if(Mon%Monomer==1) then
@@ -1151,6 +1174,7 @@ if(Mon%Monomer==1) then
    rdmfile   = 'rdm2_A.dat'
    y01file   = 'Y01_A'
    xy0file   = 'XY0_A'
+   abpm0file = 'A0BLK_A'
 elseif(Mon%Monomer==2) then
    onefile   = 'ONEEL_B'
    twofile   = 'TWOMOBB'
@@ -1161,6 +1185,7 @@ elseif(Mon%Monomer==2) then
    rdmfile   = 'rdm2_B.dat'
    y01file   = 'Y01_B'
    xy0file   = 'XY0_B'
+   abpm0file = 'A0BLK_B'
 endif
 
 ! set dimensions
@@ -1220,6 +1245,21 @@ if(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
 ! CAS
 elseif(Flags%ICASSCF==1.and.Flags%ISERPA==0) then
 
+  if(Flags%ICholeskyOTF==1.or.Flags%ICholeskyBIN==1) then
+  ! write cholesky vecs on disk!
+     if(Mon%Monomer==2) then
+        open(newunit=iunit,file='cholvecs',status='old')
+        close(iunit,status='delete')
+     endif
+     open(newunit=iunit,file='cholvecs',form='unformatted')
+     write(iunit) Mon%NChol
+     write(iunit) Mon%FF
+     close(iunit)
+     ! they are needed in JK_Chol_loop
+     write(lout,'(1x,"Monomer ",i1,": deallocate FF(NBas^2|NChol)")') Mon%Monomer
+     deallocate(Mon%FF)
+  endif
+
   allocate(ABPlus(Mon%NDimX**2),ABMin(Mon%NDimX**2))
 
   select case(Mon%TwoMoInt)
@@ -1230,6 +1270,16 @@ elseif(Flags%ICASSCF==1.and.Flags%ISERPA==0) then
             Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX, &
             NBas,Mon%NDim,NInte1,Mon%NoSt,twofile,twojfile,twokfile, &
             Flags%IFlag0,Flags%ICholesky)
+
+     if(Flags%ICholesky==1) then
+        nblk = 1 + NBas - Mon%NAct
+        allocate(A0Block(nblk))
+        call AC0BLOCK(Mon%Occ,URe,XOne, &
+             Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX, &
+             NBas,Mon%NDimX,NInte1,twojfile,twokfile,Flags%ICholesky, &
+             A0BlockIV,A0Block,nblk,1,abpm0file,1)
+     endif
+
   case(TWOMO_FFFF)
      call Y01CAS_mithap(Mon%Occ,URe,XOne,ABPlus,ABMin, &
             propfile0,propfile1, &
@@ -1271,6 +1321,23 @@ if(Mon%TwoMoInt==1) deallocate(TwoMO)
 deallocate(URe,XOne,work1,work2)
 
 end subroutine calc_resp_unc
+
+subroutine calc_resp_dft_unc(Mon,Flags,NBas)
+!
+! calculate uncoupled response
+! for CASsrDFT wave function
+!
+implicit none
+
+type(SystemBlock) :: Mon
+type(FlagsData) :: Flags
+
+integer,intent(in) :: NBas
+
+stop "SAPT(MC-srDFT) unc response not ready!"
+
+end subroutine calc_resp_dft_unc
+
 
 subroutine calc_resp_dft_molpro(Mon,MO,Flags,NAO,NBas)
 implicit none
@@ -1491,7 +1558,7 @@ case(TWOMO_FFFF)
 case(TWOMO_FOFO)
    call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBas,Mon%NDimX,&
-               NInte1,twojerf,twokerf,Flags%ICholesky,ACAlpha,.false.)
+               NInte1,twojerf,twokerf,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
 !else
 ! HERE:: ADD SEPARATE PROCEDURE FOR Kohn-Sham!
 !endif
@@ -1503,7 +1570,7 @@ MultpC(1,1)=1
 call GetKerNPT(SRKer,Mon%Occ,URe,OrbGrid,WGrid,NSymNO,MultpC, &
                NBas,NGrid)
 print*, 'SRKer',norm2(SRKer)
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 select case(Mon%TwoMoInt)
 case(TWOMO_INCORE)
    call ModABMin(Mon%Occ,SRKer,WGrid,OrbGrid,TwoMO,TwoElErf,ABMin,&
@@ -1520,7 +1587,7 @@ case(TWOMO_FOFO)
                       twokfile,twokerf,.false.)
    print*, 'ABMin-MY',norm2(ABMin)
 end select
-call clock('Mod ABMin',Tcpu,Twall)
+call gclock('Mod ABMin',Tcpu,Twall)
 
 !write(LOUT,'(1x,a)') "*** sr-kernel added. ***"
 ! test true energy
@@ -1646,7 +1713,11 @@ end subroutine calc_resp_dft_molpro
 
 subroutine calc_resp_dft_dalton(Mon,Flags,NAO,NBasis)
 !
-! calculate DFT and srDFT response with files from Dalton
+! calculate DFT and srDFT ERPA response
+!          using Dalton files
+!
+! CAREFUL!!! This should be later merged with
+!            calc_resp_dft_molpro
 !
 implicit none
 
@@ -1655,9 +1726,10 @@ type(FlagsData)    :: Flags
 integer,intent(in) :: NAO,NBasis
 
 integer :: NINte1,NInte2
-integer :: ione
+integer :: iunit,ione
 integer :: i,j,ii,ip,iq
 integer :: NGrid
+integer :: nblk
 integer :: NSymNO(NBasis),MultpC(15,15)
 
 double precision :: EnSR,EnHSR,XVSR,ECASSCF
@@ -1678,26 +1750,39 @@ double precision,allocatable :: XOne(:)
 double precision,allocatable :: work(:,:),workTr(:)
 logical :: doGGA,doRSH
 
+type(EblockData) :: A0blockIV
+type(EblockData),allocatable :: A0block(:)
+
 character(8) :: label
 character(:),allocatable :: BasisSetPath
 character(:),allocatable :: onefile,aoerfile,aosrfile, &
                             twokfile,twojerf,twokerf,  &
                             propfile,propfile0,propfile1,xy0file,rdmfile, &
-                            gridfile
+                            abfile,abpm0file,gridfile
 
 double precision :: Tcpu,Twall
 integer :: InternalGrid
 
 InternalGrid = Flags%InternalGrid
 
-!print*, 'Entering calc_resp_dft_dalton...'
-
-! checks
+! checks - 1
 if(Mon%TwoMoInt/=TWOMO_FOFO) stop "calc_resp_dft_dalton works only with FOFO integrals!"
 
 ! temporary RSH solution
 doRSH = .false.
 if(Flags%IFunSR==1.or.Flags%IFunSR==2) doRSH = .true.
+! Flags%IFunSR == 3 is PBE!
+
+! checks - 2
+if (Flags%ICholeskyOTF==1) then
+   if (doRSH) then
+      if (allocated(Mon%FFErf)) then
+         print*, 'sapt_dft_reponse with Cholesky OTF...'
+      else
+         return
+      endif
+   endif
+endif
 
 ! set filenames
 if(Mon%Monomer==1) then
@@ -1709,8 +1794,10 @@ if(Mon%Monomer==1) then
    propfile0  = 'PROP_A0'
    propfile1  = 'PROP_A1'
    xy0file    = 'XY0_A'
+   abpm0file  = 'A0BLK_A'
    rdmfile    = 'rdm2_A.dat'
    gridfile   = 'dftgrid_A.dat'
+   abfile     = 'ABMAT_A'
    aoerfile   = 'AOERFSORT'
 elseif(Mon%Monomer==2) then
    onefile    = 'ONEEL_B'
@@ -1721,7 +1808,9 @@ elseif(Mon%Monomer==2) then
    propfile0  = 'PROP_B0'
    propfile1  = 'PROP_B1'
    xy0file    = 'XY0_B'
+   abpm0file  = 'A0BLK_B'
    rdmfile    = 'rdm2_B.dat'
+   abfile     = 'ABMAT_B'
    gridfile   = 'dftgrid_B.dat'
    if(Mon%SameOm) then
       aoerfile = 'AOERFSORT'
@@ -1864,27 +1953,33 @@ write(LOUT,'(/1x,a,i8)') "The number of Grid Points =",NGrid
 ! set/load Omega - range separation parameter
 write(LOUT,'(1x,a,f15.8)') "The range-separation parameter =",Mon%Omega
 
-! transform ??? 2-el integrals
-! do we need to transform SR integrals? 
-
 ! transform LR integrals
 if(doRSH) then
-  call tran4_gen(NBasis,&
-          Mon%num0+Mon%num1,CAONO,&
-          Mon%num0+Mon%num1,CAONO,&
-          NBasis,CAONO,&
-          NBasis,CAONO,&
-          twojerf,aoerfile)
-  call tran4_gen(NBasis,&
-          NBasis,CAONO,&
-          Mon%num0+Mon%num1,CAONO,&
-          NBasis,CAONO,&
-          Mon%num0+Mon%num1,CAONO,&
-          twokerf,aoerfile)
+   if(Flags%ICholesky==0) then
+      call tran4_gen(NBasis,&
+              Mon%num0+Mon%num1,CAONO,&
+              Mon%num0+Mon%num1,CAONO,&
+              NBasis,CAONO,&
+              NBasis,CAONO,&
+              twojerf,aoerfile)
+      call tran4_gen(NBasis,&
+              NBasis,CAONO,&
+              Mon%num0+Mon%num1,CAONO,&
+              NBasis,CAONO,&
+              Mon%num0+Mon%num1,CAONO,&
+              twokerf,aoerfile)
+   endif
 endif
 
 ! testprints
 print*, 'IFunSR',Flags%IFunSR
+
+! test rho
+if (doGGA) then
+   call RhoGGAIntgrl(Mon%Occ,URe,OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
+else
+   call RhoLDAIntgrl(Mon%Occ,URe,OrbGrid,WGrid,NGrid,NBasis)
+endif
 
 call sq_to_triang2(Mon%Jsr,workTr,NBasis)
 allocate(VSR(NInte1))
@@ -1946,6 +2041,22 @@ ACAlpha = 1d0
 ! UNCOUPLED-TEST
 !ACAlpha=1d-9
 
+if(Flags%ICholeskyOTF==1.or.Flags%ICholeskyBIN==1) then
+! write cholesky LR vecs on disk!
+   write(LOUT,'(1x,a)') ' Writing LR Cholesky vectors on disk (File: cholvecs)'
+   !print*, ' NCholesky LR = ', Mon%NCholErf
+   if(Mon%Monomer==2) then
+      open(newunit=iunit,file='cholvecs',status='old')
+      close(iunit,status='delete')
+   endif
+   open(newunit=iunit,file='cholvecs',form='unformatted')
+   write(iunit) Mon%NCholErf
+   write(iunit) Mon%FFErf
+   close(iunit)
+   ! they are needed in JK_Chol_loop
+   deallocate(Mon%FFErf)
+endif
+
 allocate(ABPlus(Mon%NDimX**2),ABMin(Mon%NDimX**2))
 allocate(EigVecR(Mon%NDimX**2))
 
@@ -1958,9 +2069,11 @@ ECASSCF = 0d0
 !               Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBasis,Mon%NDimX,&
 !               NInte1,twojerf,twokerf,0,ACAlpha,.false.)
 !else
+!ACAlpha=1d-6
+print*, 'ACAlpha in Hessians = ', ACAlpha
 call AB_CAS_FOFO(ABPlus,ABMin,ECASSCF,URe,Mon%Occ,XOne, &
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,Mon%NDimX,NBasis,Mon%NDimX,&
-               NInte1,twojerf,twokerf,Flags%ICholesky,ACAlpha,.false.)
+               NInte1,twojerf,twokerf,Flags%ICholesky,Flags%IDBBSC,ACAlpha,.false.)
 !endif
 
 write(LOUT,'(/,1x,a,f16.8,a,1x,f16.8)') 'ABPlus',norm2(ABPlus),'ABMin',norm2(ABMin)
@@ -1970,7 +2083,7 @@ write(LOUT,'(/,1x,a,f16.8,a,1x,f16.8)') 'ABPlus',norm2(ABPlus),'ABMin',norm2(ABM
 MultpC(1,1)=1
 call GetKerNPT(SRKer,Mon%Occ,URe,OrbGrid,WGrid,NSymNO,MultpC,NBasis,NGrid)
 print*, 'SRKer',norm2(SRKer)
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 call ModABMin_FOFO(Mon%Occ,SRKer,WGrid,OrbGrid,ABMin,&
                    MultpC,NSymNO,&
@@ -1978,7 +2091,16 @@ call ModABMin_FOFO(Mon%Occ,SRKer,WGrid,OrbGrid,ABMin,&
                    Mon%num0,Mon%num1, &
                    twokfile,twokerf,.false.)
 print*, 'ABMin-MY',norm2(ABMin)
-call clock('Mod ABMin',Tcpu,Twall)
+call gclock('Mod ABMin',Tcpu,Twall)
+
+if(Flags%ICholeskyOTF==1) then
+   ! dump matrices for iterative C-ERPA
+   open(newunit=iunit,file=abfile,form='unformatted')
+   write(iunit) ABPlus
+   write(iunit) ABMin
+   close(iunit)
+endif
+
 !!write(LOUT,'(1x,a)') "*** sr-kernel added. ***"
 ! test true energy
 print*, 'ECASSCF',ECASSCF
@@ -2042,6 +2164,18 @@ call Y01CASLR_FOFO(Mon%Occ,URe,XOne,ABPlus,ABMin,&
                Mon%IndN,Mon%IndX,Mon%IGem,Mon%NAct,Mon%INAct,&
                NGrid,Mon%NDimX,NBasis,Mon%NDimX,NInte1,Mon%NoSt,&
                twokfile,twojerf,twokerf,Flags%ICholesky,1,1)
+
+if (Flags%ICholeskyOTF==1) then
+   nblk = 1 + NBasis - Mon%NAct
+   print*, 'nblk = ', nblk
+   allocate(A0Block(nblk))
+   call pack_AC0Block(ABPlus,ABMin, &
+                      A0block,A0blockIV, &
+                      nblk,Mon%IndN,Mon%INAct,Mon%NAct, &
+                      Mon%NDimX,NBasis, &
+                      1,abpm0file)
+   deallocate(A0block)
+endif
 
 deallocate(ABMin,ABPlus)
 deallocate(EigVecR)

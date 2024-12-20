@@ -282,6 +282,12 @@ subroutine read_block_cholesky(CholeskyParams, line)
               CholeskyParams%Cholesky    = 1
               CholeskyParams%CholeskyBIN = 0
               CholeskyParams%CholeskyOTF = 1
+           elseif (uppercase(val) == "THC".or. &
+                   uppercase(val) == "TENSORHYPERCONTRACTION") then
+              CholeskyParams%CholeskyTHC = 1
+              CholeskyParams%Cholesky    = 1 ! for testing
+              CholeskyParams%CholeskyBIN = 0 ! for testing
+              CholeskyParams%CholeskyOTF = 0 ! for testing
            else
               stop "Unknown keyword for Cholesky!"
            endif
@@ -372,6 +378,8 @@ subroutine read_block_calculation(CalcParams, line)
                CalcParams%JobType = JOB_TYPE_RESPONSE
            elseif (uppercase(val) == "NLOCCORR" ) then
                CalcParams%JobType = JOB_TYPE_NLOCCORR
+           elseif (uppercase(val) == "SRAC0" ) then
+               CalcParams%JobType = JOB_TYPE_SRAC0
            endif
 
      !case ("FRAGMENTS")
@@ -401,6 +409,9 @@ subroutine read_block_calculation(CalcParams, line)
               CalcParams%RDMType = RDM_TYPE_HF
            elseif (uppercase(val) == "DMRG" ) then
               CalcParams%RDMType = RDM_TYPE_DMRG
+           elseif (uppercase(val) == "UKS".or.    &
+                 & uppercase(val) == "UNRESTRICTED") then
+              CalcParams%RDMType = RDM_TYPE_UKS
            endif
 
       case ("UNITS")
@@ -460,6 +471,19 @@ subroutine read_block_calculation(CalcParams, line)
                CalcParams%Rdm2Type = 11
            endif
 
+      case ("CORRFUNCTION","CORRFUN","FCORR") ! option for SRAC0 (AC0+E_cmd^sr)
+           if (uppercase(val) == "FCAS") then
+               CalcParams%FunCorr = 0
+           elseif (uppercase(val) == "FCORR".or. &
+               uppercase(val) == "FAC0") then
+               CalcParams%FunCorr = 1
+           endif
+
+      case ("CBS","DBBSC") ! CBS correction
+           ! = 1 , E. Giner formulation
+           ! = 2 , K. Pernal formulation
+           read(val, *) CalcParams%DBBSC
+
       ! here not sure
       case ("RESPONSE")
            if (uppercase(val) == "ERPA-APSG".or.&
@@ -504,6 +528,10 @@ subroutine read_block_calculation(CalcParams, line)
               CalcParams%GridType = GRID_PARAMS_FINE
            elseif (uppercase(val) == "XFINE") then
               CalcParams%GridType = GRID_PARAMS_XFINE
+           elseif (uppercase(val) == "MOLPRO") then
+              CalcParams%GridType = GRID_PARAMS_MOLPRO
+           elseif (uppercase(val) == "DALTON") then
+              CalcParams%GridType = GRID_PARAMS_DALTON
            endif
 
       case ("RDMSOURCE")
@@ -557,6 +585,13 @@ subroutine read_block_calculation(CalcParams, line)
       case("SAPTEXCH")
            if (uppercase(val) == "DMFT") then
                CalcParams%SaptExch = 1
+           endif
+
+      case("VISUALIZE")
+           if (uppercase(val) == "TRUE".or.  &
+               uppercase(val) == ".TRUE.".or.&
+               uppercase(val) == "T") then
+               CalcParams%Visual = .TRUE.
            endif
 
       case("RESTART")
@@ -658,6 +693,9 @@ character(:), allocatable :: first, last
 
  case ("NATOMS")
        read(val, *) SystemParams%NCen
+
+ case ("NCORE", "NCOREORB")
+       read(val, *) SystemParams%NCoreOrb
 
  case ("ACALPHA")
        read(val, *) SystemParams%ACAlpha
@@ -1027,10 +1065,10 @@ end associate
          write(LOUT, '(1x,a,i2)') "NO. OF SYM. EQUIV. ATOMS: ", System%UCen
       endif
       if(System%DeclareThrSelAct) then
-         write(LOUT, '(1x,a,e13.6)') "THRESHOLD SELECT ACTIVE : ", System%ThrSelAct
+         write(LOUT, '(1x,a,e13.6)') "THRESHOLD SELECT ACTIVE  : ", System%ThrSelAct
       endif
       if(System%DeclareThrQVirt) then
-         write(LOUT, '(1x,a,e13.6)') "THRESHOLD QUASI-VIRTUAL : ", System%ThrQVirt
+         write(LOUT, '(1x,a,e13.6)') "THRESHOLD QUASI-VIRTUAL  : ", System%ThrQVirt
       endif
       if(System%DeclareThrQInact) then
          write(LOUT, '(1x,a,e13.6)') "THRESHOLD QUASI-INACTIVE : ", System%ThrQInact

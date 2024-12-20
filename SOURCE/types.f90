@@ -30,6 +30,7 @@ integer, parameter :: JOB_TYPE_ACFREQ      = 14
 integer, parameter :: JOB_TYPE_ACFREQNTH   = 15
 integer, parameter :: JOB_TYPE_AC1FREQNTH  = 16
 integer, parameter :: JOB_TYPE_RESPONSE    = 17
+integer, parameter :: JOB_TYPE_SRAC0       = 18
 
 integer, parameter :: SAPTLEVEL0 = 0
 integer, parameter :: SAPTLEVEL1 = 1
@@ -38,8 +39,9 @@ integer, parameter :: SAPTLEVEL2 = 2
 integer, parameter :: FLAG_CORE = 1
 integer, parameter :: FLAG_NOBASIS  = 0
 integer, parameter :: FLAG_REDVIRT  = 0
+logical, parameter :: FLAG_VISUAL  = .FALSE.
 integer, parameter :: FLAG_RDM2TYP  = 0
-integer, parameter :: FLAG_ORBRELAX = 1
+integer, parameter :: FLAG_ORBRELAX = 0
 integer, parameter :: FLAG_ORBINCL  = 0
 logical, parameter :: FLAG_RESTART = .FALSE.
 logical, parameter :: FLAG_TRIPLET = .FALSE.
@@ -51,12 +53,14 @@ integer, parameter :: RDM_TYPE_APSG = 2
 integer, parameter :: RDM_TYPE_CAS  = 3
 integer, parameter :: RDM_TYPE_DMRG = 4
 integer, parameter :: RDM_TYPE_HF   = 5
+integer, parameter :: RDM_TYPE_UKS  = 6
 
 integer, parameter :: TWOMO_INCORE = 1
 integer, parameter :: TWOMO_FFFF   = 2
 integer, parameter :: TWOMO_FOFO   = 3
 
 integer, parameter :: FLAG_CHOLESKY = 0
+integer, parameter :: FLAG_THC      = 0
 integer, parameter :: FLAG_CHOLESKY_BIN   = 0
 integer, parameter :: FLAG_CHOLESKY_OTF   = 0
 integer, parameter :: FLAG_H0TEST         = 1
@@ -64,10 +68,12 @@ integer, parameter :: CHOL_ACCU_DEFAULT   = 1
 integer, parameter :: CHOL_ACCU_TIGHT     = 2
 integer, parameter :: CHOL_ACCU_LUDICROUS = 3
 
-integer, parameter :: GRID_PARAMS_SG1 = 1
+integer, parameter :: GRID_PARAMS_SG1    = 1
 integer, parameter :: GRID_PARAMS_MEDIUM = 2
-integer, parameter :: GRID_PARAMS_FINE = 3
-integer, parameter :: GRID_PARAMS_XFINE = 4
+integer, parameter :: GRID_PARAMS_FINE   = 3
+integer, parameter :: GRID_PARAMS_XFINE  = 4
+integer, parameter :: GRID_PARAMS_MOLPRO = 5
+integer, parameter :: GRID_PARAMS_DALTON = 6
 
 integer, parameter :: UNITS_ANGSTROM = 1
 integer, parameter :: UNITS_BOHR     = 2
@@ -93,14 +99,15 @@ character(*),parameter :: PossibleInterface(4) = &
 [character(8) :: &
 'DALTON', 'MOLPRO', 'OWN', 'ORCA']
 
-character(*),parameter :: PossibleJobType(17) = &
+character(*),parameter :: PossibleJobType(18) = &
 [character(9) :: &
 'AC', 'AC0', 'ERPA', 'EERPA', 'SAPT', 'PDFT', 'CASPiDFT','CASPiDFTOpt','EERPA-1', & 
-'AC0D', 'AC0DNOSYMM', 'NLOCCORR', 'AC0DP', 'ACFREQ','ACFREQNTH','AC1FREQNTH','RESPONSE']
+'AC0D', 'AC0DNOSYMM', 'NLOCCORR', 'AC0DP', 'ACFREQ','ACFREQNTH','AC1FREQNTH', &
+'RESPONSE','SRAC0']
 
-character(*),parameter :: PossibleRDMType(5) = &
+character(*),parameter :: PossibleRDMType(6) = &
 [character(8) :: &
-'GVB', 'APSG', 'CASSCF', 'DMRG', 'HF']
+'GVB', 'APSG', 'CASSCF', 'DMRG', 'HF', 'UKS']
 
 character(*),parameter :: PossibleDFAType(3) = &
 [character(8) :: &
@@ -110,9 +117,9 @@ character(*),parameter :: PossibleCholAccu(3) = &
 [character(9) :: &
 'DEFAULT', 'TIGHT', 'LUDICROUS']
 
-character(*),parameter :: PossibleGridType(4) = &
+character(*),parameter :: PossibleGridType(6) = &
 [character(8) :: &
-'SG1', 'MEDIUM', 'FINE', 'XFINE']
+'SG1', 'MEDIUM', 'FINE', 'XFINE', 'MOLPRO', 'DALTON']
 
 character(*),parameter :: PossibleUnits(2) = &
 [character(8) :: &
@@ -145,7 +152,10 @@ character(*),parameter :: PossibleUnits(2) = &
          integer :: Rdm2Type  = FLAG_RDM2TYP
          integer :: OrbRelax  = FLAG_ORBRELAX
          integer :: OrbIncl   = FLAG_ORBINCL
+         integer :: FunCorr   = 0 ! SR-AC0,fCAS (default)
+         integer :: DBBSC     = 0 ! AC0, CBS correction (0=inactive, default)
          integer :: MemVal = 2, MemType = 3 ! default: use 2 GB for 3-ind_tran (Cholesky)
+         logical :: Visual     = FLAG_VISUAL
          logical :: Restart    = FLAG_RESTART
          logical :: Triplet    = FLAG_TRIPLET
          logical :: PostCAS    = FLAG_POSTCAS
@@ -172,6 +182,7 @@ type SystemBlock
       integer :: ZNucl  = 0
       integer :: NBasis = 0
       integer :: NChol  = 0
+      integer :: NCholErf = 0
       integer :: Monomer = DIMER_AB
       integer :: NELE
       double precision :: XELE
@@ -184,10 +195,19 @@ type SystemBlock
       integer :: NSym
       integer :: NSymBas(8),NSymOrb(8)
       integer :: NOrb, NGem
-      integer :: NActOrb = 1
+      integer :: NActOrb  = 1
+      integer :: NCoreOrb = 0
       integer :: NAct, INAct
       integer :: ISwitchAct = 0
       integer :: NActS(8), INActS(8)
+
+      ! APSG/GVB Dalton
+      integer :: NISHT_G, NASHT_G
+
+      ! unrestricted
+      integer :: NOa, NOb, NVa, NVb
+      integer :: NOVa, NOVb
+
       integer :: NDim, NDimX
       integer :: NDimN, DimEx
       integer :: NGrid
@@ -243,6 +263,8 @@ type SystemBlock
       integer,allocatable :: IndXh(:)
       integer,allocatable :: NumOSym(:),IndInt(:)
       integer,allocatable :: IndNx(:,:)
+      !
+      integer,allocatable :: IndNa(:,:), IndNb(:,:)
       ! TEST ONLY
       integer,allocatable :: IndNT(:,:)
       integer,allocatable :: Ind2(:)
@@ -252,8 +274,11 @@ type SystemBlock
       ! SAO = symmetrized atomic orbitals
       ! CMO = C(SAO,NO); CAONO = C(AO,NO); CMONO = C(MO,NO)
       double precision,allocatable :: CMO(:,:),CAONO(:,:)
+      double precision,allocatable :: UMO(:,:,:),UOcc(:,:),UOrbE(:,:)
+      double precision,allocatable :: Jos(:,:,:),Kos(:,:,:)
       double precision,allocatable :: OV(:,:),OO(:,:), &
                                       FO(:,:),FF(:,:), &
+                                      FOErf(:,:),FFErf(:,:), &
                                       FOAB(:,:),FOBA(:,:), &
                                       FFAB(:,:),FFBA(:,:), &
                                       OOAB(:,:),OOBA(:,:)
@@ -279,6 +304,7 @@ end type SystemBlock
 type CholeskyBlock
 
       integer :: Cholesky     = FLAG_CHOLESKY
+      integer :: CholeskyTHC  = FLAG_THC
       integer :: CholeskyBIN  = FLAG_CHOLESKY_BIN
       integer :: CholeskyOTF  = FLAG_CHOLESKY_OTF
       integer :: CholeskyAccu = CHOL_ACCU_DEFAULT
@@ -307,19 +333,22 @@ type FlagsData
      integer :: InterfaceType = INTER_TYPE_DAL
      ! mainp.f
      integer :: IDALTON = 1
-     integer :: iORCA   = 0
+     integer :: IMOLPRO = 0
+     integer :: IORCA   = 0
      integer :: IRes    = 0
      integer :: IAO     = 0
      integer :: INO     = 0
      integer :: NoSym   = 1
      integer :: NoSt    = 1
      integer :: IGVB    = 1
+     integer :: ISAPSG  = 0
      integer :: ITwoEl    = TWOMO_INCORE
      integer :: IRedVirt  = FLAG_REDVIRT
      integer :: IRdm2Typ  = FLAG_RDM2TYP
      integer :: IOrbRelax = FLAG_ORBRELAX
      integer :: IOrbIncl  = FLAG_ORBINCL
      integer :: ICholesky     = FLAG_CHOLESKY
+     integer :: ICholeskyTHC  = FLAG_THC
      integer :: ICholeskyBIN  = FLAG_CHOLESKY_BIN
      integer :: ICholeskyOTF  = FLAG_CHOLESKY_OTF
      integer :: ICholeskyAccu = CHOL_ACCU_DEFAULT
@@ -328,18 +357,23 @@ type FlagsData
      integer :: InternalGrid = 0
      integer :: IH0Test   = FLAG_H0TEST
      integer :: ORBITAL_ORDERING = 0
-     integer :: IFun      = 13
+     integer :: IFun      = 13 ! APSG
      integer :: IFunSR    = 0 
      integer :: IFunSRKer = 0
+     integer :: IFunSR2   = 0 ! for POSTCAS
+     integer :: ICorrMD   = 0 ! for SRAC0
+     integer :: IFlFCorr  = 0 ! for SRAC0
+     integer :: IDBBSC    = 0 ! for AC0
      double precision :: Alpha = 0
      integer :: IModG   = 1
      integer :: NGOcc   = 0
      integer :: ILoc    = 1
      integer :: IFreeze = 0
-     integer :: IAPSG   = 1
-     integer :: ISERPA  = 0
+     integer :: IAPSG   = 1 ! full APSG response
+     integer :: ISERPA  = 0 ! ERPA response
      integer :: ITrpl   = 0
      integer :: ISAPT   = 0
+     integer :: IUKS    = 0
      integer :: SaptLevel = 0
      integer :: ISHF      = 0
      character(:), allocatable :: JobTitle
@@ -386,6 +420,7 @@ type SaptData
 
   type(SystemBlock) :: monA,monB
      double precision  :: Vnn,elst,exchs2,e2ind,e2disp
+     double precision  :: e1exch
      double precision  :: e2disp_sc,e2disp_sp
      double precision  :: e2ind_unc,e2disp_unc
      double precision  :: e2dispR_unc,e2dispR
@@ -402,6 +437,9 @@ type SaptData
      double precision,allocatable :: Wind(:),Wdisp(:)
      ! test Pmat
      double precision,allocatable :: CholVecs(:,:)
+     ! Visualize
+     double precision,allocatable :: Qmat(:,:),ALOC(:,:),BLOC(:,:)
+     double precision,allocatable :: QelA(:),QelB(:)
      integer :: InterfaceType = INTER_TYPE_DAL
      integer :: SaptLevel = SAPTLEVEL2
      integer :: SaptExch  = 0
@@ -409,13 +447,14 @@ type SaptData
      integer :: NAO
      integer :: NCholesky
      integer :: NGrid
-     integer :: Max_Cn = 4
+     integer :: Max_Cn = 8
      integer :: ic6 = 0
      integer :: iPINO=-1
      integer :: IPrint = 1000
      logical :: iCpld  = .true.
      logical :: Cubic  = .false.
      logical :: CAlpha = .false.
+     logical :: Visual  = .false.
      ! MH : add keyword!
      logical :: SemiCoupled = .true.
      logical :: Wexcit  = .false.

@@ -59,7 +59,7 @@ double precision,allocatable :: work1(:)
  !print*, A%num0,A%num1
  !print*, A%INAct,A%NAct
 
-! call clock('START',Tcpu,Twall)
+! call gclock('START',Tcpu,Twall)
 
  allocate(S(NBas,NBas),Sab(NBas,NBas),&
           PA(NBas,NBas),PB(NBas,NBas),&
@@ -580,7 +580,7 @@ double precision,allocatable :: work1(:)
  !deallocate(JJb)
  deallocate(RDM2Bval,RDM2Aval)
 
-! call clock('E1exch(S2)',Tcpu,Twall)
+! call gclock('E1exch(S2)',Tcpu,Twall)
 
 end subroutine e1exchs2
 
@@ -1277,6 +1277,199 @@ deallocate(AlphaB,AlphaA)
 deallocate(Sabh,Sab,S)
 
 end subroutine e1exch_dmft_2
+
+subroutine e1exchs2_sq_o(A,B,SAPT)
+!
+! open-shell unrestricted E1exch(S2)
+! in second-quanitzed form (o2v2 cost)
+! cf. Eq. (13) in https://doi.org/10.1063/1.4758455
+!
+implicit none
+
+type(FlagsData)   :: Flags
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
+
+
+integer :: NBasis
+integer :: iunit
+integer :: i,j,k
+integer :: ip,iq,pq,ir,is,rs
+double precision :: val,tmp
+double precision :: ex1(2),ex2(2),ex3(2),e1exs2
+double precision, allocatable :: Sa(:,:),Sb(:,:)
+double precision, allocatable :: Sat(:,:),Sbt(:,:)
+double precision, allocatable :: Waa(:,:),Wab(:,:)
+double precision, allocatable :: Wba(:,:),Wbb(:,:)
+double precision, allocatable :: ints(:,:),Aux(:)
+double precision, allocatable :: work(:,:)
+double precision,external  :: trace
+
+! set dimensions
+NBasis = A%NBasis
+
+allocate(Waa(NBasis,NBasis),Wab(NBasis,NBasis))
+allocate(Wba(NBasis,NBasis),Wbb(NBasis,NBasis))
+
+call tran2MO(A%WPot,B%UMO(:,:,1),B%UMO(:,:,1),Waa,NBasis)
+call tran2MO(A%WPot,B%UMO(:,:,2),B%UMO(:,:,2),Wab,NBasis)
+
+call tran2MO(B%WPot,A%UMO(:,:,1),A%UMO(:,:,1),Wba,NBasis)
+call tran2MO(B%WPot,A%UMO(:,:,2),A%UMO(:,:,2),Wbb,NBasis)
+
+allocate(Sa(NBasis,NBasis),Sb(NBasis,NBasis))
+allocate(Sat(NBasis,NBasis),Sbt(NBasis,NBasis))
+allocate(work(NBasis,NBasis))
+
+call get_one_mat('S',work,A%Monomer,NBasis)
+call tran2MO(work,A%UMO(:,:,1),B%UMO(:,:,1),Sa,NBasis)
+call tran2MO(work,A%UMO(:,:,2),B%UMO(:,:,2),Sb,NBasis)
+
+Sat = transpose(Sa)
+Sbt = transpose(Sb)
+
+! Waa(ja,ba).S(ia,ba).S(ia,ja)
+! alpha-alpha
+ex1 = 0d0
+do k=1,B%NOa
+   do j=1,B%NVa
+      val = 0d0
+      do i=1,A%NOa
+         val = val + Sat(B%NOa+j,i)*Sa(i,k)
+      enddo
+      ex1(1) = ex1(1) + Waa(k,B%NOa+j)*val
+   enddo
+enddo
+!print*, 'wA.Sa.Sa = ',ex1(1)*1000
+if(SAPT%IPrint>=10) write(LOUT,'(/,1x,a,f16.8)') 'ExchS2(T1-a ) = ', ex1(1)*1000d0
+
+! Wab(jb,bb).S(ib,jb).S(ib,bb)
+! beta-beta
+do k=1,B%NOb
+   do j=1,B%NVb
+      val = 0d0
+      do i=1,A%NOb
+         val = val + Sbt(B%NOb+j,i)*Sb(i,k)
+      enddo
+      ex1(2) = ex1(2) + Wab(k,B%NOb+j)*val
+   enddo
+enddo
+!print*, 'wA.Sb.Sb = ',ex1(2)*1000
+!print*, 'sum = ',sum(ex1)*1000
+if(SAPT%IPrint>=10) write(LOUT,'(1x,a,f16.8)') 'ExchS2(T1-b ) = ', ex1(2)*1000d0
+
+! better: prepare subrtine with a loop for each of these terms
+!         a) dgemm for S(i,b).W^t(b,j) = I(i,j)
+!         b) loop for \sum_ij I(i,j).S(i,j)
+
+! Wba(ia,aa).S(ia,ja).S(ja,aa)
+! alpha-alpha
+ex2 = 0d0
+do k=1,A%NOa
+   do j=1,A%NVa
+      val = 0d0
+      do i=1,B%NOa
+         val = val + Sa(k,i)*Sat(i,A%NOa+j)
+      enddo
+      ex2(1) = ex2(1) + Wba(k,A%NOa+j)*val
+   enddo
+enddo
+!print*, 'wB.Sa.Sa = ',ex2(1)*1000
+if(SAPT%IPrint>=10) write(LOUT,'(1x,a,f16.8)') 'ExchS2(T2-a ) = ', ex2(1)*1000d0
+! beta-beta
+do k=1,A%NOb
+   do j=1,A%NVb
+      val = 0d0
+      do i=1,B%NOb
+         val = val + Sb(k,i)*Sbt(i,A%NOb+j)
+      enddo
+      ex2(2) = ex2(2) + Wba(k,A%NOb+j)*val
+   enddo
+enddo
+!print*, 'wB.Sb.Sb = ',ex2(2)*1000
+!print*, 'sum = ',sum(ex2)*1000
+if(SAPT%IPrint>=10) write(LOUT,'(1x,a,f16.8)') 'ExchS2(T2-b ) = ', ex2(2)*1000d0
+
+! alpha-alpha (pq|rs).S(q,r).S(p,s)
+allocate(Aux(A%NOVa),ints(A%NVa,A%NOa))
+open(newunit=iunit,file='OVOVABaa',status='OLD',&
+     access='DIRECT',form='UNFORMATTED',recl=8*A%NOVa)
+
+ints = 0d0
+ex3 = 0d0
+do rs=1,B%NOVa
+
+    ir = B%IndNa(1,rs)
+    is = B%IndNa(2,rs)
+    !print*, 'r,s,rs',ir,is,rs,B%NOVa
+    read(iunit,rec=is+(ir-B%NOa-1)*B%NOa) Aux(1:A%NOVa)
+
+    do ip=1,A%NVa
+       do iq=1,A%NOa
+          ints(ip,iq) = Aux(iq+(ip-1)*A%NOa)
+       enddo
+    enddo
+
+    val = 0d0
+    do ip=1,A%NVa
+       do iq=1,A%NOa
+          val = val + ints(ip,iq)*Sa(iq,ir)*Sat(is,A%NOa+ip)
+       enddo
+    enddo
+
+    ex3(1) = ex3(1) + val
+
+enddo
+
+close(iunit)
+deallocate(ints,Aux)
+!print*, 'v.Sa.Sa = ',ex3(1)*1000
+if(SAPT%IPrint>=10) write(LOUT,'(1x,a,f16.8)') 'ExchS2(T3-a ) = ', ex3(1)*1000d0
+
+allocate(Aux(A%NOVb),ints(A%NVb,A%NOb))
+open(newunit=iunit,file='OVOVABbb',status='OLD',&
+     access='DIRECT',form='UNFORMATTED',recl=8*A%NOVb)
+
+do rs=1,B%NOVb
+
+    ir = B%IndNb(1,rs)
+    is = B%IndNb(2,rs)
+    read(iunit,rec=is+(ir-B%NOb-1)*B%NOb) Aux(1:A%NOVb)
+
+    do ip=1,A%NVb
+       do iq=1,A%NOb
+          ints(ip,iq) = Aux(iq+(ip-1)*A%NOb)
+       enddo
+    enddo
+
+    val = 0d0
+    do ip=1,A%NVb
+       do iq=1,A%NOb
+          val = val + ints(ip,iq)*Sb(iq,ir)*Sbt(is,A%NOb+ip)
+       enddo
+    enddo
+
+    ex3(2) = ex3(2) + val
+
+enddo
+close(iunit)
+deallocate(ints)
+
+!print*, 'v.Sb.Sb = ',ex3(2)*1000
+!print*, 'sum = ', sum(ex3)*1000
+if(SAPT%IPrint>=10) write(LOUT,'(1x,a,f16.8)') 'ExchS2(T3-b ) = ', ex3(2)*1000d0
+
+e1exs2 = sum(ex1) + sum(ex2) + sum(ex3)
+e1exs2 = - e1exs2
+SAPT%exchs2 = e1exs2
+
+call print_en('E1exch(S2)',e1exs2*1000,.true.)
+
+deallocate(Wbb,Wba,Wab,Waa)
+deallocate(Sb,Sa,Sbt,Sat)
+deallocate(Aux,work)
+
+end subroutine e1exchs2_sq_o
 
 !subroutine hl_2el(Flags,A,B,SAPT)
 !! calculate Heitler-London energy
@@ -2219,6 +2412,9 @@ end subroutine e1exch_dmft_2
 !end subroutine hl_2el
 
 subroutine e2exind(Flags,A,B,SAPT)
+
+!use sapt_Chol_exch
+
 implicit none
 
 type(FlagsData)   :: Flags
@@ -2697,9 +2893,18 @@ double precision,parameter :: BigE = 1.D8
                        nelA,Vabb,nelB,Vbaa,'FOFOAABB',&
                        B%IndN,A%IndN,posB,posA,dimOB,dimOA,B%NDimX,A%NDimX,NBas)
  else
-    call exind_A3_XY_full(A%NDimX,B%NDimX,tmpXA,tmpXB,RDM2Aval,RDM2Bval,Sab, &
-                       nelA,Vabb,nelB,Vbaa,'FOFOAABB',&
-                       B%IndN,A%IndN,posB,posA,dimOB,dimOA,B%NDimX,A%NDimX,NBas)
+    !if (Flags%ICholesky==1) then
+    ! 22.01.2024: we could assemble that from A%FO vectors, but assembling FF|OO
+    !             does not make sense, one would have to store 2*N^3 in MEM...
+    !
+    !   call exind_A3_XY_Chol(A%NDimX,B%NDimX,tmpXA,tmpXB,RDM2Aval,RDM2Bval,Sab, &
+    !                      nelA,Vabb,nelB,Vbaa, &
+    !                      B%IndN,A%IndN,posB,posA,dimOB,dimOA,B%NDimX,A%NDimX,NBas)
+    !else
+       call exind_A3_XY_full(A%NDimX,B%NDimX,tmpXA,tmpXB,RDM2Aval,RDM2Bval,Sab, &
+                          nelA,Vabb,nelB,Vbaa,'FOFOAABB',&
+                          B%IndN,A%IndN,posB,posA,dimOB,dimOA,B%NDimX,A%NDimX,NBas)
+    !endif
  endif
 
  tmpYA = -tmpXA
@@ -2984,6 +3189,9 @@ double precision,allocatable :: RDM2Aval(:,:,:,:), &
                                 RDM2Bval(:,:,:,:)
 type(EBlockData)             :: SBlockAIV,SBlockBIV
 type(EBlockData),allocatable :: SBlockA(:),SBlockB(:)
+! Y01BlockData is used for SAPT0/Cholesky
+type(Y01BlockData),allocatable :: Y01BlockA(:),Y01BlockB(:)
+
 character(:),allocatable     :: propA,propB
 ! uncoupled full test
 double precision,allocatable :: AVecX0(:),AVecY0(:), &
@@ -2996,8 +3204,8 @@ double precision,parameter :: BigE   = 1.D8
 double precision,parameter :: SmallE = 1.D-3
 double precision :: TCpu,TWall
 
-! start clock
-call clock('START',Tcpu,Twall)
+! start gclock
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
  NBas = A%NBasis
@@ -3018,6 +3226,7 @@ call clock('START',Tcpu,Twall)
 ! set e2exd_version
  both      = SAPT%iCpld
  uncoupled = .true.
+
  if(Flags%ICASSCF==0)   uncoupled = .false.
  if(A%Cubic.or.B%Cubic) uncoupled = .false.
 
@@ -3574,24 +3783,32 @@ call clock('START',Tcpu,Twall)
  if(uncoupled) then
 
     ! UNC
-    sij = 0
     inquire(file='PROP_AB0',EXIST=ipropab)
     if(ipropab) then
+       sij = 0d0
        ! read s_ij
        open(newunit=iunit,file='PROP_AB0',form='UNFORMATTED',&
           access='SEQUENTIAL',status='OLD')
        read(iunit) sij
+       !print*, 'sij(unc)', norm2(sij)
        close(iunit)
 
     else
-
        ! make s_ij uncoupled
-       !call make_sij_Y_unc(sij,tmp1,A%Occ,B%Occ,A%EigY,A%EigX,B%EigY,B%EigX,&
-       !                A%num0,B%num0,dimOA,dimOB,nOVB,A%IndN,B%IndN,A%NDimX,B%NDimX,NBas)
-       write(LOUT,'(/1x,a)') 'ERROR! make_sij_Yunc not ready yet!'
-       write(LOUT,'(1x,a)')  'E2exch-disp(unc) = 0!'
-       !stop
-
+       if(Flags%ICholesky==0) then
+          call make_sij_Y_unc(sij,A%Occ,B%Occ,SBlockA,SblockAIV,SBlockB,SBlockBIV,&
+                          nblkA,nblkB,A%num0,A%num1,B%num0,B%num1, &
+                          A%IndN,B%IndN,A%NDimX,B%NDimX,NBas)
+       elseif(Flags%ICholesky==1) then
+          allocate(Y01BlockA(A%NDimX),Y01BlockB(B%NDimX))
+          call convert_XY0_to_Y01(A,Y01BlockA,OmA0,NBas,'XY0_A')
+          call convert_XY0_to_Y01(B,Y01BlockB,OmB0,NBas,'XY0_B')
+          call make_sij_Y_Chol_unc(sij,Y01BlockA,Y01BlockB, &
+                          A%DChol,B%DChol,A%NDimX,B%NDimX,A%NChol,NBas)
+          !print*, 'sij(unc)-chol', norm2(sij)
+       else
+         stop "e2exd: wrong ICholesky Flag!"
+       endif
     endif
 
     ! term X(unc)
@@ -3697,7 +3914,7 @@ call clock('START',Tcpu,Twall)
     else
 
        ! make s_ij
-       !call clock('START',Tcpu,Twall)
+       !call gclock('START',Tcpu,Twall)
        if(Flags%ICholesky==0) then
           call make_sij_Y(sij,tmp1,A%Occ,B%Occ,A%EigY,A%EigX,B%EigY,B%EigX,&
                           A%num0,B%num0,dimOA,dimOB,nOVB,A%IndN,B%IndN, &
@@ -3711,14 +3928,14 @@ call clock('START',Tcpu,Twall)
                           A%DChol,B%DChol, &
                           A%num0,B%num0,dimOA,dimOB,nOVB,A%IndN,B%IndN, &
                           A%NDimX,B%NDimX,A%NChol,NBas)
-          !call clock('make_sij_Y_Chol2',TCpu,TWall)
+          !call gclock('make_sij_Y_Chol2',TCpu,TWall)
        endif
        call writeampl(sij,'PROP_AB')
 
     endif
 
     ! term X
-    !call clock('START',Tcpu,Twall)
+    !call gclock('START',Tcpu,Twall)
     termX = 0d0
     do j=1,B%NDimX
        do i=1,A%NDimX
@@ -3736,7 +3953,7 @@ call clock('START',Tcpu,Twall)
        enddo
     enddo
     termX = -4d0*termX
-    !call clock('termX',TCpu,TWall)
+    !call gclock('termX',TCpu,TWall)
 
     !if(SAPT%IPrint>5) write(LOUT,'(/1x,a,f16.8)') 'term Z      = ',  termZ*1.0d3
     !if(SAPT%IPrint>5) write(LOUT,'(1x,a,f16.8)') 'term X      = ',  termX*1.0d3
@@ -3751,15 +3968,16 @@ call clock('START',Tcpu,Twall)
 
     else
 
-       !call clock('START',Tcpu,Twall)
+       !call gclock('START',Tcpu,Twall)
        ! term Y: t_ij
        !call make_tij_Y(tmp3,tmp2,tmp1,posA,posB,Sab,Sba,A,B,NBas)
        call make_tij_Y(tmp3,tmp2,tmp1,A%Occ,B%Occ,A%EigY,A%EigX,B%EigY,B%EigX,&
                        A%IndN,B%IndN,posA,posB,Sab,Sba,A%NDimX,B%NDimX,NBas)
-       !call clock('make_tij_Y',TCpu,TWall)
+
+       !call gclock('make_tij_Y',TCpu,TWall)
 
        ! term Y
-       !call clock('START',Tcpu,Twall)
+       !call gclock('START',Tcpu,Twall)
        termY = 0d0
        do j=1,B%NDimX
           do i=1,A%NDimX
@@ -3778,7 +3996,7 @@ call clock('START',Tcpu,Twall)
        enddo
 
        termY = -8d0*(SAPT%elst-SAPT%Vnn)*termY
-       !call clock('termY',TCpu,TWall)
+       !call gclock('termY',TCpu,TWall)
 
     endif ! approx => termY = 0
 
@@ -3821,7 +4039,7 @@ call clock('START',Tcpu,Twall)
  endif
 
  deallocate(sij)
- call clock('Exch-Disp',Tcpu,Twall)
+ call gclock('Exch-Disp',Tcpu,Twall)
 
  deallocate(posB,posA,ints)
  deallocate(Vbab,Vaba,Vaab,Vbaa,Vabb,Vb,Va,PB,PA,Sab,S)
@@ -3948,5 +4166,124 @@ call abpm_tran_gen(tmp1,tmp2,SBlockA,SBlockAIV,SBlockB,SBlockBIV, &
                    nblkA,nblkB,ANDimX,BNDimX,'YX')
 
 end subroutine make_tij_Y_unc
+
+subroutine make_sij_Y_unc(sij,AOcc,BOcc,SBlockA,SblockAIV,SBlockB,SBlockBIV,nblkA,nblkB, &
+                          Anum0,Anum1,Bnum0,Bnum1,AIndN,BIndN,ANDimX,BNDimX,NBasis)
+
+implicit none
+
+integer,intent(in) :: ANDimX,BNDimX,NBasis
+integer,intent(in) :: nblkA,nblkB
+integer,intent(in) :: Anum0,Anum1,Bnum0,Bnum1
+integer,intent(in) :: AIndN(2,ANDimX),BIndN(2,BNDimX)
+double precision,intent(in) :: AOcc(NBasis),BOcc(NBasis)
+
+type(EBlockData)               :: SBlockA(nblkA),SBlockAIV,&
+                                  SBlockB(nblkB),SBlockBIV
+
+double precision,intent(out) :: sij(ANDimX,BNDimX)
+
+integer :: iunit
+integer :: ip,iq,ipq,ir,is,irs
+integer :: Bnum2,dimOA,dimVB,dimOB,nOVB
+double precision :: fact
+double precision :: tmp1(ANDimX,BNDimX)
+double precision,allocatable :: work(:)
+
+Bnum2 = NBasis - Bnum0 - Bnum1
+dimOA = Anum0 + Anum1
+dimOB = Bnum0 + Bnum1
+dimVB = Bnum1 + Bnum2
+nOVB  = dimOB * dimVB
+
+allocate(work(nOVB))
+
+open(newunit=iunit,file='TWOMOAB',status='OLD',&
+     access='DIRECT',form='UNFORMATTED',recl=8*nOVB)
+
+tmp1=0d0
+do ipq=1,ANDimX
+   ip = AIndN(1,ipq)
+   iq = AIndN(2,ipq)
+   read(iunit,rec=iq+(ip-Anum0-1)*dimOA) work(1:nOVB)
+   do irs=1,BNDimX
+      ir = BIndN(1,irs)
+      is = BIndN(2,irs)
+
+      fact = (AOcc(ip)-AOcc(iq)) * &
+             (BOcc(ir)-BOcc(is))
+
+      tmp1(ipq,irs) = tmp1(ipq,irs) + fact*work(is+(ir-Bnum0-1)*dimOB)
+
+   enddo
+enddo
+close(iunit)
+
+sij = 0d0
+!X_A.I.Y_B
+call abpm_tran_gen(tmp1,sij,SBlockA,SBlockAIV,SBlockB,SBlockBIV, &
+                   nblkA,nblkB,ANDimX,BNDimX,'XY')
+!Y_A.I.X_B
+call abpm_tran_gen(tmp1,sij,SBlockA,SBlockAIV,SBlockB,SBlockBIV, &
+                   nblkA,nblkB,ANDimX,BNDimX,'YX')
+sij = -sij
+
+!X_A.I.X_B
+call abpm_tran_gen(tmp1,sij,SBlockA,SBlockAIV,SBlockB,SBlockBIV, &
+                   nblkA,nblkB,ANDimX,BNDimX,'XX')
+!Y_A.I.Y_B
+call abpm_tran_gen(tmp1,sij,SBlockA,SBlockAIV,SBlockB,SBlockBIV, &
+                   nblkA,nblkB,ANDimX,BNDimX,'YY')
+
+deallocate(work)
+
+end subroutine make_sij_Y_unc
+
+subroutine make_sij_Y_Chol_unc(sij,Y01BlockA,Y01BlockB, &
+                               OVA,OVB,ANDimX,BNDimX,NCholesky,NBasis)
+!
+! Careful! OV contains integrals multiplied by (c_j+c_i), j>i
+!
+implicit none
+
+integer,intent(in) :: ANDimX,BNDimX,NCholesky,NBasis
+double precision,intent(in) :: OVA(NCholesky,ANDimX),OVB(NCholesky,BNDimX)
+
+type(Y01BlockData) :: Y01BlockA(ANDimX),Y01BlockB(BNDimX)
+
+double precision,intent(out) :: sij(ANDimX,BNDimX)
+
+integer :: i,j
+integer :: ip,iq,ir,is,ipq,irs
+double precision :: fact, work(NBasis)
+double precision,allocatable :: tmpA(:,:),tmpB(:,:)
+
+allocate(tmpA(NCholesky,ANDimX),tmpB(NCholesky,BNDimX))
+
+tmpA=0d0
+do ipq=1,ANDimX
+   associate(Y => Y01BlockA(ipq))
+      do i=1,NCholesky
+         tmpA(i,Y%l1:Y%l2) = tmpA(i,Y%l1:Y%l2) + OVA(i,ipq) * Y%vec0(1:Y%n)
+      enddo
+   end associate
+enddo
+!print*, 'tmpA',norm2(tmpA)
+
+tmpB=0d0
+do irs=1,BNDimX
+   associate(Y => Y01BlockB(irs))
+      do j=1,NCholesky
+         tmpB(j,Y%l1:Y%l2) = tmpB(j,Y%l1:Y%l2) + OVB(j,irs) * Y%vec0(1:Y%n)
+      enddo
+   end associate
+enddo
+!print*, 'tmpB',norm2(tmpB)
+
+call dgemm('T','N',ANDimX,BNDimX,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,sij,ANDimX)
+
+deallocate(tmpB,tmpA)
+
+end subroutine make_sij_Y_Chol_unc
 
 end module sapt_exch

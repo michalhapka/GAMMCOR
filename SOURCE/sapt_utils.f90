@@ -5,22 +5,22 @@ use diis
 
 contains
 
-subroutine get_den(nbas,MO,Occ,Fac,Den)
-implicit none
-
-integer,intent(in) :: nbas
-double precision, intent(in) :: MO(nbas,nbas)
-double precision, intent(in) :: Occ(nbas)
-double precision, intent(in) :: Fac
-double precision, intent(out) :: Den(nbas,nbas)
-integer :: i
-
-Den = 0
-do i=1,nbas
-   call dger(nbas, nbas, Fac*Occ(i), MO(:, i), 1, MO(:, i), 1, Den, nbas)
-enddo
-
-end subroutine get_den
+!subroutine get_den(nbas,MO,Occ,Fac,Den)
+!implicit none
+!
+!integer,intent(in) :: nbas
+!double precision, intent(in) :: MO(nbas,nbas)
+!double precision, intent(in) :: Occ(nbas)
+!double precision, intent(in) :: Fac
+!double precision, intent(out) :: Den(nbas,nbas)
+!integer :: i
+!
+!Den = 0
+!do i=1,nbas
+!   call dger(nbas, nbas, Fac*Occ(i), MO(:, i), 1, MO(:, i), 1, Den, nbas)
+!enddo
+!
+!end subroutine get_den
 
 subroutine get_one_mat(var,mat,mono,nbas)
 !
@@ -415,16 +415,6 @@ double precision,allocatable :: ABMin(:,:),Work(:)
  if(M%Monomer==1) abfile='ABMAT_A'
  if(M%Monomer==2) abfile='ABMAT_B'
 
- allocate(ABMin(M%NDimX,M%NDimX))
-
- open(newunit=iunit,file=abfile,status='OLD',&
-      access='SEQUENTIAL',form='UNFORMATTED')
-
- read(iunit)
- read(iunit) ABMin
-
- close(iunit)
-
  call init_DIIS(DIISBlock,M%NDimX,M%NDimX,Flags%DIISN)
 
  allocate(WxYY(NBas,NBas))
@@ -445,8 +435,15 @@ double precision,allocatable :: ABMin(:,:),Work(:)
  ! zero iter
  !call amplitudes_T1_cphf(OmM0,wVecxYY,amps,M%NDimX)
  call amplitudes_T1_cerpa(ABlock,ABlockIV,nblk,wVecxYY,amps,M%NDimX)
- print*, 'amp-1',norm2(amps)
- e2indxy = 0
+
+ !block
+ !print*, 'amp-1',norm2(amps)
+ !do pq=1,10
+ !   print*, 'pq',pq,amps(pq)
+ !enddo
+ !end block
+
+ e2indxy = 0d0
  do pq=1,M%NDimX
     ip = M%IndN(1,pq)
     iq = M%IndN(2,pq)
@@ -454,7 +451,19 @@ double precision,allocatable :: ABMin(:,:),Work(:)
     e2indxy = e2indxy + fact*amps(pq)*WxYY(ip,iq)
  enddo
  e2indxy = 1d0*e2indxy
- print*, 'e2ind(unc)',e2indxy
+ if(Flags%SaptLevel/=0) print*, 'e2ind(unc)',e2indxy
+
+ if(Flags%SaptLevel==0) return
+
+ allocate(ABMin(M%NDimX,M%NDimX))
+
+ open(newunit=iunit,file=abfile,status='OLD',&
+      access='SEQUENTIAL',form='UNFORMATTED')
+
+ read(iunit)
+ read(iunit) ABMin
+
+ close(iunit)
 
  write(LOUT,'(1x,a,5x,a)') 'ITER', 'ERROR'
  iter = 0
@@ -521,6 +530,121 @@ double precision,allocatable :: ABMin(:,:),Work(:)
 
 end subroutine solve_cphf
 
+subroutine solve_ucphf(M,WPot,e2ind_unc,e2ind,Flags,NBas)
+!
+!
+!
+implicit none
+
+type(SystemBlock) :: M
+type(FlagsData)   :: Flags
+
+integer,intent(in)           :: NBas
+double precision,intent(in)  :: WPot(NBas,NBas)
+double precision,intent(out) :: e2ind_unc,e2ind
+
+type(DIISData)                 :: DIISBlock
+
+integer :: ip,iq,ipq
+integer :: NDimX
+
+double precision,allocatable :: WxYY(:,:)
+double precision,allocatable :: wVecxYY(:)
+double precision,allocatable :: amps(:),vecR(:),delta(:)
+double precision,allocatable :: work(:,:)
+
+NDimX = M%NOVa + M%NOVb
+
+call init_DIIS(DIISBlock,NDimX,NDimX,Flags%DIISN)
+
+allocate(wVecxYY(NDimX))
+allocate(work(NBas,NBas))
+
+! Arrange w(alpha;beta)
+call tran2MO(WPot,M%UMO(:,:,1),M%UMO(:,:,1),work,NBas)
+ipq = 0
+do iq=1,M%NOa
+   do ip=1,M%NVa
+      ipq = ipq + 1
+      wVecxYY(ipq) = work(iq,M%NOa+ip)
+   enddo
+enddo
+call tran2MO(WPot,M%UMO(:,:,2),M%UMO(:,:,2),work,NBas)
+do iq=1,M%NOb
+   do ip=1,M%NVb
+      ipq = ipq + 1
+      wVecxYY(ipq) = work(iq,M%NOb+ip)
+   enddo
+enddo
+
+allocate(vecR(NDimX),amps(NDimX),delta(NDimX))
+
+! uncoupled denominators
+delta = 0d0
+ipq = 0
+do iq=1,M%NOa
+   do ip=1,M%NVa
+      ipq = ipq + 1
+      delta(ipq) = M%UOrbE(iq,1) - M%UOrbE(M%NOa+ip,1)
+   enddo
+enddo
+do iq=1,M%NOb
+   do ip=1,M%NVb
+      ipq = ipq + 1
+      delta(ipq) = M%UOrbE(iq,2) - M%UOrbE(M%NOb+ip,2)
+   enddo
+enddo
+
+call amplitudes_T1_cphf(delta,wVecxYY,amps,NDimX)
+
+e2ind_unc = 0d0
+do ipq=1,NDimX
+   e2ind_unc = e2ind_unc - amps(ipq)*wVecxYY(ipq)
+enddo
+!if(Flags%SaptLevel/=0) print*, 'E2ind(unc)',e2indxy
+
+if(Flags%SaptLevel==0) return
+
+e2ind = 0d0
+print*, 'E2ind coupled not ready in solve_ucphf!'
+
+!write(LOUT,'(1x,a,5x,a)') 'ITER', 'ERROR'
+!iter = 0
+!do
+!
+!vecR = wVecxYY
+!call dgemv('N',M%NDimX,M%NDimX,1.d0,ABMin,M%NDimX,amps,1,1d0,vecR,1)
+!
+!error = norm2(vecR)
+!conv=error.le.ThrDIIS
+!
+!write(LOUT,'(1x,i3,f11.6)') iter,error
+!
+!if(conv) then
+!   exit
+!elseif(.not.conv.and.iter.le.MaxIt) then
+!   iter = iter + 1
+!elseif(.not.conv.and.iter.gt.MaxIt) then
+!  write(*,*) 'Error!!! E2ind DIIS not converged!'
+!  exit
+!endif
+!
+!! HF test
+!call amplitudes_T1_cphf(OmM0,vecR,delta,NDimX)
+!amps = amps + delta
+!if(iter>Flags%DIISOn) call use_DIIS(DIISBlock,amps,vecR)
+!
+!enddo
+
+call free_DIIS(DIISBlock)
+
+deallocate(delta,amps,vecR)
+
+deallocate(wVecxYY)
+deallocate(work)
+
+end subroutine solve_ucphf
+
 subroutine amplitudes_T1_cphf(deps,ints,res,NDimX)
 implicit none
 
@@ -569,6 +693,7 @@ do iblk=1,nblk
      enddo
 
      call dsytrs('U',A%n,1,A%matY,A%n,A%ipiv,tmp,A%n,info)
+!     print*, 'info',info,norm2(A%matY)
 
      do i=1,A%n
         ipos = A%pos(i)
@@ -578,7 +703,6 @@ do iblk=1,nblk
 
    end associate
 enddo
-
 ! block IV
 associate(A => ABlockIV)
 
@@ -887,6 +1011,99 @@ associate(A => SblockIV)
 end associate
 
 end subroutine convert_to_ABMIN
+
+subroutine WriteRespBatch(NDim,MaxBatchSize,EVal,EVec,fname)
+!
+! write ERPA vec in batches
+!
+implicit none
+
+integer,intent(in) :: NDim,MaxBatchSize
+double precision :: EVal(NDim)
+double precision :: EVec(NDim,NDim)
+character(*) :: fname
+integer :: iunit
+integer :: iloop,nloop,off
+integer :: BatchSize
+
+ nloop = (NDim - 1) / MaxBatchSize + 1
+
+ open(newunit=iunit,file=fname,form='UNFORMATTED',&
+    access='SEQUENTIAL')
+
+ write(iunit) NDim,MaxBatchSize
+ write(iunit) EVal
+
+ off = 0
+ do iloop=1,nloop
+    BatchSize = min(MaxBatchSize,NDim-off)
+    write(iunit) EVec(:,off+1:off+BatchSize)
+    off = off + BatchSize
+ enddo
+
+ close(iunit)
+
+end subroutine WriteRespBatch
+
+subroutine Open_RespBatch(NDim,MaxBatchSize,EVal,iunit,fname)
+!
+! open response file
+! Eval(:) is read as a whole
+!
+implicit none
+
+integer,intent(in)  :: NDim
+integer,intent(out) :: MaxBatchSize
+integer,intent(out) :: iunit
+double precision,intent(out)   :: EVal(NDim)
+character(*),intent(in) :: fname
+
+integer :: NDimFile
+
+ open(newunit=iunit,file=fname,form='UNFORMATTED',&
+    access='SEQUENTIAL',status='OLD')
+
+ read(iunit) NDimFile, MaxBatchSize
+ if (NDimFile .ne. NDim) stop "Error: Open_RespBatch: inconsistent NDim size"
+ read(iunit) EVal
+
+end subroutine Open_RespBatch
+
+subroutine Close_RespBatch(iunit)
+
+implicit none
+
+integer, intent(in) :: iunit
+
+ close(iunit)
+
+end subroutine Close_RespBatch
+
+subroutine Rewind_RespBatch(iunit)
+
+implicit none
+
+integer, intent(in) :: iunit
+
+ rewind(iunit)
+ ! skip two records
+ read(iunit)
+ read(iunit)
+
+end subroutine Rewind_RespBatch
+
+subroutine Get_RespBatch(NDim,BatchSize,EVec,iunit)
+!
+! get Evec(:,Batch)
+!
+implicit none
+
+integer,intent(in)  :: NDim,BatchSize,iunit
+double precision,intent(out) :: EVec(NDim,BatchSize)
+
+ read(iunit) EVec
+
+end subroutine Get_RespBatch
 
 subroutine readresp(EVec,EVal,NDim,fname)
 implicit none
@@ -1758,7 +1975,7 @@ deallocate(Work,C2Tilde,C1Tilde)
 
 end subroutine C_AlphaExpand
 
-subroutine C_AlphaExpand_unc(C0Tilde,OmI,A1,A2,ABP0Tilde,ABP1Tilde,&
+subroutine C_AlphaExpand_unc(C0Tilde,OmI,ABP0Tilde,&
                          A0Blk,A0BlkIV,nblk,NCholesky,NDimX)
 !
 !  For a given frequency OmI, CTilde(Alpha=1) is computed by expanding
@@ -1769,8 +1986,9 @@ implicit none
 integer,intent(in)           :: nblk,NCholesky,NDimX
 double precision,intent(in)  :: OmI
 
-double precision,intent(in)    :: A1(NDimX,NDimX),A2(NDimX,NDimX)
-double precision,intent(in)    :: ABP0Tilde(NDimX,NCholesky),ABP1TIlde(NDimX,NCholesky)
+!double precision,intent(in)    :: A1(NDimX,NDimX),A2(NDimX,NDimX)
+!double precision,intent(in)    :: ABP0Tilde(NDimX,NCholesky),ABP1TIlde(NDimX,NCholesky)
+double precision,intent(in)    :: ABP0Tilde(NDimX,NCholesky)
 double precision,intent(inout) :: C0Tilde(NDimX,NCholesky)
 
 integer :: N
@@ -1968,6 +2186,88 @@ enddo
 deallocate(ABKer,batch,work)
 
 end subroutine ModABMin
+
+subroutine sapt_trdipm(RefSt,iskip,nStates,DipAO,UAONO,CICoef,IndN,NDimX,NBasis,cpld)
+!
+! transition dipole moments from (full) ERPA eigenvectors
+! ----------------------------------------------------------------------------
+!
+! UAONO=U(AO,NO)
+!
+! RefSt : reference state
+! iskip : how many negative exc skipped
+!
+implicit none
+integer,intent(in) :: RefSt,iskip,nStates,NDimX,NBasis
+integer,intent(in) :: IndN(2,NDimX)
+logical,intent(in) :: cpld
+double precision,intent(in) :: CICoef(NBasis),DipAO(3,NBasis,NBasis)
+double precision,intent(in) :: UAONO(NBasis,NBasis)
+
+integer :: ist,i,j,ip,iq
+double precision :: fact,TDIP2
+double precision,allocatable :: EigY(:,:),Eig(:)
+double precision,allocatable :: DipNO(:,:,:)
+double precision,allocatable :: EigX0(:,:),EigY0(:,:)
+
+! dipole momoments in NO
+allocate(DipNO(3,NBasis,NBasis))
+call tran2MO(DipAO(1,:,:),UAONO,UAONO,DipNO(1,:,:),NBasis)
+call tran2MO(DipAO(2,:,:),UAONO,UAONO,DipNO(2,:,:),NBasis)
+call tran2MO(DipAO(3,:,:),UAONO,UAONO,DipNO(3,:,:),NBasis)
+
+if (cpld) then
+
+   allocate(EigY(NDimX,NDimX),Eig(NDimX))
+   call readresp(EigY,Eig,NDimX,'PROP_A')
+   !call readresp(EigY,Eig,NDimX,'PROP_A1') ! semicpld
+
+else ! uncoupled 
+
+   ! create Y0, X0 act-act block for matching
+   !call read_SBlock(SBlock,SBlockIV,nblk,xy0file)
+   !nAA=SBlock(1)%n
+   !allocate(Eig(nAA),EigY(nAA,nAA),EigX(nAA,nAA),iaddr(nAA))
+   !Eig = 0
+   !EigY = 0
+   !associate(B => Sblock(1))
+   !   do i=1,B%n
+   !        !print*,i,B%vec(i),B%matY(1:B%n,i)
+   !        iaddr(i)=B%pos(i)
+   !        ip=mon%IndN(1,iaddr(i))
+   !        iq=mon%IndN(2,iaddr(i))
+   !        EigY(i,B%l1:B%l2) = (B%matY(i,1:B%n) - B%matX(i,1:B%n))*(CICoef(ip)-CICoef(iq))
+   !        EigX(i,B%l1:B%l2) = (B%matY(i,1:B%n) + B%matX(i,1:B%n))*(CICoef(ip)+CICoef(iq))
+   !  enddo
+   !  Eig(B%l1:B%l2) = B%vec(1:B%n)
+   !end associate
+
+   ! do it in a smarter way if works...
+   allocate(EigY(NDimX,NDimX),Eig(NDimX))
+   allocate(EigY0(NDimX,NDimX),EigX0(NDimX,NDimX))
+   ! get full EigY from XY0 file
+    call unpack_XY0_full(EigX0,EigY0,Eig,CICoef,IndN,NDimX,NBasis,'XY0_A')
+    do j=1,NDimX
+       do i=1,NDimX
+          ip = IndN(1,i)
+          iq = IndN(2,i)
+          fact = CICoef(ip) - CICoef(iq)
+          EigY(i,j) = fact*(EigY0(i,j)-EigX0(i,j))
+       enddo
+    enddo
+    deallocate(EigY0,EigX0)
+
+endif
+
+do ist=iskip+1,iskip+nStates
+   call TrDipMoms(ist,TDIP2,EigY,CICoef,IndN,DipNO(1,:,:),DipNO(2,:,:),DipNO(3,:,:),NDimX,NBasis)
+   write(6,'(X,I2,"->",I2,"-ERPA vec  Y <X>^2+<Y>^2+<Z>^2",F15.8,/)') RefSt,ISt,TDIP2
+enddo
+
+deallocate(DipNO)
+deallocate(Eig,EigY)
+
+end subroutine sapt_trdipm
 
 subroutine print_en(string,val,nline)
 implicit none

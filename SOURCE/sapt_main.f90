@@ -8,6 +8,7 @@ use sapt_pol
 use sapt_Chol_pol
 use sapt_Chol_exch
 use sapt_exch
+use sapt_visual
 use exd_pino
 use omp_lib
 
@@ -41,10 +42,13 @@ double precision :: Tcpu,Twall
  write(LOUT,'(1x,a)') 'STARTING SAPT CALCULATIONS'
  write(LOUT,'(8a10)') ('**********',i=1,8)
 
+ ! jump to SAPT(UKS)  framework
+ if(Flags%IUKS==1) call sapt_driver_uks(Flags,SAPT)
+
  ! jump to reduceVirt framework
  if(Flags%IRedVirt==1) call sapt_driver_red(Flags,SAPT)
 
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
  call sapt_basinfo(SAPT,NBasis)
  call sapt_interface(Flags,SAPT,NBasis,AOBasis,CholeskyVecsOTF)
 
@@ -55,6 +59,9 @@ double precision :: Tcpu,Twall
  call sapt_response(Flags,SAPT%monB,SAPT%EnChck,NBasis)
 
  call sapt_ab_ints(Flags,SAPT%monA,SAPT%monB,SAPT%iPINO,NBasis,AOBasis,CholeskyVecsOTF)
+
+ ! MC-srDFT SAPT with Cholesky OTF
+ if(SAPT%doRSH) call sapt_mcsrdft_otf(Flags,SAPT,NBasis)
 
  ! SAPT components
  write(LOUT,'()')
@@ -129,15 +136,65 @@ double precision :: Tcpu,Twall
  call print_warn(SAPT)
  call free_sapt(Flags,SAPT)
 
- call clock('SAPT',Tcpu,Twall)
+ call gclock('SAPT',Tcpu,Twall)
 
  stop
 
 end subroutine sapt_driver
 
+subroutine sapt_driver_uks(Flags,SAPT)
+!
+! attempt at SAPT(UKS)/SAPT(UHF) interface
+!
+implicit none
+
+type(FlagsData)  :: Flags
+type(SaptData)   :: SAPT
+type(TAOBasis)   :: AOBasis
+type(TCholeskyVecsOTF) :: CholeskyVecsOTF
+
+integer :: NBasis
+double precision :: Tcpu,Twall
+
+call gclock('START',Tcpu,Twall)
+
+print*, 'Experimental SAPT(UKS) implementation...'
+
+call sapt_basinfo(SAPT,NBasis)
+call saptuks_interface(Flags,SAPT,NBasis,AOBasis,CholeskyVecsOTF)
+
+call saptuks_ab_ints(Flags,SAPT%monA,SAPT%monB,NBasis,AOBasis,CholeskyVecsOTF)
+
+print*, 'Skipping monomer integrals...'
+print*, 'Skipping response ...'
+
+call e1elst_o(SAPT%monA,SAPT%monB,SAPT)
+call e1exchs2_sq_o(SAPT%monA,SAPT%monB,SAPT)
+call e2ind_o(Flags,SAPT%monA,SAPT%monB,SAPT)
+call e2disp_o(SAPT%monA,SAPT%monB,SAPT)
+
+call summary_saptuks(SAPT)
+call free_saptuks(Flags,SAPT)
+
+call gclock('SAPT',Tcpu,Twall)
+
+stop
+
+end subroutine sapt_driver_uks
+
 subroutine sapt_driver_red(Flags,SAPT)
+!
 ! sapt driver with reduced virt space
 ! Flags%IRedVirt==1
+!
+! 1) SAPT0 calculation in full space
+! 2) truncate virt space (PerVirt = percentage of virt orbs to be removed)
+!    a) NDimX is changed, 4-indx transformation is performed
+!    b) ...
+! 3) SAPT calculation in reduced space: E2dispR, E2exch-dispR + unc
+! 4) Scaling: E2disp = E2dispR * E2disp(unc)/E2dispR(unc)
+!             E2exd  = E2exdR  * E2exd(unc)/E2exdR(unc)
+!
 implicit none
 
 type(FlagsData)  :: Flags
@@ -167,7 +224,7 @@ logical          :: onlyDisp
  SAPT%iCpld      = .false.
  Flags%IFlag0    = 1
 
- call clock('START',Tcpu,Twall)
+ call gclock('START',Tcpu,Twall)
  call sapt_basinfo(SAPT,NBasis)
  call sapt_interface(Flags,SAPT,NBasis,AOBasis,CholeskyVecsOTF)
 
@@ -182,15 +239,27 @@ logical          :: onlyDisp
  write(LOUT,'(/,1x,a)') 'SAPT COMPONENTS'
  write(LOUT,'(8a10)') ('**********',i=1,6)
 
- call e1elst(SAPT%monA,SAPT%monB,SAPT)
- !call e1exchs2(Flags,SAPT%monA,SAPT%monB,SAPT)
- call e2disp_unc(Flags,SAPT%monA,SAPT%monB,SAPT)
- if(onlyDisp.eqv..false.) call e2exdisp(Flags,SAPT%monA,SAPT%monB,SAPT)
+if (Flags%ICholesky==0) then
 
- e2d_unc   = SAPT%e2disp_unc*1000d0
- if(onlyDisp.eqv..false.) e2exd_unc = SAPT%e2exdisp_unc*1000d0
+   call e1elst(SAPT%monA,SAPT%monB,SAPT)
+   !call e1exchs2(Flags,SAPT%monA,SAPT%monB,SAPT)
+   call e2disp_unc(Flags,SAPT%monA,SAPT%monB,SAPT)
+   if(onlyDisp.eqv..false.) call e2exdisp(Flags,SAPT%monA,SAPT%monB,SAPT)
 
- call clock('SAPT(FULL SPACE)',Tcpu,Twall)
+   e2d_unc   = SAPT%e2disp_unc*1000d0
+   if(onlyDisp.eqv..false.) e2exd_unc = SAPT%e2exdisp_unc*1000d0
+
+elseif (Flags%ICholeskyOTF==1) then
+
+    call e1elst_Chol(SAPT%monA,SAPT%monB,SAPT)
+    call e2disp_CAlphaTilde_unc(Flags,SAPT%monA,SAPT%monB,SAPT)
+    if(onlyDisp.eqv..false.) call e2exdisp(Flags,SAPT%monA,SAPT%monB,SAPT)
+
+elseif (Flags%ICholeskyBIN==1) then
+    stop "CholeskyBIN+RedVirt not tested!"
+endif
+
+ call gclock('SAPT(FULL SPACE)',Tcpu,Twall)
 
  call reduce_virt(Flags,SAPT%monA,NBasis)
  call reduce_virt(Flags,SAPT%monB,NBasis)
@@ -240,11 +309,76 @@ logical          :: onlyDisp
  call print_warn(SAPT)
  call free_sapt(Flags,SAPT)
 
- call clock('SAPT',Tcpu,Twall)
+ call gclock('SAPT',Tcpu,Twall)
 
  stop
 
 end subroutine sapt_driver_red
+
+subroutine sapt_mcsrdft_otf(Flags,SAPT,NBasis)
+!
+! SAPT(MC-srDFT) with Cholesky On-The-Fly:
+!   a) calculate Cholesky ERF vectors in AO
+!   b) transform them to NO basis : (FO| and (FF|
+!   c) assemble FOFOERF integral files
+!   d) calculate response
+!
+type(FlagsData) :: Flags
+type(SaptData)  :: SAPT
+integer,intent(in) :: NBasis
+
+type(TAOBasis)  :: AOBasis
+type(TCholeskyVecsOTF) :: CholErfVecsOTF
+
+!character(:),allocatable :: twokfile,twokerf
+
+if(Flags%ICholeskyOTF==1) then
+
+   call sapt_erfint_OTF(Flags,SAPT%monA,NBasis,AOBasis,CholErfVecsOTF)
+   call chol_FOERF_AO2NO_OTF(SAPT,SAPT%monA,CholErfVecsOTF,AOBasis,Flags,NBasis)
+   call chol_FFERF_AO2NO_OTF(Flags,SAPT%monA,CholErfVecsOTF,AOBasis,NBasis)
+
+   ! temp solution: assemble FOFOERF files
+   call chol_fofo_batch(SAPT%monA%num0+SAPT%monA%num1,SAPT%monA%FOErf, &
+                        SAPT%monA%num0+SAPT%monA%num1,SAPT%monA%FOErf, &
+                        SAPT%monA%NCholErf,NBasis,'FOFOERFAA')
+
+   call sapt_response(Flags,SAPT%monA,SAPT%EnChck,NBasis)
+
+   if (.not.SAPT%SameOm) then
+
+      deallocate(CholErfVecsOTF%Rkpq)
+      deallocate(CholErfVecsOTF%Chol2Data%ShellPairs)
+      deallocate(CholErfVecsOTF%Chol2Data%ShellPairLoc,CholErfVecsOTF%Chol2Data%ShellPairDim)
+      deallocate(CholErfVecsOTF%Chol2Data%SubsetDim,CholErfVecsOTF%Chol2Data%SubsetBounds)
+
+      call sapt_erfint_OTF(Flags,SAPT%monB,NBasis,AOBasis,CholErfVecsOTF)
+   elseif (SAPT%SameOm) then
+      SAPT%monB%NCholErf = SAPT%monA%NCholErf
+   endif
+
+   call chol_FOERF_AO2NO_OTF(SAPT,SAPT%monB,CholErfVecsOTF,AOBasis,Flags,NBasis)
+   call chol_FFERF_AO2NO_OTF(Flags,SAPT%monB,CholErfVecsOTF,AOBasis,NBasis)
+ 
+   deallocate(CholErfVecsOTF%Rkpq)
+   deallocate(CholErfVecsOTF%Chol2Data%ShellPairs)
+   deallocate(CholErfVecsOTF%Chol2Data%ShellPairLoc,CholErfVecsOTF%Chol2Data%ShellPairDim)
+   deallocate(CholErfVecsOTF%Chol2Data%SubsetDim,CholErfVecsOTF%Chol2Data%SubsetBounds)
+
+   ! temp solution: assemble FOFOERF files
+   call chol_fofo_batch(SAPT%monB%num0+SAPT%monB%num1,SAPT%monB%FOErf, &
+                        SAPT%monB%num0+SAPT%monB%num1,SAPT%monB%FOErf, &
+                        SAPT%monB%NCholErf,NBasis,'FOFOERFBB')
+
+   call sapt_response(Flags,SAPT%monB,SAPT%EnChck,NBasis)
+
+elseif(Flags%ICholeskyOTF==1) then
+
+   return
+
+endif
+
+end subroutine sapt_mcsrdft_otf
 
 subroutine sapt_dmft(Flags,SAPT,Tcpu,Twall,NBasis)
 !
@@ -291,12 +425,20 @@ elseif(Flags%ICholesky==1) then
       call e1exch_dmft(Flags,SAPT%monA,SAPT%monB,SAPT)
    endif
 
+   if (Flags%IRdm2Typ==11) then ! for BB in ERPA: temporary fix
+   call e2ind(Flags,SAPT%monA,SAPT%monB,SAPT)
+   else
    call e2ind_icerpa(Flags,SAPT%monA,SAPT%monB,SAPT)
+   endif
 
-   if(.not.SAPT%CAlpha) then
-      call e2disp_Cmat_Chol_block(Flags,SAPT%monA,SAPT%monB,SAPT)
-   else if(SAPT%CAlpha) then
-      call e2disp_CAlphaTilde_block(Flags,SAPT%monA,SAPT%monB,SAPT)
+   if (Flags%IRdm2Typ==11) then ! for BB in ERPA: temporary fix
+      call e2disp(Flags,SAPT%monA,SAPT%monB,SAPT)
+   else
+      if(.not.SAPT%CAlpha) then
+         call e2disp_Cmat_Chol_block(Flags,SAPT%monA,SAPT%monB,SAPT)
+      else if(SAPT%CAlpha) then
+         call e2disp_CAlphaTilde_block(Flags,SAPT%monA,SAPT%monB,SAPT)
+      endif
    endif
 
    if(SAPT%SaptLevel/=666.and.SAPT%SaptLevel/=999) then
@@ -316,10 +458,16 @@ elseif(Flags%ICholesky==1) then
 
 endif
 
+if(SAPT%ic6==1) then
+    print*, 'calculate only C6 coeffs!'
+    call c6_dummy(Flags,SAPT%monA,SAPT%monB,SAPT)
+endif
+
+
 call print_warn(SAPT)
 call free_sapt(Flags,SAPT)
 
-call clock('SAPT',Tcpu,Twall)
+call gclock('SAPT',Tcpu,Twall)
 
 stop
 
@@ -355,7 +503,28 @@ integer :: i
       call e2disp_CAlphaTilde_block(Flags,SAPT%monA,SAPT%monB,SAPT)
     endif
 
+   if (SAPT%Visual) call dump_visual(Flags,SAPT%monA,SAPT%monB,SAPT)
+   if (SAPT%Visual) call dump_elect(Flags,SAPT%monA,SAPT%monB,SAPT)
+   if (SAPT%Visual) call test_saptvis()
+
     call summary_rspt(SAPT)
+
+ elseif(SAPT%SaptLevel==0) then
+    write(LOUT,'(1x,a,/)') 'SAPT0 calculation requested'
+    SAPT%ICpld = .false.
+
+    call e1elst_Chol(SAPT%monA,SAPT%monB,SAPT)
+    call e1exch_Chol(Flags,SAPT%monA,SAPT%monB,SAPT)
+    call e2ind_icerpa(Flags,SAPT%monA,SAPT%monB,SAPT)
+    call e2exind(Flags,SAPT%monA,SAPT%monB,SAPT)
+    if(.not.SAPT%CAlpha) then
+    !  call e2disp_Cmat_Chol_block(Flags,SAPT%monA,SAPT%monB,SAPT)
+       stop "SAPT0/Cholesky: set CAlpha = .true."
+    else if(SAPT%CAlpha) then
+       call e2disp_CAlphaTilde_unc(Flags,SAPT%monA,SAPT%monB,SAPT)
+    endif
+    call e2exdisp(Flags,SAPT%monA,SAPT%monB,SAPT)
+    call summary_sapt(SAPT)
 
  else
 
@@ -369,6 +538,7 @@ integer :: i
     !call e2disp_Chol(Flags,SAPT%monA,SAPT%monB,SAPT)
     !call e2disp_Cmat(Flags,SAPT%monA,SAPT%monB,SAPT)
 
+    !if (Flags%IFunSR/=0) call e2disp_cpld(Flags,SAPT%monA,SAPT%monB,SAPT)
     if(.not.SAPT%CAlpha) then
       ! Adam's test
       !call e2disp_Cmat_Chol(Flags,SAPT%monA,SAPT%monB,SAPT)
@@ -387,7 +557,7 @@ integer :: i
  call print_warn(SAPT)
  call free_sapt(Flags,SAPT)
 
- call clock('SAPT',Tcpu,Twall)
+ call gclock('SAPT',Tcpu,Twall)
 
  stop
 
@@ -556,7 +726,7 @@ double precision :: NO(NBasis*NBasis)
 
        if(regular) then
 
-          if(Flags%IFunSR/=0) then
+          if (Flags%IFunSR/=0) then
              if (Flags%IDALTON == 1) then
                 call calc_resp_dft_dalton(Mon,Flags,NAO,NBasis)
              elseif (Flags%IDALTON == 0) then
@@ -593,7 +763,7 @@ integer            :: thr_id
 integer            :: ntr,iunit_aotwosort
 double precision :: Tcpu,TWall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 if(Flags%SaptLevel==999) then
   print*, 'In RSPT2 intermoner ints not calculated for now'
@@ -603,7 +773,7 @@ if(Flags%SaptLevel==999) then
   return
 endif
 
-if(Flags%SaptLevel==666) then
+if(Flags%SaptLevel==666.or.Flags%SaptLevel==0) then
    if (Flags%ICholesky==1) then
       call chol_ints_oooo(A%num0+A%num1,A%num0+A%num1,A%OO,&
                           B%num0+B%num1,B%num0+B%num1,B%OO,&
@@ -625,8 +795,10 @@ if(Flags%SaptLevel==666) then
                           A%NChol,'OOOOABAB')
    endif
 
-   print*, 'Only 1-st order exchange ints in RSPT2+'
-   return
+   if(Flags%SaptLevel==666) print*, 'Only 1-st order exchange ints in RSPT2+'
+   if(Flags%SaptLevel==666) return
+   if(Flags%SaptLevel==0)   write(6,'(/1x,a)') 'SAPT0: All FOFO/FFOO integrals will be assembled from Cholesky vecs...'
+                            ! with THC it will make sense to assemble them OTF...
 endif
 
 if(Flags%ISERPA==0) then
@@ -662,6 +834,16 @@ if(Flags%ISERPA==0) then
 
   endif
 
+  if(Flags%IRDM2Typ==11.and.Flags%ICholeskyOTF==1) then ! for BB in ERPA: temporary fix
+  !if(Flags%ICholeskyOTF==1) then ! for BB in ERPA: temporary fix
+     ! integrals stored as (ov|ov)
+     call chol_ovov_batch(B%num0+B%num1,B%num0,B%FO,A%num0+A%num1,A%num0,A%FO, &
+                          A%NChol,NBasis,'TWOMOAB')
+     ! ver0 allocates one extra FO|NChol matrix but is faster
+     !call chol_ovov_batch_ver0(B%num0+B%num1,B%num0,B%FO,A%num0+A%num1,A%num0,A%FO, &
+     !                     A%NChol,NBasis,'TWOMOAB')
+  endif
+
   write(LOUT,'(/1x,a)') 'Transforming E2exch-ind integrals...'
 
   ! omp tasks
@@ -669,13 +851,13 @@ if(Flags%ISERPA==0) then
 
   if(Flags%ICholeskyBIN==1.or.Flags%ICholeskyOTF==1) then
 
-     print*, 'dimOA',A%num0+A%num1
-     print*, 'dimOB',B%num0+B%num1
+     !print*, 'dimOA',A%num0+A%num1
+     !print*, 'dimOB',B%num0+B%num1
 
      if(Flags%ICholeskyOTF==1) then
         call chol_FFXY_AB_AO2NO_OTF(Flags,A,B,CholeskyVecsOTF,AOBasis,NBasis,'AB')
         ! deallocate AO cholesky vectors
-        deallocate(CholeskyVecsOTF%R)
+        deallocate(CholeskyVecsOTF%Rkpq)
         !call chol_FFXY_AB_AO2NO_OTF(Flags,A,B,CholeskyVecsOTF,AOBasis,NBasis,'BA')
         ! test prints 
         !if(allocated(A%FF))   print*, 'A%FF   is here!'
@@ -686,10 +868,8 @@ if(Flags%ISERPA==0) then
      
 
      ! term A3-ind
-     print*, 'A:',A%num0,A%num1
-     print*, 'A:',B%num0,B%num1
-     if(allocated(A%FO)) print*, 'A%FO is allocated',A%NChol
-     if(allocated(B%FO)) print*, 'B%FO is allocated'
+     !if(allocated(A%FO)) print*, 'A%FO is allocated',A%NChol
+     !if(allocated(B%FO)) print*, 'B%FO is allocated'
      call chol_fofo_batch(A%num0+A%num1,A%FO,B%num0+B%num1,B%FO, &
                           A%NChol,NBasis,'FOFOAABB')
      !call chol_fofo_full_batch(A%num0+A%num1,A%FF,B%num0+B%num1,B%FF, &
@@ -749,11 +929,26 @@ if(Flags%ISERPA==0) then
      !                    NBasis,A%num0+A%num1,B%FFBA,&
      !                    A%NChol,NBasis,'FOFOAABA')
 
+     block
+     if (Flags%ICholeskyOTF==1 .and. A%doRSH) then
+        print*, 'temp solution for MC-srDFT with CholeskyOTF...'
+        ! temp solution: assemble FOFO files
+        call chol_fofo_batch(A%num0+A%num1,A%FO, &
+                             A%num0+A%num1,A%FO, &
+                             A%NChol,NBasis,'FOFOAA')
+     endif
+     if (Flags%ICholeskyOTF==1 .and. B%doRSH) then
+        call chol_fofo_batch(B%num0+B%num1,B%FO, &
+                             B%num0+B%num1,B%FO, &
+                             B%NChol,NBasis,'FOFOBB')
+     endif
+     end block
+
      deallocate(A%FO)
      deallocate(B%FO)
      deallocate(A%OOAB)
 
-     call clock('Time in Assemble:',Tcpu,Twall)
+     call gclock('Time in Assemble:',Tcpu,Twall)
 
   else
    ! working stuff...
@@ -979,6 +1174,54 @@ endif
 
 end subroutine sapt_ab_ints
 
+subroutine saptuks_ab_ints(Flags,A,B,NBasis,AOBasis,CholeskyVecsOTF)
+!
+! calculate : (OV|OV) alpha/beta
+!
+implicit none
+
+type(FlagsData)    :: Flags
+type(SystemBlock)  :: A,B
+type(AOReaderData) :: reader
+type(TAOBasis)     :: AOBasis
+type(TCholeskyVecsOTF) :: CholeskyVecsOTF
+
+integer,intent(in) :: NBasis
+
+if(Flags%ICholesky/=0) stop "Cholesky not ready in saptuks_ab_ints"
+
+
+! (OV|OV) alpha-alpha
+call tran4_gen(NBasis,&
+               B%NOa,B%UMO(:,:,1),&
+               B%NVa,B%UMO(1:NBasis,B%NOa+1:NBasis,1),&
+               A%NOa,A%UMO(:,:,1),&
+               A%NVa,A%UMO(1:NBasis,A%NOa+1:NBasis,1),&
+               'OVOVABaa','AOTWOSORT')
+! (OV|OV) beta-beta
+call tran4_gen(NBasis,&
+               B%NOb,B%UMO(:,:,2),&
+               B%NVb,B%UMO(1:NBasis,B%NOb+1:NBasis,2),&
+               A%NOb,A%UMO(:,:,2),&
+               A%NVb,A%UMO(1:NBasis,A%NOb+1:NBasis,2),&
+               'OVOVABbb','AOTWOSORT')
+! (OV|OV) alpha-beta
+call tran4_gen(NBasis,&
+               B%NOb,B%UMO(:,:,2),&
+               B%NVb,B%UMO(1:NBasis,B%NOa+1:NBasis,2),&
+               A%NOa,A%UMO(:,:,1),&
+               A%NVa,A%UMO(1:NBasis,A%NOa+1:NBasis,1),&
+               'OVOVABab','AOTWOSORT')
+! (OV|OV) beta-alpha
+call tran4_gen(NBasis,&
+               B%NOa,B%UMO(:,:,1),&
+               B%NVa,B%UMO(1:NBasis,B%NOa+1:NBasis,1),&
+               A%NOb,A%UMO(:,:,2),&
+               A%NVb,A%UMO(1:NBasis,A%NOb+1:NBasis,2),&
+               'OVOVABba','AOTWOSORT')
+
+end subroutine saptuks_ab_ints
+
 subroutine sapt_ab_ints_red(Flags,A,B,iPINO,NBasis,NBasisRed)
 implicit none
 
@@ -1166,6 +1409,11 @@ if(allocated(Mon%RDM2)) deallocate(Mon%RDM2)
 end subroutine prepare_RDM2val
 
 subroutine reduce_virt(Flags,Mon,NBas)
+!
+! 1) NDimX, IndN, IndX change!
+! 2) we need to perform AO-->NO(new)
+!    transformation (in full NBasis)
+!
  implicit none
 
  type(SystemBlock)  :: Mon
@@ -1245,7 +1493,8 @@ subroutine reduce_virt(Flags,Mon,NBas)
     call MP2RDM_FOFO(Mon%PerVirt,Eps,Mon%Occ,URe,workSq,XOne,&
                      Mon%IndN,Mon%IndX,Mon%IndAux,Mon%IGem,  &
                      Mon%NAct,Mon%INAct,Mon%NDimX,Mon%NDim,NBas,NInte1,&
-                     twojfile,twokfile,Mon%ThrVirt,Mon%NVZero,Mon%IPrint)
+                     twojfile,twokfile,Flags%ICholesky,&
+                     Mon%ThrVirt,Mon%NVZero,Mon%IPrint)
 
  case(TWOMO_FFFF)
 
@@ -1292,7 +1541,7 @@ character(:),allocatable     :: twojfile,twokfile
 !test
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ! set dimensions
  NSq = NBas**2
@@ -1340,6 +1589,7 @@ call clock('START',Tcpu,Twall)
 
  case(TWOMO_FOFO)
    if(Flags%ICholesky==1) then
+
       if (Flags%ICholeskyBIN==1) then
          call chol_ints_fofo(NBas,NBas,Mon%FF, &
                         Mon%num0+Mon%num1,Mon%num0+Mon%num1,Mon%FF,&
@@ -1350,12 +1600,16 @@ call clock('START',Tcpu,Twall)
       elseif (Flags%ICholeskyOTF==1) then
           write(LOUT,'(1x,a,i2)') 'Skipping FFOO/FOFO for monomer ',Mon%Monomer
           call chol_FFXX_mon_AO2NO_OTF(Flags,Mon,CholeskyVecsOTF,AOBasis,NBas)
+          
           ! SAPT+DALTON avoids Fock matrix in sapt_interface (no need
           ! for canonicalization). The J, K and W (=V+J) matrices
           ! are calculate now from Cholesky FFXX vectors.
           if (Flags%InterfaceType==1) call chol_JKmat_AO_OTF(Mon,NBas)
           if (Flags%InterfaceType==1) call CholeskyOTF_elpot_AO(Mon,NBas)
+
+          if (Flags%IFunSR/=0) deallocate(Mon%FF) ! only needed for JKmat
       endif
+
       !call chol_ints_gen(NBas,NBas,Mon%FF, &
       !               Mon%num0+Mon%num1,Mon%num0+Mon%num1,Mon%OO,&
       !               Mon%NChol,twojfile)
@@ -1370,14 +1624,14 @@ call clock('START',Tcpu,Twall)
             NBas,MO,&
             NBas,MO,&
             twojfile,'AOTWOSORT')
-       call clock('FFOO',Tcpu,Twall)
+       call gclock('FFOO',Tcpu,Twall)
        call tran4_gen(NBas,&
             NBas,MO,&
             Mon%num0+Mon%num1,MO(1:NBas*(Mon%num0+Mon%num1)),&
             NBas,MO,&
             Mon%num0+Mon%num1,MO(1:NBas*(Mon%num0+Mon%num1)),&
             twokfile,'AOTWOSORT')
-       call clock('FOFO',Tcpu,Twall)
+       call gclock('FOFO',Tcpu,Twall)
     endif
  end select
 
@@ -1560,6 +1814,46 @@ write(LOUT,'(1x,a,t19,a,f16.8)') 'Eint(RSPT2)','=', erspt2*1.0d3
 write(LOUT,'()')
 
 end subroutine summary_rspt
+
+subroutine summary_saptuks(SAPT)
+!
+! print results for unrestricted SAPT (UHF, UKS)
+!
+implicit none
+
+type(SaptData) :: SAPT
+
+integer          :: i,j
+double precision :: esapt2
+
+SAPT%esapt2 = SAPT%elst + SAPT%exchs2 + SAPT%e2ind &
+              + SAPT%e2exind + SAPT%e2disp + SAPT%e2exdisp
+
+SAPT%esapt0 = SAPT%elst + SAPT%exchs2 + SAPT%e2ind_unc &
+              + SAPT%e2exind_unc + SAPT%e2disp_unc + SAPT%e2exdisp_unc
+
+write(LOUT,'(/,8a10)') ('**********',i=1,4)
+write(LOUT,'(1x,a)') 'OS-SAPT SUMMARY / milliHartree'
+write(LOUT,'(8a10)') ('**********',i=1,4)
+
+write(LOUT,'(1x,a,i3)') 'SAPT level  =', SAPT%SaptLevel
+
+write(LOUT,'(1x,a,t19,a,f16.8)') 'E1elst',    '=', SAPT%elst*1.d03
+write(LOUT,'(1x,a,t19,a,f16.8)') 'E1exch(S2)','=', SAPT%exchs2*1.d03
+write(LOUT,'(1x,a,t19,a,f16.8)') 'E1exch    ','=', SAPT%e1exch*1.d03
+
+if(SAPT%SaptLevel==0) then
+   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2ind(unc)',   '=', SAPT%e2ind_unc*1.d03
+   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2disp(unc)',  '=', SAPT%e2disp_unc*1.d03
+elseif(SAPT%SaptLevel==2) then
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2ind',      '=', SAPT%e2ind*1.d03
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2exch-ind', '=', SAPT%e2exind*1.0d3
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2disp',     '=', SAPT%e2disp*1.d03
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'E2exch-disp','=', SAPT%e2exdisp*1.0d3
+!   write(LOUT,'(1x,a,t19,a,f16.8)') 'Eint(SAPT2)','=', SAPT%esapt2*1.0d3
+endif
+
+end subroutine summary_saptuks
 
 subroutine free_sapt(Flags,SAPT)
 implicit none
@@ -1755,7 +2049,10 @@ endif
 ! ....
 
 ! delete files
-call delfile('AOTWOSORT')
+if(Flags%ICholesky==0) call delfile('AOTWOSORT')
+
+if(Flags%ICholeskyOTF==1) call delfile('cholvecs')
+
 if(SAPT%monA%TwoMoInt==TWOMO_INCORE.or.&
    SAPT%monA%TwoMoInt==TWOMO_FFFF) then
    call delfile('TWOMOAA')
@@ -1768,6 +2065,8 @@ call delfile ('ONEEL_A')
 call delfile ('ONEEL_B')
 
 call delfile('TMPOOAB')
+
+if (Flags%ICholeskyOTF==1) call delfile('cholesky')
 
 if(SAPT%SaptLevel/=1) then
    call delfile('TWOMOAB')
@@ -1833,6 +2132,28 @@ if(SAPT%SemiCoupled) call delfile('PROP_A1')
 if(SAPT%SemiCoupled) call delfile('PROP_B1')
 
 end subroutine free_sapt
+
+subroutine free_saptuks(Flags,SAPT)
+implicit none
+
+type(FlagsData) :: Flags
+type(SaptData)  :: SAPT
+
+! orbitals, occupations, energies
+deallocate(SAPT%monA%UMO,SAPT%monB%UMO)
+deallocate(SAPT%monA%UOcc,SAPT%monB%UOcc)
+deallocate(SAPT%monA%UOrbE,SAPT%monB%UOrbE)
+! electrostatic potential
+deallocate(SAPT%monA%WPot,SAPT%monB%WPot)
+
+if(Flags%ICholesky==0) call delfile('AOTWOSORT')
+
+call delfile('OVOVABbb')
+call delfile('OVOVABaa')
+call delfile('OVOVABab')
+call delfile('OVOVABba')
+
+end subroutine free_saptuks
 
 end module sapt_main
 

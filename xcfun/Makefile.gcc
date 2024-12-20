@@ -4,10 +4,10 @@
 # -fno-threadsafe-statics. Note the last option.
 
 # C++ compiler and flags
-CXX = g++
-CC = gcc
+CXX = icx
+CC = icx
 # Turn of messages that hide real errors
-CFLAGS = -g -Wall -O3 -DNDEBUG
+CFLAGS = -g -Wall -O3 -DNDEBUG -fPIE
 CXXFLAGS = $(CFLAGS) -fno-rtti -fno-exceptions
 
 # Fortran compiler and flags

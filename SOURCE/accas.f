@@ -1,6 +1,6 @@
 *Deck ACCAS
       Subroutine ACCAS(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
-     $  Title,NBasis,NInte1,NInte2,NGem)
+     $  Title,BasisSet,NBasis,NInte1,NInte2,NGem)
 C
 c     use types
       use print_units
@@ -14,6 +14,7 @@ C
       Implicit Real*8 (A-H,O-Z)
 C
       Character*60 FMultTab,Title
+      Character(*) :: BasisSet
       Include 'commons.inc'
 c
       Parameter(Zero=0.D0,Half=0.5D0,One=1.D0,Two=2.D0)
@@ -26,13 +27,15 @@ C     LOCAL ARRAYS
 C
       Dimension
      $ IndX(NBasis*(NBasis-1)/2),IndN(2,NBasis*(NBasis-1)/2),
-     $ IndAux(NBasis),IPair(NBasis,NBasis)
+     $ IndAux(NBasis),IPair(NBasis,NBasis),
+     $ XMuMat(NBasis,NBasis)
 C
       Double Precision  :: Tcpu,Twall
 C
 C     START TIMING FOR AC PROCEDURES
 C
-      call clock('START',Tcpu,Twall)
+      call gclock('START',Tcpu,Twall)
+      If (ICholeskyOTF==1) Write(6,'(1x," BasisSet = ", A)') BasisSet
 C
 C     CONSTRUCT LOOK-UP TABLES
 C
@@ -162,7 +165,7 @@ C
 C
       EndIf
 C
-      If(IFunSR.Eq.0) Then 
+      If(IFunSR.Eq.0) Then
 C
       If(IFlAC0D.Eq.1) Then
 C
@@ -171,14 +174,42 @@ C
       Call RunACDEXIT(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 C
-      call clock('ACD model',Tcpu,Twall)
+      call gclock('ACD model',Tcpu,Twall)
 
+      ElseIf(IDBBSC.Gt.0) Then
+C
+C this is a version of AC0 with CBS basis set corrections (SR integrals are required)
+C
+      Call DBBSCH(ETot,ENuc,URe,Occ,XOne,UNOAO,
+     $   BasisSet,NBasis,NInte1,IndN,IndX,NDimX)
+
+      Call delfile('cholvecs')
+      Call delfile('cholvErf')
+      call gclock('DBBSC',Tcpu,Twall)
+C
       Else
 C
       Call RunACCAS(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 
-      call clock('AC  model',Tcpu,Twall)
+      call gclock('AC  model',Tcpu,Twall)
+C
+C     Corr,md correlation energy with local mu, requires Cholesky vecs
+C
+      If (IFlCorrMD.Eq.1) Then
+c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
+c      If(ITwoEl.eq.1) then
+c      Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
+c      stop
+
+      Call LOC_MU_CHOL(BasisSet,CorrMD,AvMU,URe,UNOAO,Occ,NBasis)
+      Call delfile('cholvecs') ! delete cholesky vecs
+      call gclock('LOC_MU_CHOL_v2',Tcpu,Twall)
+      EndIf
+C
+      If (IDBBSC.Eq.1.And.ITwoEl.Eq.1) Then
+      Call LOC_MU_CBS(XMuMat,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
+      EndIf
 C
       EndIf
 C
@@ -189,11 +220,20 @@ C
 C
       Else
 C
-      Call RunACCASLR(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
+      Call RunACCASLR(BasisSet,ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 C
-      call clock('ACLR model',Tcpu,Twall)
-
+      call gclock('ACLR model',Tcpu,Twall)
+C
+C     Corr,md correlation energy with local mu, requires Cholesky vecs
+C
+      If (IFlCorrMD.Eq.1) Then
+c     If (ICholesky==0) Stop "Run SRAC0 with Cholesky!"
+      Call LOC_MU_CHOL(CorrMD,AvMU,URe,UNOAO,Occ,NBasis,0)
+      Call delfile('cholvecs')
+      call gclock('LOC_MU_CHOL_v2',Tcpu,Twall)
+      EndIf
+C
       EndIf
 C
       Return
@@ -262,7 +302,7 @@ C
      $ Title,NBasis,NInte1,NInte2,NDimX,NGOcc,NGem,
      $ IndN,IndX,NDimX)
       EndIf
-c 
+c
 c exact AC
 c      NoEig=1
 c      NDimFull=NBasis*(NBasis-1)/2
@@ -278,7 +318,7 @@ C
       If (ICholesky .Eq. 0) Then
       Call delfile('FFOO')
       Call delfile('FOFO')
-      ElseIf (ICholesky .Eq. 1) Then
+      ElseIf (IFlCorrMD.eq.0.and.IDBBSC.Eq.0) Then
       Call delfile('cholvecs')
       EndIf
       EndIf
@@ -300,7 +340,7 @@ C
       If(ITwoEl.Eq.3) Then
       Call AB_CAS_FOFO(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne,
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDimX,
-     $ NInte1,'FFOO','FOFO',ICholesky,ACAlpha,.false.)
+     $ NInte1,'FFOO','FOFO',ICholesky,0,ACAlpha,.false.)
 C
       ElseIf(ITwoEl.Eq.1) Then
       Call AB_CAS(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne,TwoNO,IPair,
@@ -627,7 +667,7 @@ C
       End
 
 * Deck RunACCASLR
-      Subroutine RunACCASLR(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
+      Subroutine RunACCASLR(BasisSet,ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
      $  IndAux,IPair,IndN,IndX,NDimX,Title,NBasis,NInte1,NInte2,NGem)
 C
       use sorter
@@ -635,26 +675,33 @@ C
       use abfofo
       use ab0fofo
       use read_external
+      use grid_internal
       use timing
 C
       Implicit Real*8 (A-H,O-Z)
 C
       Character*60 FMultTab,Title
+      Character(*) :: BasisSet
       Include 'commons.inc'
 C
       Character*60 FName
       Real*8, Dimension(:), Allocatable :: TwoEl2
-      Real*8, Dimension(:), Allocatable :: OrbGrid
-      Real*8, Dimension(:), Allocatable :: OrbXGrid
-      Real*8, Dimension(:), Allocatable :: OrbYGrid
-      Real*8, Dimension(:), Allocatable :: OrbZGrid
+C      Real*8, Dimension(:,:), Allocatable :: OrbGrid
+C      Real*8, Dimension(:,:), Allocatable :: OrbXGrid
+C      Real*8, Dimension(:,:), Allocatable :: OrbYGrid
+C      Real*8, Dimension(:,:), Allocatable :: OrbZGrid
+      Real*8,allocatable,target :: PhiGGA(:,:,:)
+      Real*8,allocatable,target :: PhiLDA(:,:)
+      Real*8,pointer :: OrbGrid(:,:)
+      Real*8,pointer :: OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:)
+
       Real*8, Dimension(:), Allocatable :: WGrid
       Real*8, Dimension(:), Allocatable :: SRKer
       Real*8, Dimension(:), Allocatable :: Work
       Dimension NSymNO(NBasis),VSR(NInte1),MultpC(15,15),NumOSym(15),
      $ IndInt(NBasis)
 C
-      Parameter(Zero=0.D0,Half=0.5D0,One=1.D0,Two=2.D0,Four=4.D0)
+c     Parameter(Zero=0.D0,Half=0.5D0,One=1.D0,Two=2.D0,Four=4.D0)
 C
       Dimension
      $ URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis),
@@ -664,11 +711,20 @@ C
 C
 C     LOCAL ARRAYS
 C
+      Integer(8) :: MemSrtSize
+      Integer :: jtsoao(NBasis)
+      Integer :: NSymBas(8),NSymOrb(8)
+C
+      Logical :: doGGA, doGGAdal
+C
+      Character(*),Parameter :: griddalfile='dftgrid.dat'
+C
       Dimension
      $ ABPLUS(NDimX*NDimX),ABMIN(NDimX*NDimX),
      $ EigVecR(NDimX*NDimX),Eig(NDimX),
      $ ECorrG(NGem),EGOne(NGem),
      $ UAux(NBasis,NBasis),VecAux(NBasis)
+      Real*8, Dimension(:,:), Allocatable :: Jmat
 C
 C     IFlAC   = 1 - adiabatic connection formula calculation
 C               0 - AC not used
@@ -695,24 +751,113 @@ C
       Write(6,'(/,1X,"The number of CASSCF Active Orbitals = ",I4)')
      $ NAcCAS
 C
+      Allocate  (TwoEl2(NInte2))
+C
+C     load orbgrid and gradients, and wgrid
+C
+      If (IFunSR == 4) Then ! POSTCAS
+         If (IFunSR2 == 1) doGGA = .false.
+         If (IFunSR2 > 1)  doGGA = .true.
+      Else ! REGULAR
+         If (IFunSR == 1) doGGA = .false.
+         If (IFunSR > 1)  doGGA = .true.
+      End If
+C
+      If (InternalGrid==0) then
+C
+      If (IMOLPRO == 1) then
+      Write(LOUT,'(/1x,a)') 'MOLPRO GRID '
+C
+C     read no of grid pts
       Call molprogrid0(NGrid,NBasis)
-      Write(6,'(/,1X,"The number of Grid Points = ",I8)')
+C
+      Else If (IDALTON == 1) then
+      Write(LOUT,'(/1x,a)') 'DALTON GRID '
+C     read no of grid pts
+      Call daltongrid0(NGrid,griddalfile,doGGAdal,NBasis)
+      if (doGGA.neqv.doGGAdal) then
+         print*, 'doGGA GammCor =', doGGA
+         print*, 'doGGA Dalton  =', doGGAdal
+         stop "error in RunACCASLR!"
+      endif
+C
+      EndIf
+C
+      Write(6,'(1X,"The number of Grid Points = ",I8)')
      $ NGrid
 C
-      Allocate  (TwoEl2(NInte2))
       Allocate  (WGrid(NGrid))
-      Allocate  (OrbGrid(NBasis*NGrid))
-      Allocate  (OrbXGrid(NBasis*NGrid))
-      Allocate  (OrbYGrid(NBasis*NGrid))
-      Allocate  (OrbZGrid(NBasis*NGrid))
       Allocate  (Work(NGrid))
 C
 c      Call EKT(URe,Occ,XOne,TwoNO,NBasis,NInte1,NInte2)
 C
-C     load orbgrid and gradients, and wgrid
+      If (doGGA) then
+         allocate(PhiGGA(NGrid,NBasis,4))
+         OrbGrid  => PhiGGA(:,:,1)
+         OrbXGrid => PhiGGA(:,:,2)
+         OrbYGrid => PhiGGA(:,:,3)
+         OrbZGrid => PhiGGA(:,:,4)
+      ElseIf (.not.doGGA) then
+         allocate(PhiLDA(NGrid,NBasis))
+         OrbGrid  => PhiLDA
+         OrbXGrid => PhiLDA
+         OrbYGrid => PhiLDA
+         OrbZGrid => PhiLDa
+      EndIf
 C
+      If (IMOLPRO == 1) Then
       Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
-     $ WGrid,UNOAO,NGrid,NBasis)
+     $                WGrid,UNOAO,NGrid,NBasis)
+      ElseIf (IDALTON == 1) Then
+      UAux=transpose(UNOAO)
+      If (doGGA) then
+         write(lout,'(/1x,a)') 'GRID TYPE: GGA'
+         call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       WGrid,NGrid,griddalfile,NBasis)
+         call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                       UAux,0,NGrid,NBasis,.false.)
+      Else
+         write(lout,'(/1x,a)') 'GRID TYPE: LDA'
+         call daltongrid_lda(OrbGrid,WGrid,NGrid,griddalfile,NBasis)
+         call daltongrid_tran_lda(OrbGrid,UAux,0,NGrid,NBasis,.false.)
+      EndIf ! doGGA
+      print*, 'OrbGrid  =',norm2(OrbGrid)
+      print*, 'OrbXGrid =',norm2(OrbXGrid)
+      print*, 'OrbYGrid =',norm2(OrbYGrid)
+      print*, 'OrbZGrid =',norm2(OrbZGrid)
+      EndIf ! Interface
+C
+      ElseIf (InternalGrid==1) then
+
+      Write(6,'(1x,a,i3)') 'IFunSR       =',IFunSR
+c     Write(6,'(1x,a,i3)') 'IUnits       =',IUnits
+c     Write(6,'(1x,a,i3)') 'InternalGrid =',InternalGrid
+      Write(6,'(1x,a,i3)') 'IGridType    =', IGridType
+      Write(6,'(1x,a,i3)') 'ORB_ORDERING =', IOrbOrder
+C
+      If (doGGA) Then
+         Write(LOUT,'(/1x,a)') 'INTERNAL GRID GGA'
+         Call internal_gga_no_orbgrid(IGridType,BasisSet,
+     $                          IOrbOrder,transpose(UNOAO),
+     $                          WGrid,PhiGGA,NGrid,NBasis,NBasis,IUnits)
+         OrbGrid  => PhiGGA(:,:,1)
+         OrbXGrid => PhiGGA(:,:,2)
+         OrbYGrid => PhiGGA(:,:,3)
+         OrbZGrid => PhiGGA(:,:,4)
+      ElseIf(.not.doGGA) Then
+         Write(LOUT,'(/1x,a)') 'INTERNAL GRID LDA'
+         Call internal_lda_no_orbgrid(IGridType,BasisSet,
+     $                          IOrbOrder,transpose(UNOAO),
+     $                          WGrid,PhiLDA,NGrid,NBasis,NBasis,IUnits)
+         OrbGrid  => PhiLDA
+         OrbXGrid => PhiLDA
+         OrbYGrid => PhiLDA
+         OrbZGrid => PhiLDa
+      End If
+C
+      Allocate  (Work(NGrid))
+C
+      End If ! InternalGrid
 C
 C     set/load symmetries of NO's
 C
@@ -724,18 +869,45 @@ C      Read(10,*) X
 C      NumOSym(I)=X
 C      EndDo
 C      Close(10)
-C     HAP
+C
+      If (IMOLPRO == 1) Then
       Call create_ind_molpro('2RDM',NumOSym,IndInt,NSym,NBasis)
+C      Print*, 'NumOSym Molpro'
+C      Do I=1,15
+C         Print*, I,NumOSym(I)
+C      EndDo
+      ElseIf (IDALTON ==1) Then
+      Call read_sym_dalton(NSym,NSymBas,NSymOrb,'SIRIUS.RST','BASINFO ')
+c      Print*, 'NSymBas, NSymOrb Dalton'
+      NumOSym=0
+      NumOSym(1:NSym)=NSymOrb(1:NSym)
+c     If (NSym.gt.1) stop "Dalton with Symmetry in RunACCASLR!"
+      EndIf
       MxSym=NSym
 C
+      If (ICholesky==1) Then
+         if (IDALTON==1) stop "Finish Dalton+Chol in RunACCASLR!"
+         Call read_aosao_map_molpro(jtsoao,
+     $              'MOLPRO.MOPUN','CASORBAO',NBasis)
+         If (InternalGrid==0.and.MxSym>1.and.IFunSRKer==1) Then
+            Stop "In RunACCASLR: Kernel & Sym /= 1 : use INTERNAL GRID!"
+         EndIf
+      EndIf
+
       NSymNO(1:NBasis)=0
       IStart=0
       Do I=1,MxSym
       Do J=IStart+1,IStart+NumOSym(I)
 C
-      Do IOrb=1,NBasis
-      If(Abs(UNOAO(IOrb,J)).Gt.1.D-1) NSymNO(IOrb)=I
-      EndDo
+      If (ICholesky==0) Then
+         Do IOrb=1,NBasis
+         If(Abs(UNOAO(IOrb,J)).Gt.1.D-1) NSymNO(IOrb)=I
+         EndDo
+      ElseIf (ICholesky==1) Then
+         Do IOrb=1,NBasis
+         If(Abs(UNOAO(IOrb,jtsoao(J))).Gt.1.D-1) NSymNO(IOrb)=I
+         EndDo
+      EndIf
 C
       EndDo
       IStart=IStart+NumOSym(I)
@@ -765,22 +937,38 @@ C
 C     if IFunSR.Gt.0 (but different from 3) TwoEl includes lr-integrals with erf/r
 C     load full-range two-electron integrals and transform to NO
 C
-      Do I=1,60
-      FName(I:I)=' '
-      EndDo
-      K=0
-    5 K=K+1
-      If (Title(K:K).Ne.' ') Then
-      FName(K:K)=Title(K:K)
-      GoTo 5
-      EndIf
-      FName(K:K+10)='.reg.integ'
+C      Do I=1,60
+C      FName(I:I)=' '
+C      EndDo
+C      K=0
+C    5 K=K+1
+C      If (Title(K:K).Ne.' ') Then
+C      FName(K:K)=Title(K:K)
+C      GoTo 5
+C      EndIf
+C      FName(K:K+10)='.reg.integ'
 C      Call Int2_AO(TwoEl2,NumOSym,MultpC,FName,NInte1,NInte2,NBasis)
-      Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',134*1024_8**2)
+      MemSrtSize=MemVal*1024_8**MemType
+      If (ICholesky==0) Then
+c     this case is run if CBS[H] is computed for AC0 and incore
+      If (IDBBSC.Eq.2.And.ITwoEl.Eq.1) Then
+      Call readtwoint(NBasis,2,'AOTWOINT.erf','AOERFSORT',MemSrtSize)
+      Call LoadSaptTwoEl(4,TwoEl2,NBasis,NInte2)
+      Else ! regular LR-AC0 calculation
+      If (IMOLPRO==1) Then
+         Call readtwoint(NBasis,2,'AOTWOINT.mol','AOTWOSORT',MemSrtSize)
+      ElseIf (IDALTON==1) Then
+         Call readtwoint(NBasis,1,'AOTWOINT','AOTWOSORT',MemSrtSize)
+      EndIf
       If(ITwoEl.Eq.1) Call LoadSaptTwoEl(3,TwoEl2,NBasis,NInte2)
+      EndIf
 C
       If(ITwoEl.Eq.1) Then
+      If(IDBBSC.Eq.2) Then
       Write(6,'(" Transforming two-electron erf integrals ...")')
+      Else
+      Write(6,'(" Transforming full two-electron integrals ...")')
+      EndIf
       Call TwoNO1(TwoEl2,UNOAO,NBasis,NInte2)
 C
       ElseIf(ITwoEl.Eq.3) Then
@@ -801,13 +989,20 @@ C     TRANSFORM J AND K
      $        Num0+Num1,UAux(1:NBasis,1:(Num0+Num1)),
      $        'FOFO','AOTWOSORT')
 C
+      EndIf ! ITwoEl
+      EndIf ! ICholesky
+C
+      If (IDALTON==1) Then
+      NAct=NAcCAS
+      INActive=NInAcCAS
+      Call PsiHPsi(EPsiHPsi,Occ,XOne,ENuc,INActive,NAct,NInte1,NBasis)
       EndIf
 C
 C     compute sr potential (vsr=xc+hartree)
 C     as a byproduct a sr energy (ensr=sr-xc+sr-hartree) is obtained
 C
       IFunSave=IFunSR
-      If(IFunSR.Eq.4) IFunSR=2
+      If(IFunSR.Eq.4) IFunSR=IFunSR2
 C
       Den=0
       Work2=0
@@ -828,7 +1023,37 @@ C
 C
       Write(6,'(/,1X,"RANGE PARAMETER ",F8.3)')Alpha
 C
-      Call PotCoul_mithap(VCoul,Work2,.true.,'AOERFSORT',NBasis)
+C     calculate short-range Coulomb matrix in AO
+      If (ICholesky==0) Then
+         Call PotCoul_mithap(VCoul,Work2,.true.,'AOERFSORT',NBasis)
+C         block
+C         double precision :: JMOsr(NBasis,NBasis)
+C         call triang_to_sq2(VCoul,JMOsr,NBasis)
+C         Print*, 'JMOsr in AO basis =',norm2(JMOsr)
+C         do j=1,NBasis
+C            write(6,'(*(f13.8))') (JMOsr(i,j),i=1,NBasis)
+C         enddo
+C         end block
+      ElseIf (ICholesky==1) Then
+         ! for Cholesky, Jmat(sr) is read from disk
+         Allocate(Jmat(NBasis,NBasis))
+         Open(newunit=iunit,file='jsrmat',form='unformatted')
+         Read(iunit) NBasis2
+         If(NBasis2.ne.NBasis) stop "NBasis error in RunACCASLR"
+         Read(iunit) Jmat
+         Close(iunit,status='delete')
+         Call sq_to_triang2(Jmat,VCoul,NBasis)
+c         Print*, 'JMOsr in AO basis =',norm2(Jmat)
+c         do j=1,NBasis
+c            write(6,'(*(f13.8))') (Jmat(i,j),i=1,NBasis)
+c         enddo
+         Deallocate(Jmat)
+      EndIf
+C      Print*, 'UNOAO =',norm2(UNOAO)
+C      do j=1,NBasis
+C         write(6,'(*(f13.8))') (UNOAO(i,j),i=1,NBasis)
+C      enddo
+C
       Print*, 'VCoul',norm2(VCoul)
       Call EPotSR(EnSR,EnHSR,VSR,Occ,URe,UNOAO,.false.,
      $        OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,
@@ -836,6 +1061,18 @@ C
 C     $        NSymNO,VCoul,TwoEl2,TwoNO,Alpha,IFunSR,
      $        NGrid,NInte1,NInte2,NBasis)
 C
+      If (IDALTON==1) Then
+        Print*, 'Dalton: add VHsr[rho] contribution...'
+        XOne = XOne + VSR
+      EndIf
+C      block
+C        double precision :: VHsr(NBasis,NBasis)
+C        call triang_to_sq2(VSR,VHsr,NBasis)
+C        Print*, 'VHsr (NO) GammCor =',norm2(VHsr)
+C        do i=1,NBasis
+C           write(6,'(*(f13.8))') (VHsr(i,j),j=1,NBasis)
+C        enddo
+C      end block
 C      Call EPotSR(EnSR,EnHSR,VSR,Occ,URe,OrbGrid,OrbXGrid,OrbYGrid,
 C     $ OrbZGrid,WGrid,NSymNO,TwoEl2,TwoNO,NGrid,NInte1,NInte2,NBasis)
       Write(6,'(" SR xcH Energy",F15.8)')EnSR
@@ -851,6 +1088,12 @@ C
       Call PBE_ONTOP_MD(PBEMD,URe,Occ,
      $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
       Write(6,'(/," SR_PBE_corr_md ",F15.8,/)') PBEMD
+C
+      If (IFlCorrMD.Eq.1) Then
+      Call PBE_ONTOP_C_MD(PBEmodMD,5.d0,URe,Occ,
+     $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
+      Write(6,'(1x,"SR_PBE_C_corr_md",F15.8,/)') PBEmodMD
+      EndIf
 C
 c      Call CASPI_SR_PBE(URe,Occ,
 c     $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
@@ -910,9 +1153,28 @@ C
      $ NGrid,NDimX,NBasis,NDimX,NInte1,NoSt,
      $ 'FOFO','FFOOERF','FOFOERF',ICholesky,0,IFunSRKer,ECASSCF,ECorr)
 C
-      ElseIf(ITWoEl.Eq.1) Then
+      ElseIf(ITwoEl.Eq.1) Then
 C
-      Call AC0CASLR(ECorr,ECASSCF,TwoNO,Occ,URe,XOne,
+      If (IDBBSC.Eq.2) Then
+C
+c KP 23.11.2024
+c if CBS[H] is computed: XOne contains h0 without vrs
+c                        TwoNO contains 1/r integrals, TwoEl2: erf/r
+      Call AC0CASLR(ECorr,ECASSCF,TwoNO,Occ,URe,UNOAO,XOne,
+     $ ABPLUS,ABMIN,EigVecR,Eig,
+     $ IndN,IndX,NDimX,NBasis,NDim,NInte1,NInte2,
+     $ TwoEl2,OrbGrid,Work,NSymNO,MultpC,NGrid)
+
+      Write
+     $ (6,'(1X,''CASSCF+ENuc, AC0-CBS[H], Total'',6X,3F15.8)')
+     $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
+C
+      Return
+C
+      EndIf
+C
+C
+      Call AC0CASLR(ECorr,ECASSCF,TwoNO,Occ,URe,UNOAO,XOne,
      $ ABPLUS,ABMIN,EigVecR,Eig,
      $ IndN,IndX,NDimX,NBasis,NDim,NInte1,NInte2,
      $ TwoEl2,OrbGrid,Work,NSymNO,MultpC,NGrid)
@@ -991,10 +1253,11 @@ C
       If(ISym.Eq.1) Then
       Do I=1,NGrid
       XKer1234=XKer1234+Work(I)*
-C     $ OrbGrid(IA+(I-1)*NBasis)*OrbGrid(IB+(I-1)*NBasis)*
-C     $ OrbGrid(IC+(I-1)*NBasis)*OrbGrid(ID+(I-1)*NBasis)
-     $ OrbGrid(I+(IA-1)*NGrid)*OrbGrid(I+(IB-1)*NGrid)*
-     $ OrbGrid(I+(IC-1)*NGrid)*OrbGrid(I+(ID-1)*NGrid)
+CC     $ OrbGrid(IA+(I-1)*NBasis)*OrbGrid(IB+(I-1)*NBasis)*
+CC     $ OrbGrid(IC+(I-1)*NBasis)*OrbGrid(ID+(I-1)*NBasis)
+c    $ OrbGrid(I+(IA-1)*NGrid)*OrbGrid(I+(IB-1)*NGrid)*
+c    $ OrbGrid(I+(IC-1)*NGrid)*OrbGrid(I+(ID-1)*NGrid)
+     $ OrbGrid(I,IA)*OrbGrid(I,IB)*OrbGrid(I,IC)*OrbGrid(I,ID)
       EndDo
       EndIf
 C
@@ -1046,7 +1309,7 @@ C
       If(ITwoEl.Eq.3) Then
       Call AB_CAS_FOFO(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne,
      $ IndN,IndX,IGem,NAcCAS,NInAcCAS,NDimX,NBasis,NDimX,
-     $ NInte1,'FFOOERF','FOFOERF',ICholesky,ACAlpha,.false.)
+     $ NInte1,'FFOOERF','FOFOERF',ICholesky,0,ACAlpha,.false.)
 C
       ElseIf(ITwoEl.Eq.1) Then
       Call AB_CAS(ABPLUS,ABMIN,ECASSCF,URe,Occ,XOne,TwoNO,IPair,
@@ -1068,7 +1331,7 @@ C
 C
 C     ADD A SR-ALDA KERNEL
 C
-      Call clock('START',Tcpu,Twall)
+      Call gclock('START',Tcpu,Twall)
 C
 C      WITHOUT BATCHES:
 C
@@ -1126,7 +1389,7 @@ C
       EndIf
 C
       Write(6,'(1X," *** sr-kernel added ***")')
-      Call clock('sr-kernel',Tcpu,Twall)
+      Call gclock('sr-kernel',Tcpu,Twall)
 C
       EndIf
 C
@@ -1201,10 +1464,10 @@ C
 C
       DeAllocate  (TwoEl2)
       DeAllocate  (WGrid)
-      DeAllocate  (OrbGrid)
-      DeAllocate  (OrbXGrid)
-      DeAllocate  (OrbYGrid)
-      DeAllocate  (OrbZGrid)
+C      DeAllocate  (OrbGrid)
+C      DeAllocate  (OrbXGrid)
+C      DeAllocate  (OrbYGrid)
+C      DeAllocate  (OrbZGrid)
       DeAllocate  (Work)
       DeAllocate (SRKer)
 C
@@ -1252,7 +1515,7 @@ C
       End
 
 *Deck AC0CASLR
-      Subroutine AC0CASLR(ECorr,ETot,TwoNO,Occ,URe,XOne,
+      Subroutine AC0CASLR(ECorr,ETot,TwoNO,Occ,URe,UNOAO,XOne,
      $ ABPLUS,ABMIN,EigY,Eig,
      $ IndN,IndX,NDimX,NBasis,NDim,NInte1,NInte2,
      $ TwoEl2,OrbGrid,SRKerW,NSymNO,MultpC,NGrid)
@@ -1272,7 +1535,8 @@ C
       Integer,Parameter :: Maxlen = 128
 C
       Dimension
-     $ URe(NBasis,NBasis),XOne(NInte1),Occ(NBasis),TwoNO(NInte2),
+     $ URe(NBasis,NBasis),UNOAO(NBasis,NBasis),
+     $ XOne(NInte1),Occ(NBasis),TwoNO(NInte2),
      $ IndAux(NBasis),
      $ ABPLUS(NDimX*NDimX),ABMIN(NDimX*NDimX),
      $ Eig(NDimX),EigY(NDimX*NDimX),IndX(NDim),IndN(2,NDim),
@@ -1290,7 +1554,23 @@ C
      $ AuxI(NInte1),AuxIO(NInte1),IPair(NBasis,NBasis),
      $ EigX(NDimX*NDimX),
      $ IEigAddY(2,NDimX),IEigAddInd(2,NDimX),IndBlock(2,NDimX),
-     $ XMAux(NDimX*NDimX)
+     $ XMAux(NDimX*NDimX),XMuMAT(NBasis,NBasis),work1(NBasis,NBasis)
+! analysis of AC0
+       double precision :: ECorrIJ(6,6)
+       integer          :: IGIJ(4,4),IGemNo(6,2)
+C
+      NGem=MAXVAL(IGem)
+      ECorrIJ=0.0d0
+      IJ=0
+      Do I=1,NGem
+         Do J=1,I
+            IJ=IJ+1
+            IGIJ(I,J)=IJ
+            IGIJ(J,I)=IJ
+            IGemNo(IJ,1)=I
+            IGemNo(IJ,2)=J
+        EndDo
+      EndDo
 C
       IPair(1:NBasis,1:NBasis)=0
       Do II=1,NDimX
@@ -1793,6 +2073,20 @@ C     Do IP
 C
 C     FIND THE 0TH-ORDER SOLUTION FOR THE VIRTUAL-INACTIVE BLOCKS
 C
+      if(idalton.eq.0) then
+      open(10,file='fock.dat')
+      work1=0
+      Do IP=NOccup+1,NBasis
+      Do IQ=1,INActive
+      read(10,*)iip,iiq,xx
+      work1(iip,iiq)=xx
+      EndDo
+      EndDo
+      close(10)
+      endif
+C
+C     counter for testing if Fock matrix is diagonal...
+      icount=0
       Do IP=NOccup+1,NBasis
       Do IQ=1,INActive
 C
@@ -1814,6 +2108,14 @@ C
      $ NInte1,NInte2,NBasis)
 C
       Eig(NFree1)=ABP
+C
+      If(IDALTON.Eq.0) Then
+      If(ABS(ABP-work1(IP,IQ)).Gt.1.d-7) then
+      Write(*,*)'ABP inconsistent with eps_a-eps_i for',IP,IQ
+      icount=icount+1
+      EndIf
+      EndIf
+C
       EigY(NFree2)=One/Sqrt(Two)
       EigX(NFree2)=One/Sqrt(Two)
 C
@@ -1825,6 +2127,8 @@ C
 C
       EndDo
       EndDo
+
+      if(icount.eq.0) write(6,'("ABP consistent with eps_a-eps_i")')
 C
       Write(6,'(/," *** DONE WITH 0TH-ORDER IN AC0-CASSCF ***")')
 C
@@ -1835,10 +2139,104 @@ C
      $" *** COMPUTING ABPLUS(1) AND ABMIN(1) MATRICES ***"
      $ )')
 C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      If (IDBBSC.Gt.0) Then
+C
+C     MODIFY integrals with 1/r TO ACCOUNT FOR CBS CORRECTION
+C
+      Call LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoNO,NBasis,NInte2)
+c      goto 999
+C
+C     COMPUTE 1st-ORDER ONE-ELECTRON HAMILTONIAN (USING 1/r INTEGRALS)
+C
+C     SET THE FLAG FOR AB1_CAS
+C
+      IHNO1=1
+C
+      IJ=0
+      Do I=1,NBasis
+      Do J=1,I
+      IJ=IJ+1
+C
+      If(IGem(I).Eq.IGem(J)) Then
+C
+      Aux=Zero
+C
+      Do IT=1,NBasis
+      If(IGem(IT).Ne.IGem(I))
+     $ Aux=Aux+Occ(IT)*
+     $ (Two*TwoNO(NAddr3(IT,IT,I,J))-TwoNO(NAddr3(IT,I,IT,J)))
+      EndDo
+C
+      XOne(IJ)=-Aux
+C
+      EndIf
+C
+      EndDo
+      EndDo
+C
+C     COMPUTE SR INTEGRALS
+C
+      TwoEl2=TwoNO-TwoEl2
+C
+C     ADD MODIFIED SR INTEGRALS TO FULL-COULOMB INTEGRALS
+C
+      NAddr=0
+C
+      IPR=0
+      Do IP=1,NBasis
+      Do IR=1,IP
+
+      IPR=IPR+1
+C
+      IQS=0
+      Do IQ=1,NBasis
+      Do IS=1,IQ
+
+      IQS=IQS+1
+C
+      If(IPR.Ge.IQS) Then
+C
+      NAddr=NAddr+1
+      AuxSR=Zero
+      Do I=1,NBasis
+      AuxSR=AuxSR
+     $ +TwoEl2(NAddr3(I,IR,IQ,IS))*XMuMAT(IP,I)
+     $ +TwoEl2(NAddr3(IP,I,IQ,IS))*XMuMAT(IR,I)
+     $ +TwoEl2(NAddr3(IP,IR,I,IS))*XMuMAT(IQ,I)
+     $ +TwoEl2(NAddr3(IP,IR,IQ,I))*XMuMAT(IS,I)
+      EndDo
+C
+      AuxSR=AuxSR/Four
+      TwoNO(NAddr)=TwoNO(NAddr)+AuxSR
+C
+c comment out the line above and uncomment the lines below to
+c include in-active contribution to the CBS correction
+c which will be printed as "EIntra"; in practice it is always very small
+c      If(IGFact(NAddr3(IP,IR,IQ,IS)).Eq.0) Then
+c      TwoNO(NAddr)=TwoNO(NAddr)+AuxSR
+c      Else
+c      TwoNO(NAddr)=AuxSR
+c      EndIf
+C
+      EndIf
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+c uncomment to include in-active contribution to the CBS correction (see above)
+c      IGFact=0
+c comment out to include in-active contribution to the CBS correction (see above)
+      IHNO1=0
+C
+      EndIf
+  999 continue
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C
       Call AB1_CAS(ABPLUS,ABMIN,URe,Occ,XOne,TwoNO,
      $ RDM2Act,NRDM2Act,IGFact,C,Ind1,Ind2,
      $ IndBlock,NoEig,NDimX,NBasis,NInte1,NInte2)
-C      Print*, 'AB1-KA',norm2(ABPLUS),norm2(ABMIN)
+       Print*, 'AB1-KA',norm2(ABPLUS),norm2(ABMIN)
 C
 C     ADD A SR KERNEL
 C
@@ -1907,10 +2305,10 @@ C
 C
       EndDo
       EndDo
-C 
+C
 C     2nd: ADD KERNEL IN BATCHES:
 C
-      call clock('START',Tcpu,Twall)
+      call gclock('START',Tcpu,Twall)
       Allocate(Work(Maxlen),Batch(Maxlen,NBasis))
 C
       Do Offset=0,NGrid,Maxlen
@@ -1956,7 +2354,7 @@ C
       Deallocate(Batch,Work)
 CC
       Write(6,'("*** sr-kernel added ***")')
-      call clock('sr-kernel AB(1)',Tcpu,Twall)
+      call gclock('sr-kernel AB(1)',Tcpu,Twall)
 CC
       EndIf
 C
@@ -2083,6 +2481,8 @@ C
 C
 C     FINALLY THE ENERGY CORRECTION
 C
+      Print*, 'ABPLUS-energy corr=',norm2(ABPLUS)
+C
       EAll=Zero
       EIntra=Zero
 C
@@ -2101,15 +2501,15 @@ C
       SumY=ABPLUS(I+(J-1)*NoEig)
       Aux=(C(IS)+C(IQ))*(C(IP)+C(IR))*SumY
 C
-c herer!!!
       EAll=EAll+Aux*TwoNO(NAddr3(IP,IR,IQ,IS))
-c      EAll=EAll+Aux*TwoEl2(NAddr3(IP,IR,IQ,IS))
 C
       If(IGem(IP).Eq.IGem(IR).And.IGem(IQ).Eq.IGem(IS).
      $ And.IGem(IP).Eq.IGem(IQ))
-c herer!!!
      $ EIntra=EIntra+Aux*TwoNO(NAddr3(IP,IR,IQ,IS))
-c     $ EIntra=EIntra+Aux*TwoEl2(NAddr3(IP,IR,IQ,IS))
+C
+      ECorrIJ(IGIJ(IGem(IP),IGem(IR)),IGIJ(IGem(IQ),IGem(IS)))= 
+     $ ECorrIJ(IGIJ(IGem(IP),IGem(IR)),IGIJ(IGem(IQ),IGem(IS)))
+     $              +Aux*TwoNO(NAddr3(IP,IR,IQ,IS))
 C
 C     endinf of If(IP.Gt.IR.And.IQ.Gt.IS)
       EndIf
@@ -2117,9 +2517,66 @@ C
       EndDo
       EndDo
 C
-C      Print*, EAll,EIntra
+      Print*, "EAll EIntra", EAll,EIntra
 C
       ECorr=EAll-EIntra
+C
+!PRINT CONTRIBUTIONS TO ECorr FROM BLOCKS
+      Write(6,'(/,X,
+     $ "Contributions to AC0 from (Mu)(Nu) pairs of blocks")')
+      IJ=0
+      Do I=1,NGem
+      Do J=1,I
+      IJ=IJ+1
+! NGem=3 case
+       If(NGem.Eq.3) Then
+       IOO=0
+       If(IGemNo(IJ,1).Eq.1.And.IGemNo(IJ,2).Eq.1) IOO=1
+       IVV=0
+       If(IGemNo(IJ,1).Eq.3.And.IGemNo(IJ,2).Eq.3) IVV=1
+       IAA1=0
+       If(IGemNo(IJ,1).Eq.2.And.IGemNo(IJ,2).Eq.2) IAA1=1
+! NGem=2 case (zero inactive orbitals)
+       ElseIf(NGem.Eq.2) Then
+       IOO=0
+       IVV=0
+       If(IGemNo(IJ,1).Eq.2.And.IGemNo(IJ,2).Eq.2) IVV=1
+       IAA1=0
+       If(IGemNo(IJ,1).Eq.1.And.IGemNo(IJ,2).Eq.1) IAA1=1
+       EndIf
+
+       If(IVV==0.And.IOO==0) Then
+       KL=0
+       Do K=1,NGem
+       Do L=1,K
+         KL=KL+1
+         If(NGem.Eq.3) Then
+             IOO=0
+             If(IGemNo(KL,1).Eq.1.And.IGemNo(KL,2).Eq.1) IOO=1
+             IVV=0
+             If(IGemNo(KL,1).Eq.3.And.IGemNo(KL,2).Eq.3) IVV=1
+             IAA2=0
+             If(IGemNo(KL,1).Eq.2.And.IGemNo(KL,2).Eq.2) IAA2=1
+         ElseIf(NGem.Eq.2) Then
+             IOO=0
+             IVV=0
+             If(IGemNo(KL,1).Eq.2.And.IGemNo(KL,2).Eq.2) IVV=1
+             IAA2=0
+             If(IGemNo(KL,1).Eq.1.And.IGemNo(KL,2).Eq.1) IAA2=1
+         EndIf
+         If(IVV==0.And.IOO==0.And.IAA1+IAA2.Ne.2) Then
+         If(IJ.Ge.KL) Then
+           EE=ECorrIJ(IJ,KL)
+           If(IJ.Ne.KL)EE=EE+ECorrIJ(KL,IJ)
+           Write(6,'(X,"(",2I1,")","(",2I1,")",F15.8)')
+     $           IGemNo(IJ,1),IGemNo(IJ,2),IGemNo(KL,1),IGemNo(KL,2),EE
+         EndIf
+         EndIf
+      EndDo
+      EndDo
+      EndIf
+      EndDo
+      EndDo
 C
       Return
       End
@@ -2712,6 +3169,789 @@ C
       Return
       End
 
+*Deck LOC_MU_CHOL_v2
+      Subroutine LOC_MU_CHOL(BasisSet,CorrMD,AvMU,
+     $                          URe,UNOAO,Occ,NBasis)
+C
+      use timing
+      use types
+      use grid_internal
+C
+C     DGEMM version
+C     CAREFUL : memory requirements could still be improved...
+C
+C     RETURNS SHORT-RANGE CORRELATION ENERGY WITH SR-PBE ONTOP CORRELATION FUNCTIONAL AND LOCAL MU, Giner et al. JCP 152, 174104 (2020)
+C
+C     IFlFCorr == 0 : calculate CorrMD based only on fCAS function (nact^2 NGrid NCholesky)
+C     IFlFCorr == 1 : calculate CorrMD based only on fCAS + fAC0 functions (NBasis^2 NGrid NCholesky)
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Parameter(Half=0.5D0)
+c     Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
+c    $ Four=4.D0)
+C
+      Character(*) :: BasisSet
+      Include 'commons.inc'
+C
+      Dimension URe(NBasis,NBasis),UNOAO(NBasis,NBasis),Occ(NBasis)
+C
+      Real*8, Allocatable :: FPsiB(:),OnTop(:),XMuLoc(:),
+     $ Zk(:),RhoGrid(:),Sigma(:),WGrid(:),WorkD(:,:),
+     $ Oa(:,:),Oi(:,:),Oia(:,:),Oai(:,:),Q(:,:)
+      Real*8,allocatable,target :: PhiGGA(:,:,:)
+      Real*8,pointer :: OrbGrid(:,:)
+      Real*8,pointer :: OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:)
+      Double Precision, Allocatable :: Oaa(:,:),Oii(:,:)
+      Double Precision, Allocatable :: OOai(:,:),OOia(:,:)
+      Double Precision, Allocatable :: CHVCSAA(:,:),CHVCSII(:,:)
+      Double Precision, Allocatable :: CHVCSAI(:,:),CHVCSIA(:,:)
+      Double Precision, Allocatable :: RDM2Act(:)
+      Double Precision, Allocatable :: RDM2val(:,:,:,:)
+      Double Precision, Allocatable :: Work(:,:)
+      Dimension IAct(NBasis),Ind2(NBasis)
+C     correlation contribution
+      Real*8, Allocatable :: FCorr(:)
+      Double Precision, Allocatable :: RDM2corr(:,:,:,:)
+      Real*8, Allocatable :: QGamII(:,:,:),QGamAA(:,:,:),QGamVV(:,:,:)
+      Real*8, Allocatable :: QGamIV(:,:,:),QGamAV(:,:,:),QGamIA(:,:,:)
+      Real*8, Allocatable :: OGamI(:,:,:),OGamA(:,:,:),OGamV(:,:,:),
+     $                       OnTopCorr(:),XMuLocCorr(:)
+      double precision :: Twall,TCpu
+C
+      Logical :: doGGA
+      Logical :: ex ! check rdmcorr file
+      Double Precision, Allocatable :: RR(:,:)
+      Character(*),Parameter :: griddalfile='dftgrid.dat'
+C
+      call gclock('START',Tcpu,Twall)
+C
+C     debug printlevel
+      IIPRINT=5
+C
+C     set constants
+C
+c     Pi = dacos(-1.d0)
+c      SPi = SQRT(Pi)
+c     used in Kasia's code:
+      SPi=SQRT(3.141592653589793)
+      Prefac = SQRT(3.1415)/Two ! SPi/Two
+C
+      Write(6,'(/,1X,"************** ",
+     $ " DGEMM Short-Range Correlation Energy with the Local Mu ")')
+      If (IFlFCorr==1) Write(6,'(1X,"Compute fCAS and fAC0!")')
+C
+C     Load grid (Molpro, Dalton, Internal)
+C
+      If (InternalGrid==0) then
+C
+         If (IMOLPRO == 1) Then
+            Write(6,'(/,1X,"Read MOLPRO DFT grid file")')
+            Call molprogrid0(NGrid,NBasis)
+         ElseIf(IDALTON == 1) Then
+            Write(6,'(/,1X,"Read DALTON DFT grid file")')
+            Call daltongrid0(NGrid,griddalfile,doGGA,NBasis)
+            If (.not.doGGA) stop "LOC_MU_CHOL: Run Dalton with SR-PBE!"
+         EndIf
+C
+         Write(6,'(1X,"The number of Grid Points = ",I8)')
+     $         NGrid
+         Allocate(WGrid(NGrid))
+         Allocate(PhiGGA(NGrid,NBasis,4))
+
+      ElseIf (InternalGrid==1) then
+C
+C     for Orca UNOAO orbitals are read from file
+C
+!      print*, 'UAONO =',norm2(UNOAO)
+!         If (IOrbOrder == 2) then ! orca
+!            Allocate(Work(NBasis,NBasis),Oaa(NBasis,NBasis))
+!            Oaa=UNOAO
+!            Open(newunit=ione,file='uaono.dat',access='sequential',
+!     $         form='unformatted',status='old')
+!            Read(ione) Work
+!            Close(ione)
+!            UNOAO = transpose(Work)
+!         Endif
+         Call internal_gga_no_orbgrid(IGridType,BasisSet,
+     $                          IOrbOrder,transpose(UNOAO),
+     $                          WGrid,PhiGGA,NGrid,NBasis,NBasis,IUnits)
+c
+c     for Orca, restore original UNOAO==C(MO,NO)
+!     If (IOrbOrder == 2) UNOAO = Oaa
+!     If (IOrbOrder == 2) Deallocate(Oaa)
+C
+      EndIf ! InternalGrid
+C
+C     use pointers for orbitals and gradients
+      OrbGrid  => PhiGGA(:,:,1)
+      OrbXGrid => PhiGGA(:,:,2)
+      OrbYGrid => PhiGGA(:,:,3)
+      OrbZGrid => PhiGGA(:,:,4)
+C
+      If(InternalGrid==0) Then
+C        load orbitals, gradients, and wgrid
+         If (IMOLPRO == 1) Then
+            Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                      WGrid,UNOAO,NGrid,NBasis)
+         ElseIf (IDALTON == 1) Then
+            Allocate(Work(NBasis,NBasis))
+            Work = transpose(UNOAO)
+            Call daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                          WGrid,NGrid,griddalfile,NBasis)
+            Call daltongrid_tran_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     &                          Work,0,NGrid,NBasis,.false.)
+CC        visualisation
+C           Allocate(RR(3,NGrid))
+C           Call dalton_grid_coord(NGrid,RR,griddalfile)
+           Deallocate(Work)
+         EndIf
+      EndIf ! InternalGrid
+C
+      NAct=NAcCAS
+      INActive=NInAcCAS
+      NOccup=INActive+NAct
+      Ind2(1:NBasis)=0
+      Do I=1,NAct
+      Ind2(INActive+I)=I
+      EndDo
+C
+      NRDM2Act = NAct**2*(NAct**2+1)/2
+      Allocate (RDM2Act(NRDM2Act))
+      RDM2Act(1:NRDM2Act)=Zero
+C
+      Open(10,File="rdm2.dat",Status='Old')
+C
+   10 Read(10,*,End=40)I,J,K,L,X
+C     X IS DEFINED AS: < E(IJ)E(KL) > - DELTA(J,K) < E(IL) > = 2 GAM2(JLIK)
+      RDM2Act(NAddrRDM(J,L,I,K,NAct))=Half*X
+      GoTo 10
+   40 Continue
+      Close(10)
+C
+      Allocate(RDM2val(NOccup,NOccup,NOccup,NOccup))
+      Do L=1,NOccup
+      Do K=1,NOccup
+      Do J=1,NOccup
+      Do I=1,NOccup
+      RDM2val(I,K,J,L)=FRDM2(I,K,J,L,RDM2Act,Occ,Ind2,NAct,NBasis)
+      Enddo
+      Enddo
+      Enddo
+      Enddo
+      If (IIPRINT.GT.1) Print*, 'RDM2val = ', norm2(RDM2val)
+C
+      Do I=1,NBasis
+      IAct(I)=0
+      If(Occ(I).Ne.One.And.Occ(I).Ne.Zero) IAct(I)=1
+      EndDo
+C
+C     LOAD CHOLESKY VECTORS
+C
+      open(newunit=iunit,file='cholvecs',form='unformatted')
+      read(iunit) NCholesky
+      Allocate(WorkD(NCholesky,NBasis**2))
+      read(iunit) WorkD
+      close(iunit)
+c     print*,'NCholesky',NCholesky
+C
+C     truncate CHOLVECS
+C
+      Allocate (CHVCSAA(NCholesky,NAct**2))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=INActive+1,NOccup
+            Do I=INActive+1,NOccup
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSAA(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+      Allocate (CHVCSII(NCholesky,INActive**2))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=1,INActive
+            Do I=1,INActive
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSII(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+      Allocate (CHVCSIA(NCholesky,INActive*NAct))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=INActive+1,NOccup
+            Do I=1,INActive
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSIA(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+      Allocate (CHVCSAI(NCholesky,NAct*INactive))
+      Do K=1,NCholesky
+         IIJJ=0
+         Do J=1,INActive
+            Do I=INActive+1,NOccup
+               IIJJ=IIJJ+1
+               IJ=I+(J-1)*NBasis
+               CHVCSAI(K,IIJJ) = WorkD(K,IJ)
+            EndDo
+         EndDo
+      EndDo
+C
+C     COMPUTE f(r)
+C
+      Allocate (FPsiB(NGrid))
+      Allocate (Q(NAct,NAct))
+      Allocate (Oa(NCholesky,NAct))
+      Allocate (Oai(NCholesky,NAct))
+      Allocate (Oi(NCholesky,INActive))
+      Allocate (Oia(NCholesky,INActive))
+c
+      Allocate (Oaa(NAct,NAct))
+      Allocate (Oii(INActive,INActive),OOai(NAct,INActive))
+
+      Do IG=1,NGrid
+C
+      FPsiB(IG)=Zero
+C
+C     active-active
+C
+      Call dgemv('N',NCholesky*NAct,NAct,1d0,CHVCSAA,NCholesky*NAct,
+     $           OrbGrid(IG,INActive+1:INActive+NAct),1,0d0,Oa,1)
+C
+C     Q(pq) = \sum_rs \Gamma_pqrs phi_r \phi_s
+C
+      Q=Zero
+      Do IS=INactive+1,NOccup
+      Do IR=INactive+1,NOccup
+      Do IQ=INactive+1,NOccup
+      Do IP=INactive+1,NOccup
+      IPP=IP-INActive
+      IQQ=IQ-INActive
+      Q(IPP,IQQ)=Q(IPP,IQQ)
+     &        +RDM2val(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+C
+      Call dgemm('T','N',NAct,NAct,NCholesky,1d0,Oa,NCholesky,
+     $           Oa,NCholesky,0d0,Oaa,NAct)
+      FPsiB(IG)=ddot(NAct*NAct,Oaa,1,Q,1)
+C
+C     inactive-inactive
+C
+      If(INActive/=0) Then
+C
+      Call dgemv('N',NCholesky*INActive,INActive,1d0,CHVCSII,
+     $          NCholesky*INActive,OrbGrid(IG,1:INActive),1,0d0,Oi,1)
+C
+      Call dgemm('T','N',INActive,INActive,NCholesky,1d0,Oi,NCholesky,
+     $           Oi,NCholesky,0d0,Oii,INActive)
+      Do IP=1,INActive
+      Do IQ=1,INActive
+      FPsiB(IG)=FPsiB(IG)+Oii(IP,IQ)*OrbGrid(IG,IP)*OrbGrid(IG,IQ)
+      EndDo
+      EndDo
+C
+C     active-inactive + inactive-active
+C
+      Call dgemv('N',NCholesky*NAct,INActive,1d0,CHVCSAI,
+     &          NCholesky*NAct,OrbGrid(IG,1:INActive),1,0d0,Oai,1)
+C
+      Call dgemv('N',NCholesky*INActive,NAct,1d0,CHVCSIA,
+     &          NCholesky*INActive,OrbGrid(IG,INactive+1:NOccup),
+     &          1,0d0,Oia,1)
+c
+      Call dgemm('T','N',NAct,INActive,NCholesky,4d0,Oa,NCholesky,
+     &           Oi,NCholesky,0d0,OOai,NAct)
+c
+      Call dgemm('T','N',NAct,INActive,NCholesky,-2d0,Oai,NCholesky,
+     &           Oia,NCholesky,1d0,OOai,NAct)
+c
+      Do IQ=1,INActive
+      Do IP=INactive+1,NOccup
+      IPP=IP-INActive
+      FPsiB(IG)=FPsiB(IG)
+     &         +Occ(IP)*OOai(IPP,IQ)*OrbGrid(IG,IP)*OrbGrid(IG,IQ)
+      EndDo
+      EndDo
+C
+      EndIf ! INActive.ne.0
+
+      EndDo ! NGrid
+      FPsiB = 2d0*FPsiB
+      If (IIPRINT.GT.1) Print*, 'Total FPsiB =', norm2(FPsiB)
+C
+      Deallocate(CHVCSII,CHVCSAA,CHVCSAI,CHVCSIA)
+      Deallocate(OOai)
+C
+      call gclock('fr loop',Tcpu,Twall)
+C
+      If (IFlFCorr==0) Deallocate(WorkD) ! Chol vecs no longer necessary
+C
+      If (IFlFCorr==1) Then
+c
+C     add a contribution from the AC0 correlation Gamma
+C
+      Allocate(QGamII(NBasis,NBasis,NGrid))
+      Allocate(QGamIA(NBasis,NBasis,NGrid))
+      Allocate(QGamIV(NBasis,NBasis,NGrid))
+      Allocate(QGamAA(NBasis,NBasis,NGrid))
+      Allocate(QGamAV(NBasis,NBasis,NGrid))
+      Allocate(QGamVV(NBasis,NBasis,NGrid))
+!     careful! seems that some savings are
+!              possible here :
+!     Allocate(QGamVV(NOccup,NOccup,NGrid))
+      Allocate(OGamI(NCholesky,NBasis,NGrid))
+      Allocate(OGamA(NCholesky,NBasis,NGrid))
+      Allocate(OGamV(NCholesky,NBasis,NGrid))
+C
+      QGamII=Zero
+      QGamIA=Zero
+      QGamIV=Zero
+      QGamAA=Zero
+      QGamAV=Zero
+      QGamVV=Zero
+C
+      Allocate(FCorr(NGrid))
+      FCorr=Zero
+C
+      Allocate (RDM2corr(NBasis,NBasis,NOccup,NOccup))
+      RDM2corr=Zero
+      inquire(file='rdmcorr',EXIST=ex)
+      if (.not.ex) stop "no rdmcorr file!"
+      Open(10,file='rdmcorr',form='unformatted')
+CC
+  557 Read(10,End=556) IP,IQ,IR,IS,GCor
+c     print*, 'ip > ir, iq > is ',ip,ir,iq,is,GCor
+      RDM2corr(IP,IQ,IR,IS) = Half*GCor
+c
+c     multiply by 1/4 (GCor is used four times) and by 2 because GCor (with proper factors)
+c     must satisfy E^AC0 = 1/2 sum_pqrs GCor_pqrs <pqrs>
+c     assumed symmetry of GCor pqrs = rqps = psrq = rspq
+c
+      GoTo 557
+  556 Close(10)
+C
+      If (IIPRINT.GT.1) Print*, 'RDM2corr =',norm2(RDM2corr)
+C
+      Do IS=1,NBasis
+      Do IR=1,NBasis
+      IRS=IGem(IR)+(IGem(IS)-1)*3
+      select case (IRS)
+      case (1)
+c        Print*, 'case 1: Inact-Inact'
+         Do IG=1,NGrid
+         Do IQ=INactive+1,NBasis
+         Do IP=INactive+1,NBasis
+         QGamII(IP,IQ,IG)=QGamII(IP,IQ,IG)
+     &           +RDM2corr(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+         EndDo
+         EndDo
+         Enddo
+      case (2)
+c        Print*, 'case 2: Act - Inact'
+         Do IG=1,NGrid
+         Do IQ=Inactive+1,NBasis
+            Do IP=1,IR-1
+            QGamIA(IP,IQ,IG)=QGamIA(IP,IQ,IG)
+     &              +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IP=IR+1,NBasis
+            QGamIA(IP,IQ,IG)=QGamIA(IP,IQ,IG)
+     &              +RDM2corr(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         Enddo
+      case (3)
+c        print*, 'case-3: Virt-Inact'
+         Do IG=1,NGrid
+         Do IQ=Inactive+1,NBasis
+         Do IP=1,NOccup
+         QGamIV(IP,IQ,IG)=QGamIV(IP,IQ,IG)
+     &           +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+         EndDo
+         EndDo
+         Enddo
+c     case (4) IA = (AI)^T
+      case (5)
+c        Print*, 'case 5: Act-Act'
+         Do IG=1,NGrid
+         Do IQ=1,IS-1
+            Do IP=1,IR-1
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IR,IS,IP,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IP=IR+1,NBasis
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IP,IS,IR,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         Do IQ=IS+1,NBasis
+            Do IP=1,IR-1
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IP=IR+1,NBasis
+            QGamAA(IP,IQ,IG)=QGamAA(IP,IQ,IG)
+     &              +RDM2corr(IP,IQ,IR,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         EndDo
+      case (6) ! Virt-Act
+         Do IG=1,NGrid
+         Do IP=1,NOccup
+            Do IQ=1,IS-1
+               QGamAV(IP,IQ,IG)=QGamAV(IP,IQ,IG)
+     &           +RDM2corr(IR,IS,IP,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+            Do IQ=IS+1,NBasis
+               QGamAV(IP,IQ,IG)=QGamAV(IP,IQ,IG)
+     &           +RDM2corr(IR,IQ,IP,IS)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+            EndDo
+         EndDo
+         Enddo
+c     case(7) IV = (VI)^T
+c     case(8) AV = (VA)^T
+      case (9)
+c       Print*, 'case 9: Virt-Virt'
+         Do IG=1,NGrid
+         Do IQ=1,NOccup
+         Do IP=1,NOccup
+         QGamVV(IP,IQ,IG)=QGamVV(IP,IQ,IG)
+     &           +RDM2corr(IR,IS,IP,IQ)*OrbGrid(IG,IR)*OrbGrid(IG,IS)
+         EndDo
+         EndDo
+         Enddo
+      end select
+      EndDo
+      EndDo
+C
+      If (IIPRINT.GT.1) Then
+       Print*, 'QGam-1 II', norm2(QGamII)
+       Print*, 'QGam-2 AI', norm2(QGamIA)
+       Print*, 'QGam-3 VI', norm2(QGamIV)
+       Print*, 'QGam-5 AA', norm2(QGamAA)
+       Print*, 'QGam-6 VA', norm2(QGamAV)
+       Print*, 'QGam-9 VV', norm2(QGamVV)
+      EndIf
+c
+      Deallocate(RDM2corr)
+C
+C     OGam matrices
+C
+      Do IT=1,NBasis
+      ITT=(IT-1)*NBasis
+      select case (IGem(IT))
+      case(1)
+         Do IG=1,NGrid
+            Do IP=1,NBasis
+               Do K=1,NCholesky
+                  OGamI(K,IP,IG)=OGamI(K,IP,IG)
+     &                          +WorkD(K,ITT+IP)*OrbGrid(IG,IT)
+               EndDo
+            EndDo
+         EndDo
+      case(2)
+         Do IG=1,NGrid
+            Do IP=1,NBasis
+               Do K=1,NCholesky
+                  OGamA(K,IP,IG)=OGamA(K,IP,IG)
+     &                          +WorkD(K,ITT+IP)*OrbGrid(IG,IT)
+               EndDo
+            EndDo
+         EndDo
+      case(3)
+         Do IG=1,NGrid
+            Do IP=1,NBasis
+               Do K=1,NCholesky
+                  OGamV(K,IP,IG)=OGamV(K,IP,IG)
+     &                          +WorkD(K,ITT+IP)*OrbGrid(IG,IT)
+               EndDo
+            EndDo
+         EndDo
+      end select
+      EndDo
+C
+      If (IIPRINT.GT.1) Then
+       Print*, 'OGamI = ', norm2(OGamI)
+       Print*, 'OGamA = ', norm2(OGamA)
+       Print*, 'OGamV = ', norm2(OGamV)
+      EndIf
+C
+      call gclock('QGam OGam',Tcpu,Twall)
+c
+      Deallocate(WorkD)
+      Allocate (Work(NBasis,NBasis))
+C
+C     COMPUTE fcorr(r)
+C
+      Do IG=1,NGrid
+      FCorr(IG)=Zero
+c
+C     1 inact-inact
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamI(:,:,IG),NCholesky,OGamI(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +ddot(NBasis*NBasis,Work,1,QGamII(:,:,IG),1)
+c     print*, 'II: IG,Fcorr',IG,FCorr(IG)
+c
+C     2 act-inact
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     $  OGamA(:,:,IG),NCholesky,OGamI(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +2d0*ddot(NBasis*NBasis,Work,1,QGamIA(:,:,IG),1)
+c     print*, 'AI: IG,Fcorr',IG,FCorr(IG)
+C
+C     3 virt-inact
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     $  OGamV(:,:,IG),NCholesky,OGamI(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +2d0*ddot(NBasis*NBasis,Work,1,QGamIV(:,:,IG),1)
+c     print*, 'AI: IG,Fcorr',IG,FCorr(IG)
+c
+c    5 act-act
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamA(:,:,IG),NCholesky,OGamA(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +ddot(NBasis*NBasis,Work,1,QGamAA(:,:,IG),1)
+c     print*, 'AA: IG,Fcorr',IG,FCorr(IG)
+c
+C     6 virt-act
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamV(:,:,IG),NCholesky,OGamA(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +2d0*ddot(NBasis*NBasis,Work,1,QGamAV(:,:,IG),1)
+c     print*, 'AV: IG,Fcorr',IG,FCorr(IG)
+c
+c    9 virt-virt
+      Call dgemm('T','N',NBasis,NBasis,NCholesky,1d0,
+     &  OGamV(:,:,IG),NCholesky,OGamV(:,:,IG),NCholesky,0d0,Work,NBasis)
+      FCorr(IG)=FCorr(IG)
+     &         +ddot(NBasis*NBasis,Work,1,QGamVV(:,:,IG),1)
+c     print*, 'VV: IG,Fcorr',IG,FCorr(IG)
+c
+      EndDo ! NGrid
+      If (IIPRINT.GT.1) Print*, 'Total FCorr =',norm2(FCorr)
+c
+      Deallocate(OGamV,OGamA,OGamI)
+c
+      call gclock('FCorr loop',Tcpu,Twall)
+C
+      EndIf ! IFlFCorr end
+c
+      If (IFlFCorr==1) Allocate(OnTopCorr(NGrid),XMuLocCorr(NGrid))
+C
+      Allocate(OnTop(NGrid))
+      Allocate(XMuLoc(NGrid))
+      Allocate(RhoGrid(NGrid))
+      Allocate(Sigma(NGrid))
+
+      Do I=1,NGrid
+C
+      Call DenGrid(I,RhoGrid(I),Occ,URe,OrbGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoX,Occ,URe,OrbGrid,OrbXGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoY,Occ,URe,OrbGrid,OrbYGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoZ,Occ,URe,OrbGrid,OrbZGrid,NGrid,NBasis)
+      Sigma(I)=RhoX**2+RhoY**2+RhoZ**2
+C
+      OnTop(I)=Zero
+      Do IS=1,NOccup
+         ValS=Two*OrbGrid(I,IS)
+         Do IR=1,NOccup
+            ValRS=OrbGrid(I,IR)*ValS
+            Do IQ=1,NOccup
+               ValQRS=OrbGrid(I,IQ)*ValRS
+               Do IP=1,NOccup
+                  OnTop(I)=OnTop(I)
+     &                 +RDM2val(IP,IQ,IR,IS)*OrbGrid(I,IP)*ValQRS
+               EndDo
+            EndDo
+         EndDo
+      EndDo
+C
+      XMuLoc(I)=Zero
+C
+      If(OnTop(I).Gt.1.D-8) Then
+c     XMuLoc(I)=Prefac*FPsiB(I)/OnTop(I)
+c     used in Kasia's code:
+      XMuLoc(I)=SQRT(3.1415)/Two*FPsiB(I)/OnTop(I)
+      EndIf
+C
+      EndDo ! NGrid
+
+      If (IFlFCorr==1) Then
+      Do I=1,NGrid
+C
+      OnTopCorr(I)=Zero
+      Do IP=1,NBasis
+      Do IQ=1,NBasis
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +QGamII(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +QGamAA(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +QGamVV(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +2d0*QGamIA(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +2d0*QGamIV(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      OnTopCorr(I)=OnTopCorr(I)
+     $            +2d0*QGamAV(IP,IQ,I)*OrbGrid(I,IP)*OrbGrid(I,IQ)
+      EndDo
+      EndDo
+C
+      XMuLocCorr(I)=Zero
+C
+      If(OnTop(I).Gt.1.D-8) Then
+c     XMuLocCorr(I)=Prefac*(FPsiB(I)+FCorr(I))
+c    $ /(OnTop(I)+OnTopCorr(I))
+c     used in Kasia's code:
+      XMuLocCorr(I)=SQRT(3.1415)/Two*(FPsiB(I)+FCorr(I))
+     $ /(OnTop(I)+OnTopCorr(I))
+      EndIf
+C
+      EndDo ! NGrid
+      EndIf ! IFlFCorr end
+c
+      If (IIPRINT.GT.1) Then
+       Print*, 'OnTop      =', norm2(OnTop)
+       Print*, 'XMuLoc     =', norm2(XMuLoc)
+       If(IFlFCorr==1) Print*, 'XMuLocCorr =', norm2(XMuLocCorr)
+       If(IFlFCorr==1) Print*, 'OnTopCorr  =', norm2(OnTopCorr)
+      EndIf
+c
+      call gclock('OnTop loop 1',Tcpu,Twall)
+c
+c     if(allocated(FPsiB)) print*, 'allocated FsiB!'
+c     if(allocated(RDM2val)) print*, 'allocated rdm2val!'
+      Deallocate(FPsiB)
+      Deallocate(RDM2val)
+C
+      If (IFlFCorr==1) Then
+         Deallocate(Work)
+         Deallocate(QGamAV,QGamIV,QGamIA)
+         Deallocate(QGamVV,QGamAA,QGamII)
+         Deallocate(FCorr)
+      EndIf
+C
+      Allocate(Zk(NGrid))
+C
+      Call PBECor(RhoGrid,Sigma,Zk,NGrid)
+C
+      SPi=SQRT(3.141592653589793)
+      Const=Three/Two/SPi/(One-SQRT(Two))
+C
+      AvMU=Zero
+      CorrMD=Zero
+      XEl=Zero
+      XPairAv=Zero
+      XPairCAv=Zero
+      XPairAC0Av=Zero
+C
+C     Test: averaged mu
+c     Alpha = 10.0
+c     Print*, 'Use Averaged Alpha = ', Alpha
+c     Print*, 'USe C=0.0 ..'
+c     XMuLoc = Alpha ! replace local Mu with average Mu
+c
+      Do I=1,NGrid
+C
+      XMu=XMuLoc(I)
+c     XMu=Alpha ! replace local Mu with average Mu
+      AvMU=AvMU+XMu*RhoGrid(I)*WGrid(I)
+      XEl=XEl+RhoGrid(I)*WGrid(I)
+C
+      Bet=Zero
+      OnTopC=Zero
+      If(XMuLoc(I).Gt.1.D-8) OnTopC=OnTop(I)/(One+Two/SPi/XMu)
+      If(OnTopC.Ne.Zero) Then
+      Bet=Const*Zk(I)/OnTopC
+      C=5.0d0
+      CorrMD=CorrMD+Zk(I)/(C*One+Bet*XMu**3)*WGrid(I)
+c     print*, 'i,corrmd',I,CorrMD
+C
+CC     visualisation
+C      CorrRZ=Zk(I)/(C*One+Bet*XMu**3)
+C      If(Abs(RR(1,I)).Lt.1.D-8.And.Abs(RR(2,I)).Lt.1.D-8)
+C     $ Write(6,'(5E15.6)')RR(3,I),RhoGrid(I),XMuLoc(I),
+C     $ OnTop(I),CorrRZ
+CC
+      EndIf
+C
+      XPairAv=XPairAv+OnTop(I)*WGrid(I)
+      XPairCAv=XPairCAv+OnTopC*WGrid(I)
+c     XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
+C
+      EndDo
+      call gclock('CorrMD loop ',Tcpu,Twall)
+C
+      Write(6,'(/,
+     $" Averaged on-top pair densities: CAS, extrapolated OT",
+     $ 2F15.4)') XPairAv,XPairCAv
+C
+      AvMU=AvMU/XEl
+C
+      If (IFlFCorr==1) Then
+C
+C     CorrMD with a contribution from Gamma^corr
+C
+      AvMUCorr=Zero
+      CorrMDCorr=Zero
+      XEl=Zero
+      Do I=1,NGrid
+C
+      XPairAC0Av=XPairAC0Av+(OnTop(I)+OnTopCorr(I))*WGrid(I)
+C
+      XMu=XMuLocCorr(I)
+
+      AvMUCorr=AvMUCorr+XMu*RhoGrid(I)*WGrid(I)
+      XEl=XEl+RhoGrid(I)*WGrid(I)
+C
+      Bet=Zero
+      OnTopC=Zero
+c     If(XMu.Gt.1.D-8) OnTopC=(OnTop(I)+OnTopCorr(I))
+      If(XMu.Gt.1.D-8) OnTopC=OnTop(I)
+     $ /(One+Two/SPi/XMu)
+      If(OnTopC.Ne.Zero) Then
+      Bet=Const*Zk(I)/OnTopC
+      C=5.0d0
+      CorrMDCorr=CorrMDCorr+Zk(I)/(C*One+Bet*XMu**3)*WGrid(I)
+C
+CC     visualisation
+C      CorrRZ=Zk(I)/(C*One+Bet*XMu**3)
+C      If(Abs(RR(1,I)).Lt.1.D-8.And.Abs(RR(2,I)).Lt.1.D-8)
+C     $ Write(6,'(5E15.6)')RR(3,I),RhoGrid(I),XMuLocCorr(I),
+C     $ OnTop(I)+OnTopCorr(I),CorrRZ
+C
+      EndIf
+C
+      EndDo
+      call gclock('CorrMDCorr loop ',Tcpu,Twall)
+C
+      Write(6,'(/,
+     $" Averaged on-top pair densities: CAS, CAS-AC0, extrapolated OT",
+     $ 3F15.4)') XPairAv,XPairAC0Av,XPairCAv
+C
+      AvMUCorr=AvMUCorr/XEl
+      EndIf ! IFlFCorr end
+C
+      Write(6,'(/," CAS:     Corr_md and average Mu   ",
+     $ F12.8,F12.2)') CorrMD,AvMU
+      If(IFlFCorr==1) Then
+         Write(6,'(  " CAS-AC0: Corr_md and average Mu   ",
+     $         F12.8,F12.2/)') CorrMDCorr,AvMUCorr
+C
+         Deallocate(OnTopCorr,XMuLocCorr)
+      EndIf
+C
+      End Subroutine LOC_MU_CHOL
+
 *Deck PBE_ONTOP_MD
       Subroutine PBE_ONTOP_MD(PBEMD,URe,Occ,
      $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
@@ -2720,7 +3960,7 @@ C     RETURNS A SR-PBE ONTOP CORRELATION DEFINED IN Eq.(25)-(29), Toulouse JCP 1
 C
       Implicit Real*8 (A-H,O-Z)
 C
-      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0, 
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
      $ Four=4.D0)
 C
       Include 'commons.inc'
@@ -2736,6 +3976,113 @@ C
 C
       Write(6,'(/,1X,"COMPUTING SR-PBE_CORR_MD FOR THE RANGE PARAMETER "
      $ ,F8.3)')Alpha
+C
+      NAct=NAcCAS
+      INActive=NInAcCAS
+      NOccup=INActive+NAct
+      Ind2(1:NBasis)=0
+      Do I=1,NAct
+      Ind1(I)=INActive+I
+      Ind2(INActive+I)=I
+      EndDo
+C
+      NRDM2Act = NAct**2*(NAct**2+1)/2
+      Allocate (RDM2Act(NRDM2Act))
+      RDM2Act(1:NRDM2Act)=Zero
+C
+      Open(newunit=iunit,File="rdm2.dat",Status='Old')
+C
+      Do
+      Read(iunit,*,iostat=ios)I,J,K,L,X
+      If (ios/=0) Exit
+C
+C     X IS DEFINED AS: < E(IJ)E(KL) > - DELTA(J,K) < E(IL) > = 2 GAM2(JLIK)
+C
+      RDM2Act(NAddrRDM(J,L,I,K,NAct))=Half*X
+C
+      I=Ind1(I)
+      J=Ind1(J)
+      K=Ind1(K)
+      L=Ind1(L)
+C
+      EndDo
+      Close(iunit)
+C
+      Do I=1,NGrid
+C
+      Call DenGrid(I,RhoGrid(I),Occ,URe,OrbGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoX,Occ,URe,OrbGrid,OrbXGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoY,Occ,URe,OrbGrid,OrbYGrid,NGrid,NBasis)
+      Call DenGrad(I,RhoZ,Occ,URe,OrbGrid,OrbZGrid,NGrid,NBasis)
+      Sigma(I)=RhoX**2+RhoY**2+RhoZ**2
+C
+      OnTop(I)=Zero
+      Do IP=1,NOccup
+      Do IQ=1,NOccup
+      Do IR=1,NOccup
+      Do IS=1,NOccup
+      OnTop(I)=OnTop(I)
+     $ +Two*FRDM2(IP,IQ,IR,IS,RDM2Act,Occ,Ind2,NAct,NBasis)
+     $ *OrbGrid(I,IP)*OrbGrid(I,IQ)*OrbGrid(I,IR)*OrbGrid(I,IS)
+      EndDo
+      EndDo
+      EndDo
+      EndDo
+C
+      EndDo
+C
+      Call PBECor(RhoGrid,Sigma,Zk,NGrid)
+C
+      SPi=SQRT(3.141592653589793)
+      Const=Three/Two/SPi/(One-SQRT(Two))
+C
+      PBEMD=Zero
+      Do I=1,NGrid
+C
+      Bet=Zero
+      OnTopC=OnTop(I)/(One+Two/SPi/Alpha)
+      If(OnTopC.Ne.Zero) Bet=Const*Zk(I)/OnTopC
+C
+      PBEMD=PBEMD+Zk(I)/(One+Bet*Alpha**3)*WGrid(I)
+C
+      EndDo
+C
+      Return
+      End
+
+*Deck PBE_ONTOP_C_MD
+      Subroutine PBE_ONTOP_C_MD(PBEmodMD,Cfac,URe,Occ,
+     $ OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,NBasis)
+C
+C     RETURNS A SR-PBE modified ONTOP CORRELATION
+C     DEFINED IN Eq.(25)-(29), Toulouse JCP 150, 084103 (2019)
+C     Difference:
+C     Eq. (26): e_{c,md} = e_c^PBE / (C + beta*mu^3)
+C     Recommended value: Cfac = 5.0d0
+C
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
+     $ Four=4.D0)
+C
+      Include 'commons.inc'
+C
+      Double Precision, intent(in)  :: Cfac
+      Double Precision, intent(out) :: PBEmodMD
+C
+      Real*8, Allocatable :: RDM2Act(:)
+C
+      Dimension URe(NBasis,NBasis),Occ(NBasis),
+     $ Ind1(NBasis),Ind2(NBasis),
+     $ WGrid(NGrid),OrbGrid(NGrid,NBasis),OrbXGrid(NGrid,NBasis),
+     $ OrbYGrid(NGrid,NBasis),OrbZGrid(NGrid,NBasis)
+C
+      Dimension Zk(NGrid),RhoGrid(NGrid),Sigma(NGrid),OnTop(NGrid)
+C
+      Write(6,'(1X,"COMPUTING SR-PBE_CORR_MD FOR THE RANGE PARAMETER "
+     $ ,F8.3)')Alpha
+      Write(6,'(1x, "C FACTOR ", F6.3)')Cfac
 C
       NAct=NAcCAS
       INActive=NInAcCAS
@@ -2787,7 +4134,7 @@ C
       EndDo
       EndDo
       EndDo
-C     
+C
       EndDo
 C
       Call PBECor(RhoGrid,Sigma,Zk,NGrid)
@@ -2795,17 +4142,88 @@ C
       SPi=SQRT(3.141592653589793)
       Const=Three/Two/SPi/(One-SQRT(Two))
 C
-      PBEMD=Zero      
+      PBEmodMD=Zero
       Do I=1,NGrid
 C
       Bet=Zero
       OnTopC=OnTop(I)/(One+Two/SPi/Alpha)
-      If(OnTopC.Ne.Zero) Bet=Const*Zk(I)/OnTopC
+      If(OnTopC.Ne.Zero) Then
+         Bet=Const*Zk(I)/OnTopC
+c     If(OnTopC.Ne.Zero) Bet=Const*Zk(I)/OnTopC
 C
-      PBEMD=PBEMD+Zk(I)/(One+Bet*Alpha**3)*WGrid(I)
+         PBEmodMD=PBEmodMD+Zk(I)/(Cfac*One+Bet*Alpha**3)*WGrid(I)
+c        print*, 'i,pbemod',I,PBEmodMD
+      EndIf
 C
       EndDo
 C
       Return
+      End
+
+      Subroutine PsiHPSi(Ene,Occ,XOne,ENuc,INActive,NAct,NInte1,NBasis)
+C
+C     Returns E = <Psi|T+V+W|Psi> , where
+C     W is the full 1/r operator
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Include 'commons.inc'
+C
+      Integer,Intent(in) :: INActive,NAct,NInte1,NBasis
+      Double Precision,Intent(in)  :: ENuc
+      Double Precision,Intent(in)  :: Occ(NBasis),XOne(NInte1)
+      Double Precision,Intent(out) :: Ene
+C
+      Integer :: I,J,K,L,II
+      Integer :: IFunSR_save
+      Integer :: NRDM2Act
+      Integer :: Ind1(NBasis)
+      Double Precision :: X,EOne,ETwo
+      Double Precision, Allocatable :: RDM2Act(:)
+
+c     Write(6,*) 'Entering <Psi|H|Psi>...'
+c
+      Do I=1,NAct
+      Ind1(I)=INActive+I
+C     Ind2(INActive+I)=I
+      EndDo
+C
+      NRDM2Act=NAct**2*(NAct**2+1)/2
+      Allocate(RDM2Act(NRDM2Act))
+      Open(10,File="rdm2.dat",Status='Old')
+C
+   10 Read(10,*,End=40)I,J,K,L,X
+C
+C     X IS DEFINED AS: < E(IJ)E(KL) > - DELTA(J,K) < E(IL) > = 2 GAM2(JLIK)
+C
+      RDM2Act(NAddrRDM(J,L,I,K,NAct))=0.5d0*X
+C
+      I=Ind1(I)
+      J=Ind1(J)
+      K=Ind1(K)
+      L=Ind1(L)
+C
+      GoTo 10
+   40 Continue
+      Close(10)
+C
+      EOne=0d0
+      Do I=1,NBasis
+      II=(I*(I+1))/2
+      EOne=EOne+2d0*Occ(I)*XOne(II)
+      EndDo
+C
+      IFunSR_save = IFunSR ! select FOFO integrals
+      IFunSR = 0
+      Call TwoEneChck(ETwo,RDM2Act,Occ,INActive,NAct,NBasis)
+      IFunSR = IFunSR_save
+C
+      Ene = EOne + ETwo + ENuc
+      Print*, '<Psi|T+Vne|Psi>  =',EOne
+      Print*, '<Psi|Vee  |Psi>  =',ETwo
+      Write(6,'(/1x,a,F14.8)') '<Psi|H|Psi>+ENuc = ',Ene
+C
+      Deallocate(RDM2Act)
+
       End
 

@@ -1,20 +1,23 @@
 Calculation
- JobTitle      test
+ JobTitle      H2O / ORCA / 1-rdm relaxed / exclude
  Interface     ORCA
- Basis         cc-pVDZ-OPT
- JobType       ACFREQNTH
- Max_Cn        10
- NBasis        24
+ Basis         cc-pVTZ-OPT
+ JobType       AC0
+ RedVirt       .true.
+ OrbRelax      .true.
+ OrbIncl       .false.
+ NBasis        58
  TwoMoInt      FOFO
  BasisPath /home/michalhapka/pr-dmft/basis/
 end
 
 CholeskyBlock
-Cholesky      OTF
-!Cholesky      BIN
-!Cholesky_Accu DEFAULT
+ Cholesky       OTF
+ Cholesky_Accu  DEFAULT
+ H0Test         .false.
+
 !Cholesky_Accu TIGHT
-Cholesky_Accu LUDICROUS
+!Cholesky_Accu LUDICROUS
 end
 
 xyz
@@ -29,4 +32,3 @@ System
  Charge  0
  ThrSelAct    1.d-4
 end
-
