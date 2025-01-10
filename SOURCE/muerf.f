@@ -50,7 +50,10 @@ C
      $ NoSt,'FFOO','FOFO',ICholesky,IDBBSC,IFlFCorr)
 C
       Write
-     $ (6,'(/1X,''CASSCF+ENuc, AC0-CBS[DFT], Total'',6X,3F15.8)')
+     $ (6,'(/1X,''CASSCF+ENuc, AC0-Corr    , Total'',6X,3F15.8)')
+     $ ECASSCF+ENuc,ECorr,ECASSCF+ENuc+ECorr
+      Write
+     $ (6,'(1X,''CASSCF+ENuc, AC0-CBS[DFT], Total'',6X,3F15.8)')
      $ ECASSCF+ENuc,ECorr+ECorrMD,ECASSCF+ENuc+ECorr+ECorrMD
        ETot=ECASSCF+ENuc+ECorr
 C
@@ -164,7 +167,7 @@ c      Print*, 'ECorr = ', ECorr
       End
 C *End Subroutine DBBSCH
 
-*Deck LOC_MU_CBS_v2
+*Deck LOC_MU_CBS_CHOL
       Subroutine LOC_MU_CBS_CHOL(XMuMat,CorrMD,AvMU,URe,
      $                           UNOAO,Occ,BasisSet,NBasis)
 C
@@ -216,7 +219,7 @@ C
 C
       call gclock('START',Tcpu,Twall)
 C
-      If(IFlCore.Eq.0) Then
+      If(IFlCore.Eq.0.And.IDBBSC.Eq.1) Then
          ICore = NCoreOrb ! from input.inp
          Do I=1,ICore
          Occ(I)=Zero
@@ -601,6 +604,10 @@ C
 C
 C     COMPUTE XMuMAT MATRIX in NO
 C
+      C=1.0d0
+      Write(*,*)
+      Write(*,*)"*** C= *** ",C
+C
       Do IP=1,NBasis
       Do IQ=1,IP
       XMuMAT(IP,IQ)=0d0
@@ -610,7 +617,7 @@ C
 C
       Do I=1,NGrid
       XMuMAT(IP,IQ)=XMuMAT(IP,IQ)
-     $ +OrbGrid(I,IP)*OrbGrid(I,IQ)*WGrid(I)*Exp(-XMuLoc(I))
+     $ +OrbGrid(I,IP)*OrbGrid(I,IQ)*WGrid(I)*Exp(-C*XMuLoc(I))
       EndDo
 C
       EndIf
@@ -670,10 +677,11 @@ C
 
       End Subroutine LOC_MU_CBS_CHOL
 
-C     incore version
 *Deck LOC_MU_CBS
       Subroutine LOC_MU_CBS(XMuMAT,URe,UNOAO,Occ,TwoEl,
      $ NBasis,NInte2)
+C
+C     INCORE VERSION
 C
 C     COMPUTES A "BASIS-SET ERROR CORRECTION" WITH SR-PBE ONTOP CORRELATION from Giner et al. JCP 152, 174104 (2020)
 C     RETURNS XMuMAT USED TO COMPUTE CBS CORRECTION BY MODIFICATION OF H' IN AC0
@@ -939,4 +947,111 @@ C
       Return
       End
 C*End Subroutine LOC_MU_CBS
+
+*Deck PairD_Vis
+      Subroutine PairD_Vis(URe,UNOAO,Occ,NBasis)
+C
+C     Visualise electron pair density of HELIUM atom on a sphere of the 
+C     radius 0.5 bohr
+C     2-RDM is constructed from PMAT read from pmat.dat
+C
+C     Do not use symmetry!
+C
+      use read_external
+C
+      Implicit Real*8 (A-H,O-Z)
+C
+      Parameter(Zero=0.D0, Half=0.5D0, One=1.D0, Two=2.D0, Three=3.0D0,
+     $ Four=4.D0)
+C
+      Include 'commons.inc'
+C
+      Real*8, Allocatable ::  OrbGrid(:,:),RhoGrid(:),
+     $ OrbXGrid(:,:),OrbYGrid(:,:),OrbZGrid(:,:),WGrid(:),
+     $ RR(:,:)
+C
+      Dimension URe(NBasis,NBasis),Occ(NBasis),UNOAO(NBasis,NBasis),
+     $ PMAT(NBasis,NBasis)
+C
+      Call molprogrid0(NGrid,NBasis)
+      Write(6,'(/,1X,"The number of Grid Points = ",I8)')
+     $ NGrid
+C
+      Allocate (WGrid(NGrid))
+      Allocate (OrbGrid(NGrid,NBasis))
+      Allocate (OrbXGrid(NGrid,NBasis))
+      Allocate (OrbYGrid(NGrid,NBasis))
+      Allocate (OrbZGrid(NGrid,NBasis))
+      Allocate(RhoGrid(NGrid))
+      Allocate(RR(3,NGrid))
+C
+      Call molprogrid(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,
+     $ WGrid,UNOAO,NGrid,NBasis)
+      Call molprogrid1(RR,NGrid)
+C
+      Open(10,file="pmat.dat")
+      Read(10,*)X
+      Do I=1,NBasis
+      Do J=1,NBasis
+      Read(10,*) I1,I2,PMAT(I,J)
+      EndDo
+      EndDo
+      Close(10)
+C
+C     find the radiues closest to 0.5 bohr       
+C
+      Radius=Zero
+      Err=1.0d5
+      Do I1=1,NGrid
+C
+      R1=RR(1,I1)**2+RR(2,I1)**2+RR(3,I1)**2
+      R1=SQRT(R1)
+      If(Abs(R1-0.5D0).Lt.Err) Then
+      Radius=R1
+      Err=Abs(R1-0.5D0)
+      EndIf
+C
+      EndDo
+C
+      Do I1=1,NGrid
+C
+      R1=RR(1,I1)**2+RR(2,I1)**2+RR(3,I1)**2
+      R1=SQRT(R1)
+C
+      If(Abs(R1-Radius).Lt.1.D-2) Then
+C     
+      Do I2=1,NGrid
+C
+      R2=RR(1,I2)**2+RR(2,I2)**2+RR(3,I2)**2
+      R2=SQRT(R2)
+C
+      If(Abs(R2-Radius).Lt.1.D-2) Then
+C
+      R12=(RR(1,I1)-RR(1,I2))**2+(RR(2,I1)-RR(2,I2))**2
+     $   +(RR(3,I1)-RR(3,I2))**2
+      R12=SQRT(R12)
+C
+      PairD=Zero
+      Do IP=1,NBasis
+      Do IQ=1,NBasis
+      PairD=PairD
+     $ +SQRT(Two)*PMAT(IP,IQ)
+     $ *OrbGrid(I1,IP)*OrbGrid(I2,IQ)
+      EndDo
+      EndDo 
+      PairD=PairD*PairD
+C
+      Write(*,*)R12,PairD
+C
+      EndIf
+      EndDo
+C
+      Stop
+      EndIf
+      EndDo 
+C
+      Write(*,*)'Radius of the sphere =',Radius
+C
+      Return
+      End     
 
