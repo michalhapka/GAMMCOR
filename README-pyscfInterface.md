@@ -1,5 +1,7 @@
 # PYSCF - GAMMCOR Interface Description
 
+PYSCF works in INCORE or simple THC mode. For THC, you need to set Cholesky OTF in input.
+
 ## 1. Setup and Example
 
 **1.1Example Input (eth.py)**
