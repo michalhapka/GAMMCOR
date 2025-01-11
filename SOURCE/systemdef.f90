@@ -137,6 +137,9 @@ else
    Flags%ICholeskyOTF  = Input%CholeskyParams%CholeskyOTF
    Flags%ICholeskyTHC  = Input%CholeskyParams%CholeskyTHC
    Flags%ICholeskyAccu = Input%CholeskyParams%CholeskyAccu
+   Flags%DCholeskyThr  = Input%CholeskyParams%CholeskyThr
+   Flags%DTHCThr       = Input%CholeskyParams%THCThr
+
    Flags%IH0Test       = Input%CholeskyParams%H0Test
 
   ! set DFT grid
@@ -197,7 +200,14 @@ else
      Flags%NoSym   = 1
      Flags%IA = 1
      Flags%ORBITAL_ORDERING = 2 ! ORBITAL_ORDERING_ORCA
-  end select
+
+  case(INTER_TYPE_PYSCF)
+     Flags%IDALTON = 0
+     Flags%IPYSCF  = 1
+     Flags%ORBITAL_ORDERING = 5 ! ORBITAL_ORDERING_PYSCF
+     print*, Flags%IPYSCF, 'ipyscf'
+end select
+
   Flags%InterFaceType = Input%CalcParams%InterfaceType
 
   if(Input%CalcParams%Restart) Flags%IRes = 1
