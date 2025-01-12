@@ -12,7 +12,7 @@ contains
 
 subroutine ACABMAT0_FOFO(AMAT,BMAT,URe,Occ,XOne, &
                          IndN,IndX,IGem,C, &
-                         NAct,NElHlf,NBasis,NDim,NDimX,NInte1,NGem, &
+                         InAct,NAct,NBasis,NDim,NDimX,NInte1,NGem, &
                          IntFileName,IntJFile,IntKFile,ISAPT,ACAlpha,IFlag)
 !
 !     COMPUTE THE A+B AND A-B MATRICES IN ERPA WITH APSG APPROXIMATION
@@ -29,7 +29,7 @@ subroutine ACABMAT0_FOFO(AMAT,BMAT,URe,Occ,XOne, &
 !
 implicit none
 
-integer,intent(in) :: NAct,NElHlf,NBasis,NDim,NDimX,NInte1,ISAPT,NGem
+integer,intent(in) :: InAct,NAct,NBasis,NDim,NDimX,NInte1,ISAPT,NGem
 character(*) :: IntJFile,IntKFile,IntFileName
 double precision,intent(out) :: AMAT(NDimX,NDimX),BMAT(NDimX,NDimX)
 double precision,intent(in)  :: URe(NBasis,NBasis),Occ(NBasis),XOne(NInte1),C(NBasis)
@@ -62,10 +62,10 @@ AMAT = 0
 BMAT = 0
 
 ! set dimensions
-INActive = NElHlf - NAct
-NOccup = 2*NAct + INActive
-
-!print*, 'NOccup',NOccup
+NOccup = InAct + NAct
+! old GVB-PP settings
+!INActive = NElHlf - NAct
+!NOccup = 2*NAct + INActive
 
 allocate(work1(NBasis**2),work2(NBasis**2),ints(NBasis,NBasis))
 
@@ -3301,9 +3301,10 @@ character(:),allocatable :: twojfile,twokfile
 
  elseif(ICASSCF==0) then
 
+    print*, 'CHECK if INActive+NAct = NOccup here:',INactive+NAct
     call ACABMAT0_FOFO(ABPLUS,ABMIN,URe,Occ,XOne, &
                   IndN,IndX,IGemIN,CICoef, &
-                  NAct,NELE,NBasis,NDim,NDimX,NInte1,NGem, &
+                  INActive,NAct,NBasis,NDim,NDimX,NInte1,NGem, &
                  'TWOMO','FFOO','FOFO',0,ACAlpha,1)
 
  endif

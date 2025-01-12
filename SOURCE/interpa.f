@@ -7,9 +7,6 @@ C
       use abfofo
       use ab0fofo
 C
-C      Subroutine INTERPA(ETot,ENuc,TwoNO,URe,UNOAO,Occ,XOne,
-C     $  Title,OrbGrid,WGrid,NSymMO,NBasis,NInte1,NInte2,NGrid,NDim,
-C     $  NGem,IAPSG,ISERPA,QMAX,NGOcc,Small)
 C     A ROUTINE FOR COMPUTING ELECTRONIC ENERGY USING ERPA TRANSITION
 C     DENSITY MATRIX ELEMENTS
 C
@@ -117,6 +114,7 @@ C
       If(ICASSCF.Eq.0) Then
 C
 c      ThrAct=0.990
+      If(ISAPSG==0) Then ! GVB-PP
       Write(6,'(/,X," Threshold for Active Orbitals in GVB: ",E14.4)')
      $ ThrAct
       Do I=1,NELE
@@ -130,6 +128,21 @@ c      ThrAct=0.990
       ICount=ICount+2
       EndIf
       EndDo
+C
+      ElseIf(ISAPSG==1) Then ! APSG
+      Write(6,'(/,X," Threshold for Active Orbitals in APSG: ",E14.4)')
+     $ ThrAct
+      Do I=1,NASHT_G
+      IndAux(NISHT_G+I) = 1
+      ICount=ICount+1
+      EndDo
+      EndIf ! GVB or APSG
+C
+C     ... test IndAux
+c     print*, 'INTERPA: IndAux'
+c     Do I=1,NBasis
+c     print* , I, IndAux(I)
+c     EndDo
 C
       ElseIf(ICASSCF.Eq.1) Then
 C
@@ -166,8 +179,9 @@ C
       If(IndAux(I)+IndAux(J).Ne.0.And.IndAux(I)+IndAux(J).Ne.4) Then
 C
 C     do not correlate active degenerate orbitals if from different geminals
-      If((ICASSCF.Eq.0.And.(IGem(I).Ne.IGem(J)).And.(IndAux(I).Eq.1)
-     $ .And.(IndAux(J).Eq.1).And.
+      If((ICASSCF.Eq.0
+     $ .And.(IGem(I).Ne.IGem(J))
+     $ .And.(IndAux(I).Eq.1).And.(IndAux(J).Eq.1).And.
      $ (Abs(Occ(I)-Occ(J))/Occ(I).Lt.ThrSelAct))
      $.Or.
      $ (ICASSCF.Eq.1.
@@ -276,13 +290,13 @@ C
 C
       Call ACABMAT0_FOFO(ABPLUS,ABMIN,URe,Occ,XOne,
      $            IndN,IndX,IGem,CICoef,
-     $            NActive,NELE,NBasis,NDim,NDimX,NInte1,NGem,
+     $            NISHT_G,NASHT_G,NBasis,NDim,NDimX,NInte1,NGem,
      $            'TWOMO','FFOO','FOFO',0,ACAlpha,1)
 
 c     print*, 'ABPLUS-my',norm2(ABPLUS)
 c     print*, 'ABMIN -my',norm2(ABMIN)
 
-      Call EneGVB_FOFO(NActive,NELE,ETot,URe,Occ,CICoef,XOne,
+      Call EneGVB_FOFO(NISHT_G,NASHT_G,ETot,URe,Occ,CICoef,XOne,
      $                 IGem,IndN,NBasis,NInte1,'FOFO',NDimX,NGem)
 
       EndIf

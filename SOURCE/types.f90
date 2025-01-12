@@ -201,7 +201,10 @@ type SystemBlock
       integer :: ISwitchAct = 0
       integer :: NActS(8), INActS(8)
 
-      ! unterstricted
+      ! APSG/GVB Dalton
+      integer :: NISHT_G, NASHT_G
+
+      ! unrestricted
       integer :: NOa, NOb, NVa, NVb
       integer :: NOVa, NOVb
 
@@ -338,6 +341,7 @@ type FlagsData
      integer :: NoSym   = 1
      integer :: NoSt    = 1
      integer :: IGVB    = 1
+     integer :: ISAPSG  = 0
      integer :: ITwoEl    = TWOMO_INCORE
      integer :: IRedVirt  = FLAG_REDVIRT
      integer :: IRdm2Typ  = FLAG_RDM2TYP
@@ -353,7 +357,7 @@ type FlagsData
      integer :: InternalGrid = 0
      integer :: IH0Test   = FLAG_H0TEST
      integer :: ORBITAL_ORDERING = 0
-     integer :: IFun      = 13
+     integer :: IFun      = 13 ! APSG
      integer :: IFunSR    = 0 
      integer :: IFunSRKer = 0
      integer :: IFunSR2   = 0 ! for POSTCAS
@@ -365,8 +369,8 @@ type FlagsData
      integer :: NGOcc   = 0
      integer :: ILoc    = 1
      integer :: IFreeze = 0
-     integer :: IAPSG   = 1
-     integer :: ISERPA  = 0
+     integer :: IAPSG   = 1 ! full APSG response
+     integer :: ISERPA  = 0 ! ERPA response
      integer :: ITrpl   = 0
      integer :: ISAPT   = 0
      integer :: IUKS    = 0

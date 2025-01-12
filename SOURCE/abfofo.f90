@@ -2340,11 +2340,11 @@ deallocate(ints,work)
 
 end subroutine EERPA_FOFO
 
-subroutine EneGVB_FOFO(NAct,NElHlf,ETot,URe,Occ,C,XOne, &
+subroutine EneGVB_FOFO(InAct,NAct,ETot,URe,Occ,C,XOne, &
                        IGem,IndN,NBasis,NInte1,IntKFile,NDimX,NGem)
 implicit none
 
-integer,intent(in) :: NAct,NElHlf,NBasis,NInte1,NDimX,NGem
+integer,intent(in) :: InAct,NAct,NBasis,NInte1,NDimX,NGem
 character(*) :: IntKFile
 double precision :: ETot
 
@@ -2367,8 +2367,7 @@ double precision,allocatable :: ints(:,:)
 write(lout,'(/A)') ' Electronic GVB energy check:'
 
 ! set dimensions
-INActive = NElHlf - NAct
-NOccup = 2*NAct + INActive
+NOccup = INAct + NAct
 
 allocate(work1(NBasis**2),work2(NBasis**2),ints(NBasis,NBasis))
 

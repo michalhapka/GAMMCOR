@@ -206,10 +206,12 @@ else
   select case(Input%CalcParams%RDMType)
   case(RDM_TYPE_GVB)
      Flags%IGVB = 1
+     Flags%ISAPSG  = 0
      Flags%ICASSCF = 0
 
   case(RDM_TYPE_APSG)
-     FLags%IGVB = 0
+     Flags%IGVB    = 0
+     Flags%ISAPSG  = 1
      Flags%ICASSCF = 0
 
   case(RDM_TYPE_CAS)
