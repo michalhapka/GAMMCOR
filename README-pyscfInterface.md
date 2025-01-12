@@ -74,7 +74,7 @@ C     0.0000000     0.0000000     -0.6681880
 
 Before running any calculations:
 
-1. Replace the following line with your path to gammcor executable:
+1. Replace the following line with your path to gammcor where the Pyscf2Gammcor.py file is:
 ```python
 sys.path.append('/home/aleksandra.tucholska/test/gammcor/')
 sys.path.append('/path/to/your/gammcor/')
