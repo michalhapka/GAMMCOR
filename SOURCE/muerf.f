@@ -941,7 +941,7 @@ c      EndDo
 c      Write(6,'(/,1X,"*** CBS CORRECTION EXCLUDING CORE ORBITALS ***")')
 c      EndIf
 C
-      Write(6,'(/," CBS correction, average Mu",
+      Write(6,'(/," CBS[DFT] correction, average Mu",
      $ F15.8,F15.2/)') CorrMD,AvMU
 C
       Return

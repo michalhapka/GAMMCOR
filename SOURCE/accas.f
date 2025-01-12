@@ -2260,8 +2260,9 @@ c      IGFact=0
 c comment out to include in-active contribution to the CBS correction (see above)
       IHNO1=0
 C
-C     KP 13.12.2024
-c      goto 444
+C     KP 12.01.2025
+c      stop
+      goto 444
 C    ***** Two-Electron systems investigation
       NDim=NBasis*(NBasis-1)/2
 C     AuxI=VSR
