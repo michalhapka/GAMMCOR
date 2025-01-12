@@ -2270,6 +2270,9 @@ C     AuxI=VSR
       NoEig=1
       TwoNO=TwoNO-TwoElSR
 C
+c      Ind1=0
+c      Ind1(1)=1
+
       NAddr=0
       IPR=0
       Do IP=1,NBasis
@@ -2284,6 +2287,9 @@ C
       If((IGem(IP).Eq.1.And.
      $ IGem(IP).Eq.IGem(IR).And.IGem(IQ).Eq.IGem(IS).
      $ And.IGem(IP).Eq.IGem(IQ))) TwoElSR(NAddr)=Zero
+c      If((Ind1(IP).Eq.1.And.
+c     $ Ind1(IP).Eq.Ind1(IR).And.Ind1(IQ).Eq.Ind1(IS).
+c     $ And.Ind1(IP).Eq.Ind1(IQ))) TwoElSR(NAddr)=Zero
       EndIf
       EndDo
       EndDo
