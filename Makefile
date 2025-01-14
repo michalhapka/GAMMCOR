@@ -1,10 +1,10 @@
 MKL_ROOT = /opt/intel/mkl/
 
-FCC = ifort
-WARNINGS          =     -warn nounused
-OPTIMIZATION      =     -xHost -O3
-PARALLELIZATION   = -coarray=single -mkl=parallel -qopenmp
-XCFUN                   =     -I xcfun/fortran
+FCC = ifort 
+WARNINGS 		=	-warn nounused
+OPTIMIZATION 	=	-xHost -O3
+PARALLELIZATION	= -coarray=single -qmkl=parallel -qopenmp
+XCFUN 			=	-I xcfun/fortran
 CHOLESKY       =  -I ./gammcor-integrals/include
 
 COMMON_FLAGS = $(WARNINGS) $(PARALLELIZATION) $(XCFUN) $(CHOLESKY) -assume byterecl -heap-arrays -g

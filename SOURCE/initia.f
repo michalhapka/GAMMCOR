@@ -2833,7 +2833,7 @@ C
       End
 Cc    End Subroutine LdInteg
 
-      subroutine ReadPYSCF(THCData, BasisSet, XKin, XNuc, ENuc, Occ,      
+      subroutine ReadPYSCF(THCData, BasisSet, XKin, XNuc, ENuc, Occ,    
      &    URe, TwoEl, UMOAO,  NInte1, NBasis, NInte2, NGem, Flags, anSt)
       use interface_pp
       use print_units
