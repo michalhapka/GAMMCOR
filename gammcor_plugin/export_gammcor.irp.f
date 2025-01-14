@@ -340,6 +340,9 @@ subroutine run
   rc = trexio_write_mo_coefficient(f, mo_coef)
   call trexio_assert(rc, TREXIO_SUCCESS)
 
+  rc = trexio_write_mo_class(f, mo_class, len(mo_class(1)))
+  call trexio_assert(rc, TREXIO_SUCCESS)
+
 !  if (trim(mo_label) == 'Canonical') then
 !    rc = trexio_write_mo_energy(f, fock_matrix_diag_mo)
 !    call trexio_assert(rc, TREXIO_SUCCESS)
@@ -509,10 +512,6 @@ subroutine run
       write(6,'(1x,a,i4)') 'mo_num =',mo_num
       write(6,'(1x,a,i4)') 'n_core_inact_act_orb =',n_core_inact_act_orb
 
-      !do l=1,mo_num
-      !  do k=1,mo_num
-      !    do j=1,mo_num
-      !      do i=1,mo_num
       do l=1,n_core_inact_act_orb
         do k=1,n_core_inact_act_orb
           do j=1,n_core_inact_act_orb
@@ -545,66 +544,194 @@ subroutine run
 
   end if
 
+! One-e TRDM
+! ---------
+
+  if (export_tr_rdm) then
+
+  integer :: istate,jstate
+  integer :: ist
+  double precision :: eist
+
+  PROVIDE one_e_tr_dm_mo
+
+  !print*, 'mo_num',mo_num
+  !do jstate=1,N_states
+  !do istate=1,N_states
+  !   print*, 'States =', istate, jstate
+  !   !do j=1,n_act_orb
+  !   !do i=1,n_act_orb
+  !   do j=1,n_core_inact_act_orb
+  !     do i=1,n_core_inact_act_orb
+  !      print*, i,j,one_e_tr_dm_mo(i,j,istate,jstate)
+  !   enddo
+  !   enddo
+  !enddo
+  !enddo
+  print*, 'One-e TRDM'
+
+  rc = trexio_write_state_num(f,N_states)
+  rc = trexio_write_rdm_1e_transition(f,one_e_tr_dm_mo)
+  call trexio_assert(rc, TREXIO_SUCCESS)
+
+  !print*, 'check state energy ...'
+  !rc = trexio_has_state_energy(f)
+  !rc = trexio_read_state_num(f, ist)
+  !print*, 'State ene = ', eist
+  !!
+  !print*, 'check state number ...'
+  !rc = trexio_has_state_num(f)
+  !print*, 'State num = ', ist
+  !rc = trexio_read_state_num(f, ist)
+  !call trexio_assert(rc, TREXIO_SUCCESS)
+  endif
+
+ if (export_tr_rdm) then
+ integer :: iorb,jorb,korb,lorb
+ double precision :: vijkl, rdm_transtot
+ double precision :: wee_tot(N_states,N_states)
+
+ print*, 'Two-e TRDM'
+
+ PROVIDE act_2_rdm_trans_spin_trace_mo
+
+ wee_tot = 0d0
+ do jstate = 1, N_states
+  do istate = 1, N_states
+     wee_tot(istate,jstate) = 0.d0
+     !print*, '2RDMStates =', istate, jstate
+     do i = 1, n_act_orb
+        iorb = list_act(i)
+        do j = 1, n_act_orb
+           jorb = list_act(j)
+           do k = 1, n_act_orb
+              korb = list_act(k)
+              do l = 1, n_act_orb
+                 lorb = list_act(l)
+                 vijkl = mo_two_e_integral(i,j,k,l)
+                 rdm_transtot  =  act_2_rdm_trans_spin_trace_mo(l,k,j,i,istate,jstate)
+                 !write(6,'(1x,4i3,f16.10)') i,j,k,l, rdm_transtot
+                 wee_tot(istate,jstate) = wee_tot(istate,jstate) + 0.5d0 * vijkl * rdm_transtot
+              enddo
+           enddo
+        enddo
+     enddo
+  print*,'Active space only energy for state ',istate,jstate
+  print*,'wee_tot                 = ',wee_tot(istate,jstate)
+  enddo
+ enddo
+
+ icount = 0_8
+ offset = 0_8
+ do istate = 1, N_states
+ do jstate = 1, istate
+
+    icount += 1_8
+    eri_buffer(icount) = 0d0
+    eri_index(1,icount) = -1
+    eri_index(2,icount) = -1
+    eri_index(3,icount) = -1
+    eri_index(4,icount) = -1
+    if (icount == BUFSIZE) then
+      rc = trexio_write_rdm_2e_transition(f, offset, icount, eri_index, eri_buffer)
+      call trexio_assert(rc, TREXIO_SUCCESS)
+      offset += icount
+      icount = 0_8
+    end if
+
+ do i=1,n_act_orb
+   do j=1,n_act_orb
+     do k=1,n_act_orb
+       do l=1,n_act_orb
+
+         integral = act_2_rdm_trans_spin_trace_mo(l,k,j,i,istate,jstate)
+         if (integral == 0.d0) cycle
+         icount += 1_8
+         eri_buffer(icount) = integral
+         eri_index(1,icount) = i
+         eri_index(2,icount) = j
+         eri_index(3,icount) = k
+         eri_index(4,icount) = l
+         if (icount == BUFSIZE) then
+           rc = trexio_write_rdm_2e_transition(f, offset, icount, eri_index, eri_buffer)
+           call trexio_assert(rc, TREXIO_SUCCESS)
+           offset += icount
+           icount = 0_8
+         end if
+       end do
+     end do
+   end do
+ end do
+
+ end do
+ end do
+
+ if (icount > 0_8) then
+   rc = trexio_write_rdm_2e_transition(f, offset, icount, eri_index, eri_buffer)
+   call trexio_assert(rc, TREXIO_SUCCESS)
+ end if
+
+ endif 
 
 ! ------------------------------------------------------------------------------
 
-  ! Determinants
-  ! ------------
-
-    integer*8, allocatable :: det_buffer(:,:,:)
-    double precision, allocatable :: coef_buffer(:,:)
-    integer :: nint
-
-!    rc = trexio_read_determinant_int64_num(f, nint)
+!  ! Determinants
+!  ! ------------
+!
+!    integer*8, allocatable :: det_buffer(:,:,:)
+!    double precision, allocatable :: coef_buffer(:,:)
+!    integer :: nint
+!
+!!    rc = trexio_read_determinant_int64_num(f, nint)
+!!    call trexio_assert(rc, TREXIO_SUCCESS)
+!    nint = N_int
+!    if (nint /= N_int) then
+!       stop 'Problem with N_int'
+!    endif
+!    allocate ( det_buffer(nint, 2, BUFSIZE), coef_buffer(BUFSIZE, n_states) )
+!
+!    icount = 0_8
+!    offset = 0_8
+!    rc = trexio_write_state_num(f, n_states)
 !    call trexio_assert(rc, TREXIO_SUCCESS)
-    nint = N_int
-    if (nint /= N_int) then
-       stop 'Problem with N_int'
-    endif
-    allocate ( det_buffer(nint, 2, BUFSIZE), coef_buffer(BUFSIZE, n_states) )
-
-    icount = 0_8
-    offset = 0_8
-    rc = trexio_write_state_num(f, n_states)
-    call trexio_assert(rc, TREXIO_SUCCESS)
-
-    rc = trexio_set_state (f, 0)
-    call trexio_assert(rc, TREXIO_SUCCESS)
-    do k=1,n_det
-       icount += 1_8
-       det_buffer(1:nint, 1:2, icount) = psi_det(1:N_int, 1:2, k)
-       coef_buffer(icount,1:N_states) = psi_coef(k,1:N_states)
-       if (icount == BUFSIZE) then
-         call trexio_assert(rc, TREXIO_SUCCESS)
-         rc = trexio_write_determinant_list(f, offset, icount, det_buffer)
-         call trexio_assert(rc, TREXIO_SUCCESS)
-         do i=1,N_states
-           rc = trexio_set_state (f, i-1)
-           call trexio_assert(rc, TREXIO_SUCCESS)
-           rc = trexio_write_determinant_coefficient(f, offset, icount, coef_buffer(1,i))
-         end do
-         rc = trexio_set_state (f, 0)
-         offset += icount
-         icount = 0_8
-       end if
-    end do
-
-  if (icount >= 0_8) then
-       call trexio_assert(rc, TREXIO_SUCCESS)
-       rc = trexio_write_determinant_list(f, offset, icount, det_buffer)
-       call trexio_assert(rc, TREXIO_SUCCESS)
-       do i=1,N_states
-         rc = trexio_set_state (f, i-1)
-         call trexio_assert(rc, TREXIO_SUCCESS)
-         rc = trexio_write_determinant_coefficient(f, offset, icount, coef_buffer(1,i))
-       end do
-       rc = trexio_set_state (f, 0)
-  end if
-
-  deallocate ( det_buffer, coef_buffer )
-
-  rc = trexio_close(f)
-  call trexio_assert(rc, TREXIO_SUCCESS)
+!
+!    rc = trexio_set_state (f, 0)
+!    call trexio_assert(rc, TREXIO_SUCCESS)
+!    do k=1,n_det
+!       icount += 1_8
+!       det_buffer(1:nint, 1:2, icount) = psi_det(1:N_int, 1:2, k)
+!       coef_buffer(icount,1:N_states) = psi_coef(k,1:N_states)
+!       if (icount == BUFSIZE) then
+!         call trexio_assert(rc, TREXIO_SUCCESS)
+!         rc = trexio_write_determinant_list(f, offset, icount, det_buffer)
+!         call trexio_assert(rc, TREXIO_SUCCESS)
+!         do i=1,N_states
+!           rc = trexio_set_state (f, i-1)
+!           call trexio_assert(rc, TREXIO_SUCCESS)
+!           rc = trexio_write_determinant_coefficient(f, offset, icount, coef_buffer(1,i))
+!         end do
+!         rc = trexio_set_state (f, 0)
+!         offset += icount
+!         icount = 0_8
+!       end if
+!    end do
+!
+!  if (icount >= 0_8) then
+!       call trexio_assert(rc, TREXIO_SUCCESS)
+!       rc = trexio_write_determinant_list(f, offset, icount, det_buffer)
+!       call trexio_assert(rc, TREXIO_SUCCESS)
+!       do i=1,N_states
+!         rc = trexio_set_state (f, i-1)
+!         call trexio_assert(rc, TREXIO_SUCCESS)
+!         rc = trexio_write_determinant_coefficient(f, offset, icount, coef_buffer(1,i))
+!       end do
+!       rc = trexio_set_state (f, 0)
+!  end if
+!
+!  deallocate ( det_buffer, coef_buffer )
+!
+!  rc = trexio_close(f)
+!  call trexio_assert(rc, TREXIO_SUCCESS)
 
 end
 
