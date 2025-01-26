@@ -4,7 +4,7 @@
      $ ICholesky,ICholeskyBIN,ICholeskyOTF,ICholeskyTHC,
      $ ICholeskyAccu,Monomer,MemVal,MemType,
      $ IH0test,IUnits,InternalGrid,IGridType
-      Common/INTF/ IDALTON,IMOLPRO,ITREXIO,
+      Common/INTF/ IDALTON,IMOLPRO,ITREXIO, IPYSCF,
      $ IOrbOrder
       Common/CAS/ ICASSCF,NAcCAS,NInAcCAS,NStates,
      $ InSt(2,100),InTrSt(2,1),ISpinMs2
