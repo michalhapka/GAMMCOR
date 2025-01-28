@@ -86,7 +86,7 @@ $(O)rdwrext.o          : $(O)priunit.o
 $(O)sorter.o           : $(O)priunit.o $(O)rdwrext.o
 $(O)tran.o             : $(O)blocktypes.o $(O)sorter.o
 $(O)tran_Chol.o        : $(O)tran.o
-$(O)interface_pp.o      : $(S)interface_pp.f90  $(O)acpp_types.o
+$(O)interface_pp.o      : $(S)interface_pp.f90  $(O)acpp_types.o $(O)gammint.o
 $(O)abfofo.o           : $(O)priunit.o $(O)tran.o $(O)blocktypes.o $(O)abchol.o $(O)timing.o
 $(O)abmats.o           : $(O)priunit.o $(O)tran.o
 $(O)ab0fofo.o          : $(O)priunit.o $(O)tran.o $(O)blocktypes.o $(O)abfofo.o
