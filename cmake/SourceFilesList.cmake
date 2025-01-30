@@ -8,7 +8,7 @@ set(GAMMCOR_SOURCE
     SOURCE/ac_fofo.f90
     SOURCE/ac_iter.f
     SOURCE/caspidft.f
-    SOURCE/CholeskyOTF.f90
+    SOURCE/CholeskyOTF.F90
     SOURCE/constants.h
     SOURCE/cpdmft.f
     SOURCE/dftacg_pw92c.f
@@ -38,6 +38,7 @@ set(GAMMCOR_SOURCE
     SOURCE/mainp.f
     SOURCE/matrix.f
     SOURCE/matvec.f
+    SOURCE/memory.f90
     SOURCE/misc.f
     SOURCE/newton.f
     SOURCE/nonadia.f
@@ -49,6 +50,7 @@ set(GAMMCOR_SOURCE
     SOURCE/sapt_main.f90
     SOURCE/sapt_pol.f90
     SOURCE/sapt_utils.f90
+    SOURCE/sapt_visual.f90
     SOURCE/sorter.f90
     SOURCE/srefex.f90
     SOURCE/srlrdynamic.f

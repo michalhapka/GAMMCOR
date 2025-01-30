@@ -11,7 +11,7 @@ contains
 
 subroutine AB_CAS_FOFO(ABPLUS,ABMIN,ETot,URe,Occ,XOne, &
      IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
-     IntJFile,IntKFile,ICholesky,ACAlpha,AB1)
+     IntJFile,IntKFile,ICholesky,IDBBSC,ACAlpha,AB1)
 !
 ! COMPUTE THE A+B AND A-B MATRICES FOR 2-RDM READ FROM A rdm2.dat FILE
 !
@@ -19,12 +19,15 @@ subroutine AB_CAS_FOFO(ABPLUS,ABMIN,ETot,URe,Occ,XOne, &
 ! THE FOLLOWING SYMMETRY IS ASSUMED
 ! RDM2(ij,kl) = RDM2(kl,ij)
 ! ONLY ELEMENTS ij >= kl ARE STORED BUT ONLY FOR THE ACTIVE ELEMENTS
+!
 ! COULOMB INTEGRALS ARE READ FROM IntJFile IN (FF|OO) FORMAT
 ! EXCHANGE INTEGRALS ARE READ FROM IntKFile IN (FO|FO) FORMAT
+!
  implicit none
 
 integer,intent(in) :: NAct,INActive,NDimX,NBasis,NDim,NInte1
 integer,intent(in) :: ICholesky
+integer,intent(in) :: IDBBSC
 character(*) :: IntJFile,IntKFile
 double precision,intent(out) :: ABPLUS(NDim,NDim),ABMIN(NDim,NDim)
 double precision,intent(out) :: ETot
@@ -182,9 +185,18 @@ else
 endif
 
 if(ICholesky==1) then
-   call JK_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
-                     RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
-                     INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,ACAlpha,switch,ETot)
+   if (IDBBSC==2) then ! CBS[H] requires addition of SR integrals in Hessian
+      call JK_SR_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
+                          RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
+                          INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,&
+                          ACAlpha,switch,ETot)
+
+   else
+      call JK_Chol_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
+                        RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
+                        INActive,NOccup,NDimX,NDimX,NBasis,NInte1,IntJFile,IntKFile,&
+                        ACAlpha,switch,ETot)
+   endif
 else
    call JK_loop(ABPLUS,ABMIN,HNO,AuxI,AuxIO,WMAT,&
                 RDM2val,Occ,AuxCoeff,IGem,AuxInd,pos,&
@@ -309,10 +321,14 @@ end subroutine AB_CAS_FOFO
 
 subroutine MP2RDM_FOFO(PerVirt,Eps,Occ,URe,UNOAO,XOne,IndN,IndX,IndAux,IGemIN, &
                        NAct,INActive,NDimX,NDim,NBasis,NInte1,     &
-                       IntJFile,IntKFile,ThrVirt,NVZero,IPrint)
+                       IntJFile,IntKFile,ICholesky,ThrVirt,NVZero,IPrint)
+!
+!
+!
 implicit none
 
 integer,intent(in)           :: NAct,INActive,NDimX,NDim,NBasis,NInte1
+integer,intent(in)           :: ICholesky
 integer,intent(in)           :: IPrint
 integer,intent(in)           :: IndN(2,NDim),IndX(NDim),IndAux(NBasis),IGemIN(NBasis)
 integer,intent(out)          :: NVZero
@@ -342,6 +358,10 @@ double precision,allocatable :: AuxI(:,:),Aux2(:,:)
 double precision,allocatable :: ints_J(:,:),ints_K(:,:),   &
                                 ints_bi(:,:),ints_bk(:,:), &
                                 work(:),workTr(:),workSq(:,:)
+!
+integer :: NCholesky
+double precision, allocatable :: MatFF(:,:)
+!
 integer          :: EndVirt,NBasisNew
 character(100)   :: num1char
 !double precision :: xnum1,PerThr
@@ -393,7 +413,7 @@ call create_blocks_ABPL0(nAA,nAI,nAV,nIV,tmpAA,tmpAI,tmpAV,tmpIV,&
 
 call ABPM0_FOFO(Occ,URe,XOne,ABPLUS,ABMIN, &
                 IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
-                IntJFile,IntKFile,0,ETot)
+                IntJFile,IntKFile,ICholesky,ETot)
 
 Eps = 0
 !get AV
@@ -418,8 +438,6 @@ enddo
 deallocate(ABMIN,ABPLUS)
 
 allocate(work(NBasis**2),ints_bi(NBasis,NBasis),ints_bk(NBasis,NBasis))
-open(newunit=iunit1,file=trim(IntKFile),status='OLD', &
-     access='DIRECT',recl=8*NBasis*NOccup)
 
 Gamma = 0
 ij = 0
@@ -430,51 +448,69 @@ do j=1,NOccup
    enddo
 enddo
 
-do k=1,NOccup
-   do b=NOccup+1,NBasis
+if (ICholesky == 0) then
 
-      read(iunit1,rec=(b+(k-1)*NBasis)) work(1:NBasis*NOccup)
-      ! ints_bk
-      do l=1,NOccup
-         do j=1,NBasis
-            ints_bk(j,l) = work((l-1)*NBasis+j)
-         enddo
-      enddo
-      ints_bk(:,NOccup+1:NBasis) = 0
+   open(newunit=iunit1,file=trim(IntKFile),status='OLD', &
+        access='DIRECT',recl=8*NBasis*NOccup)
 
-      ij = 0
-      do i=1,NOccup
-         read(iunit1,rec=(b+(i-1)*NBasis)) work(1:NBasis*NOccup)
-         ! ints_bi
+   do k=1,NOccup
+      do b=NOccup+1,NBasis
+
+         read(iunit1,rec=(b+(k-1)*NBasis)) work(1:NBasis*NOccup)
+         ! ints_bk
          do l=1,NOccup
-            do ii=1,NBasis
-               ints_bi(ii,l) = work((l-1)*NBasis+ii)
+            do j=1,NBasis
+               ints_bk(j,l) = work((l-1)*NBasis+j)
             enddo
          enddo
-         ints_bi(:,NOccup+1:NBasis) = 0
+         ints_bk(:,NOccup+1:NBasis) = 0
 
-         do a=NOccup+1,NBasis
-            do j=1,i
-               ij = (max(i,j)*(max(i,j)-1))/2 + min(i,j)
-               Gamma(ij) = Gamma(ij) - ints_bk(a,j)*(2d0*ints_bk(a,i)-ints_bi(a,k)) / &
-                           (Eps(a,i)+Eps(b,k)) / (Eps(a,j)+Eps(b,k))
+         ij = 0
+         do i=1,NOccup
+            read(iunit1,rec=(b+(i-1)*NBasis)) work(1:NBasis*NOccup)
+            ! ints_bi
+            do l=1,NOccup
+               do ii=1,NBasis
+                  ints_bi(ii,l) = work((l-1)*NBasis+ii)
+               enddo
             enddo
-         enddo
+            ints_bi(:,NOccup+1:NBasis) = 0
 
-         do c=NOccup+1,NBasis
-            do a=NOccup+1,c
-               ac = (c*(c-1))/2 + a
-               Gamma(ac) = Gamma(ac) + ints_bk(c,i)*(2d0*ints_bk(a,i)-ints_bi(a,k)) / &
-                           (Eps(a,i)+Eps(b,k)) / (Eps(c,i)+Eps(b,k))
+            do a=NOccup+1,NBasis
+               do j=1,i
+                  ij = (max(i,j)*(max(i,j)-1))/2 + min(i,j)
+                  Gamma(ij) = Gamma(ij) - ints_bk(a,j)*(2d0*ints_bk(a,i)-ints_bi(a,k)) / &
+                              (Eps(a,i)+Eps(b,k)) / (Eps(a,j)+Eps(b,k))
+               enddo
             enddo
+
+            do c=NOccup+1,NBasis
+               do a=NOccup+1,c
+                  ac = (c*(c-1))/2 + a
+                  Gamma(ac) = Gamma(ac) + ints_bk(c,i)*(2d0*ints_bk(a,i)-ints_bi(a,k)) / &
+                              (Eps(a,i)+Eps(b,k)) / (Eps(c,i)+Eps(b,k))
+               enddo
+            enddo
+
          enddo
 
       enddo
-
    enddo
-enddo
 
-close(iunit1)
+   close(iunit1)
+
+elseif (ICholesky == 1) then
+
+   ! read cholesky (FF|K) vectors
+   open(newunit=iunit1,file='cholvecs',form='unformatted')
+   read(iunit1) NCholesky
+   allocate(MatFF(NCholesky,NBasis**2))
+   read(iunit1) MatFF
+   close(iunit1)
+
+endif
+
+
 deallocate(ints_bi,ints_bk)
 
 !print*, 'Gamma-my',norm2(Gamma)
@@ -697,104 +733,107 @@ subroutine RDMResp_FOFO(Occ,URe,UNOAO,XOne,IndN,IndX,IndAux,IGemIN, &
                        IntJFile,IntKFile,ICholesky,IOrbRelax,IOrbIncl)
 implicit none
 integer,intent(in)           :: ICholesky
-integer,intent(in)           :: IOrbRelax,IOrbIncl
-integer,intent(in)           :: NAct,INActive,NDimX,NDim,NBasis,NInte1
-integer,intent(in)           :: IndN(2,NDim),IndX(NDim),IndAux(NBasis),IGemIN(NBasis)
-double precision,intent(in)  :: Occ(NBasis),XOne(NInte1),UNOAO(NBasis,NBasis)
-double precision             :: Eps(NBasis,NBasis),CI(NBasis),ipiv(NDimX)
-character(*)                 :: IntJFile,IntKFile
-integer                      :: iunit1,iunit2
-integer                      :: i,j,k,l,a,b,c,ij,ac,ii,jj,ip,iq,ir,is,ipos,ipos1,ipos2,d,m
-integer                      :: NOccup,NVirt,NVirtOld,iOccup,iVirt,NOccup0,NOccupResp,NVirtResp
-integer                      :: IGem(NBasis),pos(NBasis,NBasis),IPair(NBasis,NBasis),IPair1(NBasis,NBasis)
-integer                      :: nAA,nAI(INActive),nAV(INActive+NAct+1:NBasis),nIV
-integer                      :: tmpAA(NAct*(NAct-1)/2),tmpAI(NAct,1:INActive),&
-                                tmpAV(NAct,INActive+NAct+1:NBasis),&
-                                tmpIV(INActive*(NBasis-NAct-INActive))
-integer                      :: limAA(2),limAI(2,1:INActive),&
-                                limAV(2,INActive+NAct+1:NBasis),limIV(2)
-double precision             :: val,ETot,xmiu
-double precision             :: URe(NBasis,NBasis),UCorr(NBasis,NBasis)
-double precision             :: AuxMat(NBasis,NBasis),&
-                                Gamma(NBasis,NBasis),PC(NBasis),Fock(NBasis*NBasis),AUXM0(NBasis,NBasis),AUX2(NBasis*NBasis)
-integer                      :: XInd(NBasis,NBasis),XInd1(NBasis,NBasis),IRow,ICol,inf,NDimRed,Max_Cn,NS1
-integer, allocatable         :: IndBlock(:,:)
-double precision,allocatable :: ABPLUS(:,:),ABMIN(:,:),AUX1(:)
-double precision,allocatable :: AuxI(:,:)
-double precision,allocatable :: ints_J(:,:),ints_K(:,:),   &
-                                ints_bi(:,:),ints_bk(:,:),ints_dl(:,:), &
-                                work(:),workTr(:),workSq(:,:)
-integer          :: EndVirt,NBasisNew
-logical          :: DipCheck
-character(100)   :: num1char
+   integer,intent(in)           :: IOrbRelax,IOrbIncl
+   integer,intent(in)           :: NAct,INActive,NDimX,NDim,NBasis,NInte1
+   integer,intent(in)           :: IndN(2,NDim),IndX(NDim),IndAux(NBasis),IGemIN(NBasis)
+   double precision,intent(in)  :: Occ(NBasis),XOne(NInte1),UNOAO(NBasis,NBasis)
+   double precision             :: Eps(NBasis,NBasis),CI(NBasis),ipiv(NDimX)
+   character(*)                 :: IntJFile,IntKFile
+   integer                      :: iunit1,iunit2
+   integer                      :: i,j,k,l,a,b,c,ij,ac,ii,jj,ip,iq,ir,is,ipos,ipos1,ipos2,d,m
+   integer                      :: NOccup,NVirt,NVirtOld,iOccup,iVirt,NOccup0,NOccupResp,NVirtResp
+   integer                      :: IGem(NBasis),pos(NBasis,NBasis),IPair(NBasis,NBasis),IPair1(NBasis,NBasis)
+   integer                      :: nAA,nAI(INActive),nAV(INActive+NAct+1:NBasis),nIV
+   integer                      :: tmpAA(NAct*(NAct-1)/2),tmpAI(NAct,1:INActive),&
+                                   tmpAV(NAct,INActive+NAct+1:NBasis),&
+                                   tmpIV(INActive*(NBasis-NAct-INActive))
+   integer                      :: limAA(2),limAI(2,1:INActive),&
+                                   limAV(2,INActive+NAct+1:NBasis),limIV(2)
+   double precision             :: val,ETot,xmiu
+   double precision             :: URe(NBasis,NBasis),UCorr(NBasis,NBasis)
+   double precision             :: AuxMat(NBasis,NBasis),&
+                                   Gamma(NBasis,NBasis),PC(NBasis),Fock(NBasis*NBasis),AUXM0(NBasis,NBasis),AUX2(NBasis*NBasis)
+   integer                      :: XInd(NBasis,NBasis),XInd1(NBasis,NBasis),IRow,ICol,inf,NDimRed,Max_Cn,NS1
+   integer, allocatable         :: IndBlock(:,:)
+   double precision,allocatable :: ABPLUS(:,:),ABMIN(:,:),AUX1(:)
+   double precision,allocatable :: AuxI(:,:)
+   double precision,allocatable :: ints_J(:,:),ints_K(:,:),   &
+                                   ints_bi(:,:),ints_bk(:,:),ints_dl(:,:), &
+                                   work(:),workTr(:),workSq(:,:)
+   integer          :: EndVirt,NBasisNew
+   logical          :: DipCheck
+   character(100)   :: num1char
 
-! set dimensions
-NOccup   = INActive + NAct
+   ! set dimensions
+   NOccup   = INActive + NAct
 
-! fix IGem
-do i=1,INActive
-   IGem(i) = 1
-enddo
-do i=INActive+1,NOccup
-   IGem(i) = 2
-enddo
-do i=NOccup+1,NBasis
-   IGem(i) = 3
-enddo
+   ! fix IGem
+   do i=1,INActive
+      IGem(i) = 1
+   enddo
+   do i=INActive+1,NOccup
+      IGem(i) = 2
+   enddo
+   do i=NOccup+1,NBasis
+      IGem(i) = 3
+   enddo
 
-IPair = 0
-XInd  = 0
-do ii=1,NDimX
-   i = IndN(1,ii)
-   j = IndN(2,ii)
-   IPair(i,j) = 1
-   IPair(j,i) = 1
-   XInd(i,j) = IndX(ii)
-   XInd(j,i) = IndX(ii)
-enddo
+   IPair = 0
+   XInd  = 0
+   do ii=1,NDimX
+      i = IndN(1,ii)
+      j = IndN(2,ii)
+      IPair(i,j) = 1
+      IPair(j,i) = 1
+      XInd(i,j) = IndX(ii)
+      XInd(j,i) = IndX(ii)
+   enddo
 
-do i=1,NBasis
-  CI(i)=SQRT(Occ(i))
-  if(Occ(i).Lt.0.5d0) CI(i)=-CI(i)
-enddo
+   do i=1,NBasis
+     CI(i)=SQRT(Occ(i))
+     if(Occ(i).Lt.0.5d0) CI(i)=-CI(i)
+   enddo
 
-! construct ABPLUS(0)
-allocate(ABPLUS(NDimX,NDimX),ABMIN(NDimX,NDimX))
+   ! construct ABPLUS(0)
+   allocate(ABPLUS(NDimX,NDimX),ABMIN(NDimX,NDimX))
 
-call create_blocks_ABPL0(nAA,nAI,nAV,nIV,tmpAA,tmpAI,tmpAV,tmpIV,&
-                         limAA,limAI,limAV,limIV,pos,&
-                         IGem,IndN,INActive,NAct,NBasis,NDimX)
+   call create_blocks_ABPL0(nAA,nAI,nAV,nIV,tmpAA,tmpAI,tmpAV,tmpIV,&
+                            limAA,limAI,limAV,limIV,pos,&
+                            IGem,IndN,INActive,NAct,NBasis,NDimX)
 
-call ABPM0_FOFO(Occ,URe,XOne,ABPLUS,ABMIN, &
-                IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
-                IntJFile,IntKFile,ICholesky,ETot)
+   call ABPM0_FOFO(Occ,URe,XOne,ABPLUS,ABMIN, &
+                   IndN,IndX,IGemIN,NAct,INActive,NDimX,NBasis,NDim,NInte1, &
+                   IntJFile,IntKFile,ICholesky,ETot)
 
-Eps = 0
-!get AV
-do i=1,NDimX
-   ip = IndN(1,i)
-   iq = IndN(2,i)
-   ipos = pos(ip,iq)
-   Eps(ip,iq) = SQRT(ABPLUS(ipos,ipos)*ABMIN(ipos,ipos))
-enddo
+   Eps = 0
+   !get AV
+   do i=1,NDimX
+      ip = IndN(1,i)
+      iq = IndN(2,i)
+      ipos = pos(ip,iq)
+      Eps(ip,iq) = SQRT(ABPLUS(ipos,ipos)*ABMIN(ipos,ipos))
+   enddo
 
-! AB(1) PART
-call AB_CAS_FOFO(ABPLUS,ABMIN,val,URe,Occ,XOne,&
-              IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
-              NInte1,IntJFile,IntKFile,ICholesky,1d0,.true.)
+   ! AB(1) PART
+   call AB_CAS_FOFO(ABPLUS,ABMIN,val,URe,Occ,XOne,&
+                 IndN,IndX,IGem,NAct,INActive,NDimX,NBasis,NDimX,&
+                 NInte1,IntJFile,IntKFile,ICholesky,0,1d0,.true.)
 
-allocate(work(NBasis**2),ints_bi(NBasis,NBasis),ints_bk(NBasis,NBasis))
-open(newunit=iunit1,file=trim(IntKFile),status='OLD', &
-     access='DIRECT',recl=8*NBasis*NOccup)
+   ! a separate procedure for ints OTF
+   if (ICholesky==1) stop "MP2RDM: ICholesky not ready!"
 
-Gamma = 0
-ij = 0
-do i=1,NOccup
-   Gamma(i,i) = Occ(i)
-enddo
+   allocate(work(NBasis**2),ints_bi(NBasis,NBasis),ints_bk(NBasis,NBasis))
+   open(newunit=iunit1,file=trim(IntKFile),status='OLD', &
+        access='DIRECT',recl=8*NBasis*NOccup)
 
-AUXM0 = 0
-NOccup0=NOccup
+   Gamma = 0
+   ij = 0
+   do i=1,NOccup
+      Gamma(i,i) = Occ(i)
+   enddo
+
+   AUXM0 = 0
+   NOccup0=NOccup
 
 If (IOrbIncl==1) write(6,'(/1x,a)') 'Include active orbitals'
 If (IOrbIncl==0) write(6,'(/1x,a)') 'Exclude active orbitals'
@@ -1109,9 +1148,9 @@ Max_Cn=25
 AUX1=0.d0
 Write(6,'(/,X,"**** Expansion of the C response matrix up to n_max = ",I5," ****")') Max_Cn
 Call CFREQPROJ(AUX1,0.d0,AUX2,1, &
-   Max_Cn,XOne,URe,Occ,&
-   IGem,NAct,INActive,NBasis,NInte1,IndAux,&
-   0,IndBlock,IndX,NDimRed)
+               Max_Cn,XOne,URe,Occ,&
+               IGem,NAct,INActive,NBasis,NInte1,IndAux,&
+               0,IndBlock,IndX,NDimRed)
 
 do a=NS1+1,NBasis
    do i=1,min(NOccup,a-1)
@@ -1159,7 +1198,7 @@ Call MultpM(UCorr,AuxMat,UNOAO,NBasis)
 Inquire(file='DIP',exist=DipCheck)
 If(DipCheck) Then
   write(LOUT,'(/,x,"Dipole moment with correlated 1-RDM")')
-  Call ComputeDipoleMom(UCorr,PC,NBasis,NBasis)
+  Call ComputeDipoleMom(UCorr,PC,'DIP','AOONEINT.mol',NBasis,NBasis)
 Else
   write(LOUT,'(/,x,"Dipole moment ints not available")')
 EndIf
@@ -1899,7 +1938,7 @@ double precision,allocatable :: ints1(:,:),ints2(:,:)
 logical :: dump
 double precision :: Tcpu,Twall
 
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 dump = .false.
 if(present(dfile)) dump=.true.
@@ -1990,8 +2029,8 @@ do offset=0,NGrid,maxlen
 
 enddo
 
-call clock('ModABMin:Ker',Tcpu,Twall)
-call clock('START',Tcpu,Twall)
+call gclock('ModABMin:Ker',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 open(newunit=iunit1,file=trim(twokfile),status='OLD', &
      access='DIRECT',recl=8*NBasis*NOccup)
@@ -2048,7 +2087,7 @@ close(iunit1)
 
 deallocate(ABKer,batch,WtKer,ints2,ints1,work2,work1)
 
-call clock('ModABMin',Tcpu,Twall)
+call gclock('ModABMin',Tcpu,Twall)
 
 end subroutine ModABMin_FOFO
 
@@ -2301,11 +2340,11 @@ deallocate(ints,work)
 
 end subroutine EERPA_FOFO
 
-subroutine EneGVB_FOFO(NAct,NElHlf,ETot,URe,Occ,C,XOne, &
+subroutine EneGVB_FOFO(InAct,NAct,ETot,URe,Occ,C,XOne, &
                        IGem,IndN,NBasis,NInte1,IntKFile,NDimX,NGem)
 implicit none
 
-integer,intent(in) :: NAct,NElHlf,NBasis,NInte1,NDimX,NGem
+integer,intent(in) :: InAct,NAct,NBasis,NInte1,NDimX,NGem
 character(*) :: IntKFile
 double precision :: ETot
 
@@ -2328,8 +2367,7 @@ double precision,allocatable :: ints(:,:)
 write(lout,'(/A)') ' Electronic GVB energy check:'
 
 ! set dimensions
-INActive = NElHlf - NAct
-NOccup = 2*NAct + INActive
+NOccup = INAct + NAct
 
 allocate(work1(NBasis**2),work2(NBasis**2),ints(NBasis,NBasis))
 

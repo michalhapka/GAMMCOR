@@ -15,9 +15,14 @@ integer,parameter :: string_out_LENGTH = 20
 
 contains
 
-subroutine clock(mode,Tcpu,Twall)
-implicit none
+subroutine gclock(mode,Tcpu,Twall)
+!
+! GammCor timing subroutine
+! adapted from HECTOR (M. Przybytek)
+!
 ! -What watch? -10 watch. -Such much?
+!
+implicit none
 
 character(*),intent(in) :: mode
 double precision,intent(inout) :: Tcpu,Twall
@@ -45,7 +50,7 @@ endif
 Tcpu  = Tcpu_inter
 Twall = Twall_inter
 
-end subroutine clock
+end subroutine gclock
 
 subroutine wall_time(time,DateTime)
 implicit none

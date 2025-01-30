@@ -20,6 +20,10 @@ double precision,allocatable :: Va(:,:),Vb(:,:)
 double precision,allocatable :: Vabb(:,:),Vbaa(:,:)
 double precision :: ea,eb,eab,elst
 double precision,external  :: ddot
+! for Visualize
+integer :: NOccupA,NOccupB
+double precision,allocatable :: QelA(:),QelB(:)
+double precision :: E_elst, E_elstA, E_elstB
 
 ! set dimensions
 NBas = A%NBasis
@@ -68,6 +72,102 @@ elst = ea + eb + eab + SAPT%Vnn
 call print_en('V_nn',SAPT%Vnn,.false.)
 call print_en('Eelst',elst*1000,.false.)
 SAPT%elst = elst
+
+! Visualize (can be moved to a separate subroutine)
+if (SAPT%Visual) then
+
+   NOccupA = A%num0+A%num1
+   NOccupB = B%num0+B%num1
+
+   allocate(QelA(NOccupA),QelB(NOccupB))
+
+   ! Eq (30) in the note
+   do i=1,NOccupA
+      
+      ! ii = ( i - 1 ) * NOccupA + i
+      ii = (i-1)*(A%num0+A%num1)+i
+
+      ! write(*,*) i
+      ! write(*,*) A%Occ(i) 
+      ! write(*,*) Vbaa(i,i)
+
+      QelA(i) = A%Occ(i)*Vbaa(i,i)
+      
+      do j=1,NOccupB
+      
+         ! jj = ( j - 1 ) * NOccupB + j
+         jj = (j-1)*(B%num0+B%num1)+j
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * <pq|pq>
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * (pp|qq)
+         
+                     !  eab = eab + A%Occ(i)*B%Occ(j)*ddot(NCholesky,A%OO(:,ii),1,B%OO(:,jj),1)
+
+         QelA(i) = QelA(i) + A%Occ(i) * B%Occ(j) * ddot(NCholesky, A%OO(:,ii), 1, B%OO(:,jj), 1)
+      
+      enddo
+      
+      QelA(i) = 2d0 * QelA(i)
+
+   enddo
+
+   do i=1,NOccupB
+      
+      ! ii = ( i - 1 ) * NOccupB + i
+      ii = (i-1)*(B%num0+B%num1)+i
+
+      QelB(i) = B%Occ(i)*Vabb(i,i)
+      
+      do j=1,NOccupA
+      
+         ! jj = ( j - 1 ) * NOccupA + j
+         jj = (j-1)*(A%num0+A%num1)+j
+
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * <pq|pq>
+         ! QelA(i) += A%Occ(i) * A%Occ(j) * (pp|qq)
+         QelB(i) = QelB(i) + B%Occ(i) * A%Occ(j) * ddot(NCholesky, B%OO(:,ii), 1, A%OO(:,jj), 1)
+      
+      enddo
+      
+      QelB(i) = 2d0 * QelB(i)
+
+   enddo
+
+   E_elst = 0.0d0 
+   E_elstA = 0.0d0 
+   E_elstB = 0.0d0 
+
+   do i=1,NOccupA
+      E_elstA = E_elstA + QelA(i)
+   enddo
+
+   do i=1,NOccupB
+      E_elstB = E_elstB + QelB(i)
+   enddo
+
+   E_elst = E_elstA + E_elstB + SAPT%Vnn
+  
+  ! write(*,*) "E_elst,  E_elstA,  E_elstB", E_elst, E_elstA, E_elstB
+  ! write(*,*) "E_elst-V_nn *1000", (E_elst-SAPT%Vnn ) * 1000
+  ! write(*,*) "E_elst+V_nn *1000", (E_elst+SAPT%Vnn ) * 1000
+  call print_en('Eelst(Visual)',E_elst*1000,.false.)
+
+! do j=1,NOccupB
+!    jj = ( j - 1 ) * NOccupB + j   ! wybieramy indeks diagonalny z kwadratu NOccupB*NOccupB
+!    do i=1,NOccupA
+!         ii = ( i - 1 ) * NOccupA + i   ! wybieramy indeks diagonalny z kwadratu NOccupA*NOccupA
+!         QelA = QelA + A%Occ(i) * B%Occ(j) * ddot(NCholesky, A%OO(:,ii), 1, B%OO(:,jj), 1)
+!     enddo
+! enddo
+
+   ! ... and the remaining pieces from Eq (30)
+
+   allocate(SAPT%QelA(NOccupA),SAPT%QelB(NOccupB))
+   SAPT%QelA = QelA
+   SAPT%QelB = QelB
+
+   deallocate(QelB,QelA)
+
+endif
 
 deallocate(Vb,Va,Vbaa,Vabb)
 
@@ -134,86 +234,62 @@ close(iunit)
 
 end subroutine test_Chol_ints
 
-subroutine e2disp_Chol(Flags,A,B,SAPT)
+subroutine e2disp_Chol_cpld_batch(Flags,A,B,SAPT)
 !
 ! calculate 2nd order dispersion energy
-! in coupled and uncoupled approximations
+! in coupled approximation
+! Requires (NCholesky,MaxBatchSize) allocations
 !
 implicit none
 
 type(FlagsData)   :: Flags
 type(SystemBlock) :: A, B
 type(SaptData)    :: SAPT
-type(Y01BlockData),allocatable :: Y01BlockA(:),Y01BlockB(:)
 
-integer :: NBas
-integer :: dimOA,dimVA,dimOB,dimVB,nOVA,nOVB
-integer :: NCholesky
-integer :: i,j,pq,rs
-integer :: ip,iq,ir,is
-logical,allocatable          :: condOmA(:),condOmB(:)
-double precision,allocatable :: OmA(:), OmB(:), &
-                                OmA0(:),OmB0(:)
-double precision,allocatable :: EVecA(:), EVecB(:)
-double precision,allocatable :: tmp1(:,:),tmp2(:,:),&
-                                tmp01(:,:),tmp02(:,:)
-double precision,allocatable :: work(:)
+integer :: NBas,NCholesky
+integer :: i,j
 double precision :: e2d,fact,tmp
-double precision :: e2du,dea,deb
-double precision :: inv_omega
-! for Be ERPA:
-!double precision,parameter :: SmallE = 1.D-1
+!
+integer :: iunitA,iunitB
+integer :: iloopA,iloopB,nloopA,nloopB
+integer :: offA,offB
+integer :: BatchSizeA,BatchSizeB
+integer :: MaxBatchSizeA,MaxBatchSizeB
+!
+double precision,allocatable :: OmA(:), OmB(:)
+double precision,allocatable :: EVecA(:,:),EVecB(:,:)
+double precision,allocatable :: tmpA(:,:),tmpB(:,:)
+double precision,allocatable :: tmpAB(:,:)
+logical,allocatable          :: condOmA(:),condOmB(:)
+!
+double precision :: Tcpu,Twall
 double precision,parameter :: BigE = 1.D8
 double precision,parameter :: SmallE = 1.D-3
 
-! Parameter(SmallE=1.D-3,BigE=1.D8)
+call gclock('START',Tcpu,Twall)
 
- if(A%NBasis.ne.B%NBasis) then
-    write(LOUT,'(1x,a)') 'ERROR! MCBS not implemented in SAPT!'
-    stop
- else
-    NBas = A%NBasis
- endif
+NCholesky = SAPT%NCholesky
 
-! print thresholds
- if(SAPT%IPrint>1) then
-    write(LOUT,'(/,1x,a)') 'Thresholds in E2disp:'
-    write(LOUT,'(1x,a,t18,a,e15.4)') 'SmallE','=', SmallE
-    write(LOUT,'(1x,a,t18,a,e15.4)') 'BigE',  '=', BigE
- endif
+allocate(OmA(A%NDimX),OmB(B%NDimX))
 
-! set dimensions
- dimOA = A%num0+A%num1
- dimVA = A%num1+A%num2
- dimOB = B%num0+B%num1
- dimVB = B%num1+B%num2
- nOVA  = dimOA*dimVA
- nOVB  = dimOB*dimVB
+call Open_RespBatch(A%NDimX,MaxBatchSizeA,OmA,iunitA,'PROB_A')
+call Open_RespBatch(B%NDimX,MaxBatchSizeB,OmB,iunitB,'PROB_B')
+print*, 'Use MaxBatchSizeA = ', MaxBatchSizeA
+print*, 'Use MaxBatchSizeB = ', MaxBatchSizeB
 
- NCholesky = SAPT%NCholesky
+nloopA = (A%NDimX - 1) / MaxBatchSizeA + 1
+nloopB = (B%NDimX - 1) / MaxBatchSizeB + 1
+print*, 'nloopA = ', nloopA
+print*, 'nloopB = ', nloopB
 
-! read EigValA_B
- allocate(EVecA(A%NDimX*A%NDimX),OmA(A%NDimX),  &
-          EVecB(B%NDimX*B%NDimX),OmB(B%NDimX),  &
-          OmA0(A%NDimX),OmB0(B%NDimX))
+allocate(EVecA(A%NDimX,MaxBatchSizeA),EVecB(B%NDimX,MaxBatchSizeB))
+allocate(tmpA(NCholesky,MaxBatchSizeA),tmpB(NCholesky,MaxBatchSizeB))
+allocate(tmpAB(MaxBatchSizeA,MaxBatchSizeB))
 
- call readresp(EVecA,OmA,A%NDimX,'PROP_A')
- call readresp(EVecB,OmB,B%NDimX,'PROP_B')
+allocate(condOmA(A%NDimX),condOmB(B%NDimX))
+condOmA = (abs(OmA).gt.SmallE.and.abs(OmA).lt.BigE)
+condOmB = (abs(OmB).gt.SmallE.and.abs(OmB).lt.BigE)
 
- ! uncoupled - works for CAS only
- if(Flags%ICASSCF==1) then
-    allocate(Y01BlockA(A%NDimX),Y01BlockB(B%NDimX))
-
-    call convert_XY0_to_Y01(A,Y01BlockA,OmA0,NBas,'XY0_A')
-    call convert_XY0_to_Y01(B,Y01BlockB,OmB0,NBas,'XY0_B')
- endif
-
-allocate(work(B%NDimX))
-
-allocate(tmp1(A%NDimX,B%NDimX),tmp2(A%NDimX,B%NDimX),&
-        tmp01(A%NDimX,B%NDimX),tmp02(A%NDimX,B%NDimX))
-
-! coupled
 do i=1,A%NDimX
    if(OmA(i)<0d0) write(LOUT,*) 'Negative omega A!',i,OmA(i)
 enddo
@@ -221,167 +297,269 @@ do i=1,B%NDimX
    if(OmB(i)<0d0) write(LOUT,*) 'Negative omega B!',i,OmB(i)
 enddo
 
-if(.not.(Flags%ICASSCF==0.and.Flags%ISERPA==0)) then
+e2d = 0d0
 
- tmp1=0
- tmp01=0
- do pq=1,A%NDimX
-    ip = A%IndN(1,pq)
-    iq = A%IndN(2,pq)
-    call dgemv('T',NCholesky,B%NDimX,1d0,B%OV,NCholesky,A%OV(:,pq),1,0d0,work,1)
+offB = 0
+do iloopB=1,nloopB
 
-    do rs=1,B%NDimX
-       ir = B%IndN(1,rs)
-       is = B%IndN(2,rs)
+   BatchSizeB = min(MaxBatchSizeB,B%NDimX-offB)
+   call Get_RespBatch(B%NDimX,BatchSizeB,EvecB,iunitB)
+   call dgemm('N','N',NCholesky,BatchSizeB,B%NDimX,1d0,B%DChol,NCholesky,EvecB,B%NDimX,0d0,tmpB,NCholesky)
 
-       fact = (A%CICoef(iq)+A%CICoef(ip)) * &
-              (B%CICoef(is)+B%CICoef(ir)) * &
-               work(rs)
+   offA = 0
+   do iloopA=1,nloopA
 
-       do i=1,A%NDimX
-          tmp1(i,rs) = tmp1(i,rs) + &
-                       fact * &
-                       EVecA(pq+(i-1)*A%NDimX)
-       enddo
+      BatchSizeA = min(MaxBatchSizeA,A%NDimX-offA)
+      call Get_RespBatch(A%NDimX,BatchSizeA,EvecA,iunitA)
+      call dgemm('N','N',NCholesky,BatchSizeA,A%NDimX,1d0,A%DChol,NCholesky,EvecA,A%NDimX,0d0,tmpA,NCholesky)
 
-       associate(Y => Y01BlockA(pq))
-          tmp01(Y%l1:Y%l2,rs) = tmp01(Y%l1:Y%l2,rs) + fact * Y%vec0(1:Y%n)
-       end associate
+      call dgemm('T','N',BatchSizeA,BatchSizeB,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,tmpAB,MaxBatchSizeA)
 
-    enddo
- enddo
- ! coupled
- call dgemm('N','N',A%NDimX,B%NDimX,B%NDimX,1d0,tmp1,A%NDimX,EVecB,B%NDimX,0d0,tmp2,A%NDimX)
+      do j=1,BatchSizeB
+         if(condOmB(offB+j)) then
+            do i=1,BatchSizeA
+               if(condOmA(offA+i)) then
+                  e2d = e2d + tmpAB(i,j)**2/(OmA(offA+i)+OmB(offB+j))
+               endif
+            enddo
+         endif
+      enddo
 
- ! uncoupled
- tmp02=0
- do rs=1,B%NDimX
-    associate(Y => Y01BlockB(rs))
-      call dger(A%NDimX,Y%n,1d0,tmp01(:,rs),1,Y%vec0,1,tmp02(:,Y%l1:Y%l2),A%NDimX)
-    end associate
- enddo
+      offA = offA + BatchSizeA
 
-elseif(Flags%ICASSCF==0.and.Flags%ISERPA==0) then
+   enddo
+   call Rewind_RespBatch(iunitA)
 
- tmp1 = 0
- do pq=1,A%NDimX
-    ip = A%IndN(1,pq)
-    iq = A%IndN(2,pq)
-    call dgemv('T',NCholesky,B%NDimX,1d0,B%OV,NCholesky,A%OV(:,pq),1,0d0,work,1)
+   offB = offB + BatchSizeB
 
-    do rs=1,B%NDimX
-       ir = B%IndN(1,rs)
-       is = B%IndN(2,rs)
+enddo
 
-       fact = (A%CICoef(iq)+A%CICoef(ip)) * &
-              (B%CICoef(is)+B%CICoef(ir)) * &
-               work(rs)
+call Close_RespBatch(iunitA)
+call Close_RespBatch(iunitB)
 
-       do i=1,A%NDimX
-          tmp1(i,rs) = tmp1(i,rs) + &
-                       fact * &
-                       EVecA(pq+(i-1)*A%NDimX)
-       enddo
+SAPT%e2disp  = -16d0*e2d
+e2d  = -16d0*e2d*1000d0
 
-    enddo
- enddo
+call print_en('E2disp(batch)',e2d,.true.)
 
- tmp2=0
- do j=1,B%NDimX
-    do i=1,A%NDimX
-       do rs=1,B%NDimX
-       ir = B%IndN(1,rs)
-       is = B%IndN(2,rs)
-       tmp2(i,j) = tmp2(i,j) + &
-                    EVecB(rs+(j-1)*B%NDimX)*tmp1(i,rs)
-       enddo
-    enddo
- enddo
+call gclock('E2dispCholBatch',Tcpu,Twall)
 
-endif ! end GVB select
+deallocate(condOmB,condOmA)
+deallocate(tmpB,tmpA,tmpAB)
+deallocate(OmB,OmA)
+deallocate(EvecB,EVecA)
 
-if(.not.(Flags%ICASSCF==0.and.Flags%ISERPA==0)) then
-   ! uncoupled
-    e2du = 0d0
-    do j=1,B%NDimX
-       do i=1,A%NDimX
+end subroutine e2disp_Chol_cpld_batch
 
-          if(abs(OmA0(i)).gt.SmallE.and.abs(OmB0(j)).gt.SmallE&
-             .and.abs(OmA0(i)).lt.BigE.and.abs(OmB0(j)).lt.BigE) then
+subroutine e2disp_Chol_cpld(Flags,A,B,SAPT)
+!
+! calculate 2nd order dispersion energy
+! in coupled approximation
+!
+implicit none
 
+type(FlagsData)   :: Flags
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
 
-          inv_omega = 1d0/(OmA0(i)+OmB0(j))
-          e2du = e2du + tmp02(i,j)**2*inv_omega
+integer :: NBas,NCholesky
+integer :: i,j
+double precision :: e2d
+!
+double precision,allocatable :: tmpA(:,:),tmpB(:,:)
+double precision,allocatable :: tmpAB(:,:)
+double precision,allocatable :: OmA(:), OmB(:)
+logical,allocatable          :: condOmA(:),condOmB(:)
+!
+double precision :: Tcpu,Twall
+!
+double precision,parameter :: BigE = 1.D8
+double precision,parameter :: SmallE = 1.D-3
 
-          endif
-       enddo
-    enddo
-    SAPT%e2disp_unc = -16d0*e2du
+call gclock('START',Tcpu,Twall)
 
-    e2du = -16d0*e2du*1000d0
-
-    call writeampl(tmp02,'PROP_AB0')
-
+if(A%NBasis.ne.B%NBasis) then
+   write(LOUT,'(1x,a)') 'ERROR! MCBS not implemented in SAPT!'
+   stop
+else
+   NBas = A%NBasis
 endif
 
- allocate(condOmA(A%NDimX),condOmB(B%NDimX))
- condOmA = (abs(OmA).gt.SmallE.and.abs(OmA).lt.BigE)
- condOmB = (abs(OmB).gt.SmallE.and.abs(OmB).lt.BigE)
+! print thresholds for discarding spurious omega values
+if(SAPT%IPrint>1) then
+   write(LOUT,'(/,1x,a)') 'Thresholds in E2disp:'
+   write(LOUT,'(1x,a,t18,a,e15.4)') 'SmallE','=', SmallE
+   write(LOUT,'(1x,a,t18,a,e15.4)') 'BigE',  '=', BigE
+endif
 
- e2d = 0d0
- do j=1,B%NDimX
-    if(condOmB(j)) then
-       do i=1,A%NDimX
-!          if(abs(OmA(i)).gt.SmallE.and.abs(OmB(j)).gt.SmallE&
-!             .and.abs(OmA(i)).lt.BigE.and.abs(OmB(j)).lt.BigE) then
+NCholesky = SAPT%NCholesky
 
-             if(condOmA(i)) then
-                e2d = e2d + tmp2(i,j)**2/(OmA(i)+OmB(j))
-             endif
-       enddo
-    endif
- enddo
- SAPT%e2disp  = -16d0*e2d
+!! CODE BELOW ALLOCATES 3 (NDimX,NDimX) MATRICES INSTEAD OF ONE
+!allocate(EVecA(A%NDimX*A%NDimX),OmA(A%NDimX),  &
+!         EVecB(B%NDimX*B%NDimX),OmB(B%NDimX))
+!
+!! read ERPA eigenvectors: Z^A(pq,mu), Z^B(rs,nu)
+!call readresp(EVecA,OmA,A%NDimX,'PROP_A')
+!call readresp(EVecB,OmB,B%NDimX,'PROP_B')
+!
+!allocate(tmpA(NCholesky,A%NDimX),tmpB(NCholesky,B%NDimX))
+!allocate(tmpAB(A%NDimX,B%NDimX))
+!
+!! coupled
+!do i=1,A%NDimX
+!   if(OmA(i)<0d0) write(LOUT,*) 'Negative omega A!',i,OmA(i)
+!enddo
+!do i=1,B%NDimX
+!   if(OmB(i)<0d0) write(LOUT,*) 'Negative omega B!',i,OmB(i)
+!enddo
+!
+!! I(k,mu) = R(k,pq).Z(pq,mu)
+!call dgemm('N','N',NCholesky,A%NDimX,A%NDimX,1d0,A%DChol,NCholesky,EvecA,A%NDimX,0d0,tmpA,NCholesky)
+!call dgemm('N','N',NCholesky,B%NDimX,B%NDimX,1d0,B%DChol,NCholesky,EvecB,B%NDimX,0d0,tmpB,NCholesky)
+!call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,tmpAB,A%NDimX)
 
- e2d  = -16d0*e2d*1000d0
+! code below uses 1 (NDimX,NDimX) allocation
+! intermediate A
+allocate(tmpA(NCholesky,A%NDimX),tmpB(NCholesky,B%NDimX))
+allocate(tmpAB(A%NDimX,A%NDimX),OmA(A%NDimX))
 
- call print_en('E2disp',e2d,.true.)
- call print_en('E2disp(unc)',e2du,.false.)
+call readEvecZ(tmpAB,A%NDimX,'PROP_A')
+call readEvalZ(OmA,A%NDimX,'PROP_A')
 
- ! write amplitude to a file
- call writeampl(tmp2,'PROP_AB')
+! I(k,mu) = R(k,pq).Z(pq,mu)
+call dgemm('N','N',NCholesky,A%NDimX,A%NDimX,1d0,A%DChol,NCholesky,tmpAB,A%NDimX,0d0,tmpA,NCholesky)
+deallocate(tmpAB)
 
- !! calucate semicoupled and dexcitations
- !if(SAPT%SemiCoupled) call e2disp_semi(Flags,A,B,SAPT)
+! intermediate B
+allocate(tmpAB(B%NDimX,B%NDimX),OmB(B%NDimX))
+call readEvecZ(tmpAB,B%NDimX,'PROP_B')
+call readEvalZ(OmB,B%NDimX,'PROP_B')
 
- !! calculate extrapolated E2disp
- !if(A%Cubic.or.B%Cubic) call e2disp_cpld(Flags,A,B,SAPT)
+! I(k,mu) = R(k,pq).Z(pq,mu)
+call dgemm('N','N',NCholesky,B%NDimX,B%NDimX,1d0,B%DChol,NCholesky,tmpAB,B%NDimX,0d0,tmpB,NCholesky)
+deallocate(tmpAB)
 
- !! calculate Wterms (deexcitations)
- !if(SAPT%Wexcit) call e2inddisp_dexc(Flags,A,B,SAPT)
+! final intermediate
+allocate(tmpAB(A%NDimX,B%NDimX))
+call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,tmpAB,A%NDimX)
 
- deallocate(work)
+allocate(condOmA(A%NDimX),condOmB(B%NDimX))
+condOmA = (abs(OmA).gt.SmallE.and.abs(OmA).lt.BigE)
+condOmB = (abs(OmB).gt.SmallE.and.abs(OmB).lt.BigE)
 
- if(Flags%ICASSCF==1) then
-    ! deallocate Y01Block
-    do i=1,A%NDimX
-       associate(Y => Y01BlockA(i))
-         deallocate(Y%vec0)
-       end associate
-    enddo
-    do i=1,B%NDimX
-       associate(Y => Y01BlockB(i))
-         deallocate(Y%vec0)
-       end associate
-    enddo
-    deallocate(Y01BlockB,Y01BlockA)
- endif
+e2d = 0d0
+do j=1,B%NDimX
+   if(condOmB(j)) then
+      do i=1,A%NDimX
+         if(condOmA(i)) then
+            e2d = e2d + tmpAB(i,j)**2/(OmA(i)+OmB(j))
+         endif
+      enddo
+   endif
+enddo
+e2d  = -16d0*e2d*1000d0
+call print_en('E2disp(full)',e2d,.true.)
 
- deallocate(condOmB,condOmA)
- deallocate(tmp02,tmp01,tmp2,tmp1)
- deallocate(OmB0,OmA0,OmB,EVecB,OmA,EVecA)
+! write amplitude to a file
+call writeampl(tmpAB,'PROP_AB')
 
-end subroutine e2disp_Chol
+deallocate(tmpAB,tmpB,tmpA)
+deallocate(OmB,OmA)
+deallocate(condOmB,condOmA)
+
+end subroutine e2disp_Chol_cpld
+
+subroutine e2disp_Chol_unc(Flags,A,B,SAPT)
+!
+! calculate 2nd order dispersion energy
+! in uncoupled approximation
+!
+implicit none
+
+type(FlagsData)   :: Flags
+type(SystemBlock) :: A, B
+type(SaptData)    :: SAPT
+
+type(Y01BlockData),allocatable :: Y01BlockA(:),Y01BlockB(:)
+
+integer :: NBas
+integer :: NCholesky
+integer :: i,j,ik,pq,rs
+logical,allocatable          :: condOmA(:),condOmB(:)
+double precision,allocatable :: OmA0(:), OmB0(:)
+double precision,allocatable :: tmpA(:,:),tmpB(:,:)
+double precision,allocatable :: tmpAB(:,:)
+double precision :: e2du
+
+double precision :: Tcpu,Twall
+double precision,parameter :: BigE = 1.D8
+double precision,parameter :: SmallE = 1.D-3
+
+call gclock('START',Tcpu,Twall)
+
+! print thresholds for discarding spurious omega values
+if(SAPT%IPrint>1) then
+   write(LOUT,'(/,1x,a)') 'Thresholds in E2disp(unc):'
+   write(LOUT,'(1x,a,t18,a,e15.4)') 'SmallE','=', SmallE
+   write(LOUT,'(1x,a,t18,a,e15.4)') 'BigE',  '=', BigE
+endif
+
+NCholesky = SAPT%NCholesky
+
+allocate(Y01BlockA(A%NDimX),Y01BlockB(B%NDimX))
+allocate(OmA0(A%NDimX),OmB0(B%NDimX))
+
+allocate(tmpA(NCholesky,A%NDimX))
+call convert_XY0_to_Y01(A,Y01BlockA,OmA0,NBas,'XY0_A')
+
+! I(k,mu) = R(k,pq).Z(pq,mu)
+tmpA = 0d0
+do pq=1,A%NDimX
+   associate(Y => Y01BlockA(pq))
+      do ik=1,NCholesky
+         tmpA(ik,Y%l1:Y%l2) = tmpA(ik,Y%l1:Y%l2) + A%DChol(ik,pq)*Y%vec0(1:Y%n)
+      enddo
+   end associate
+enddo
+
+allocate(tmpB(NCholesky,B%NDimX))
+call convert_XY0_to_Y01(B,Y01BlockB,OmB0,NBas,'XY0_B')
+tmpB = 0d0
+do rs=1,B%NDimX
+   associate(Y => Y01BlockB(rs))
+      do ik=1,NCholesky
+         tmpB(ik,Y%l1:Y%l2) = tmpB(ik,Y%l1:Y%l2) + B%DChol(ik,rs)*Y%vec0(1:Y%n)
+      enddo
+   end associate
+enddo
+
+allocate(tmpAB(A%NDimX,B%NDimX))
+call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,tmpA,NCholesky,tmpB,NCholesky,0d0,tmpAB,A%NDimX)
+
+allocate(condOmA(A%NDimX),condOmB(B%NDimX))
+condOmA = (abs(OmA0).gt.SmallE.and.abs(OmA0).lt.BigE)
+condOmB = (abs(OmB0).gt.SmallE.and.abs(OmB0).lt.BigE)
+
+e2du = 0d0
+do j=1,B%NDimX
+   if(condOmB(j)) then
+      do i=1,A%NDimX
+         if(condOmA(i)) then
+            e2du = e2du + tmpAB(i,j)**2/(OmA0(i)+OmB0(j))
+         endif
+      enddo
+   endif
+enddo
+SAPT%e2disp_unc = -16d0*e2du
+
+e2du = -16d0*e2du*1000d0
+
+call print_en('E2disp(unc)',e2du,.true.)
+
+deallocate(OmB0,OmA0)
+deallocate(tmpAB,tmpB,tmpA)
+
+end subroutine e2disp_Chol_unc
 
 subroutine e2disp_Cmat(Flags,A,B,SAPT)
 !
@@ -1544,6 +1722,19 @@ type(EBlockData),allocatable :: A0BlkA(:),A0BlkB(:)
 
 type(EBlockData)             :: LambdaIVA,LambdaIVB
 type(EBlockData),allocatable :: LambdaA(:),LambdaB(:)
+
+! for Visualize
+integer          :: dimOA, dimOB
+double precision :: e2dv
+integer,allocatable          :: posA(:,:),posB(:,:)
+double precision,allocatable :: Qmat(:,:),CAB(:,:),DAB(:,:)
+! for Visualize with local
+character*60 line
+integer :: iip,ILoc
+double precision,allocatable :: ALOC(:,:),BLOC(:,:)
+double precision,allocatable :: ALOAO(:,:),BLOAO(:,:)
+double precision,allocatable :: QAux1(:,:,:),QAuxC(:,:,:,:),QAuxD(:,:,:,:)
+
 ! test
 double precision :: ErrMax
 double precision :: Tcpu,Twall
@@ -1555,7 +1746,7 @@ print*, 'Experimental E2disp(CAlpha) procedure...'
 both = SAPT%iCpld
 
 ! timing
-call clock('START',Tcpu,Twall)
+call gclock('START',Tcpu,Twall)
 
 ACAlpha = 1.0d0
 Pi = 4.0d0*atan(1.0)
@@ -1569,6 +1760,72 @@ if(A%NBasis.ne.B%NBasis) then
    stop
 else
    NBas = A%NBasis
+endif
+
+! for Visualize
+ILoc=0
+if (SAPT%Visual) then
+
+   dimOA = A%num0 + A%num1
+   allocate(posA(NBas,NBas))
+   posA = 0
+   do i=1,A%NDimX
+      posA(A%IndN(1,i),A%IndN(2,i)) = A%IndX(i)
+   enddo
+
+   dimOB = B%num0 + B%num1
+   allocate(posB(NBas,NBas))
+   posB = 0
+   do i=1,B%NDimX
+      posB(B%IndN(1,i),B%IndN(2,i)) = B%IndX(i)
+   enddo
+      allocate(ALOC(A%NBasis,A%NBasis),BLOC(B%NBasis,B%NBasis), &
+              ALOAO(A%NBasis,A%NBasis),BLOAO(B%NBasis,B%NBasis))
+      ALOAO=A%CMO
+      BLOAO=B%CMO 
+! for Q_AB in localized orbitals
+  if(ILoc==1) then
+      allocate(CA(A%NBasis,A%NBasis),CB(B%NBasis,B%NBasis))
+      allocate(A1A(A%NBasis,A%NBasis))
+      allocate(A1B(A%NBasis,A%NBasis))
+
+      open(10,file="loc_a.dat",status='OLD')
+      read(10,'(A10)')line
+      read(10,'(A10)')line
+      do i=1,A%NBasis
+          read(10,*) (CA(j,i),j=1,A%NBasis)
+      enddo
+      close(10)
+      open(10,file="loc_b.dat",status='OLD')
+      read(10,'(A10)')line
+      read(10,'(A10)')line
+      do i=1,B%NBasis
+          read(10,*) (CB(j,i),j=1,B%NBasis)
+      enddo
+      close(10)
+
+      ALOAO=CA
+      BLOAO=CB
+
+      call CpyM(A1A,A%CMO,A%NBasis)
+      A1A=transpose(A1A)
+      call minvr(A1A,1.0d-7,val,i,A%NBasis)
+      if (i.ne.0) then
+         Write(6,'(/,'' ERROR : transformation from ao to mo basis is singular'')')
+         Stop
+      endif
+      call CpyM(A1B,B%CMO,A%NBasis)
+      A1B=transpose(A1B)
+      call minvr(A1B,1.0d-7,val,i,B%NBasis)
+      if (i.ne.0) then
+         Write(6,'(/,'' ERROR : transformation from ao to mo basis is singular'')')
+         Stop
+      endif
+      call dgemm('N','N',A%NBasis,A%NBasis,A%NBasis,1.d0,CA,A%NBasis,A1A,A%NBasis,0.0d0,ALOC,A%NBasis)
+      call dgemm('N','N',B%NBasis,B%NBasis,B%NBasis,1.d0,CB,B%NBasis,A1B,B%NBasis,0.0d0,BLOC,B%NBasis)
+      deallocate(CA,CB,A1A,A1B)
+  endif 
+
 endif
 
 !! get Dmat
@@ -1707,6 +1964,10 @@ allocate(CTildeA(A%NDimX,NCholesky),CTildeB(B%NDimX,NCholesky))
 allocate(WorkA(A%NDimX,NCholesky),WorkB(B%NDimX,NCholesky))
 allocate(CA(NCholesky,NCholesky),CB(NCholesky,NCholesky))
 
+if (SAPT%Visual.and.ILoc.eq.0) allocate(Qmat(dimOA,dimOB),CAB(A%NDimX,B%NDimX),DAB(A%NDimX,B%NDimX))
+if (SAPT%Visual.and.ILoc.eq.1) allocate(Qmat(dimOA,dimOB))
+if (SAPT%Visual) Qmat = 0d0
+
 call FreqGrid(XFreq,WFreq,NFreq)
 
 ! read ABPLUS0.ABMIN0 blocks
@@ -1715,6 +1976,7 @@ call read_ABPM0Block(A0BlkB,A0BlkIVB,nblkB,'A0BLK_B')
 
 e2d  = 0
 e2du = 0
+e2dv = 0d0
 ErrMax = 0d0
 do ifreq=1,NFreq
 
@@ -1741,6 +2003,129 @@ do ifreq=1,NFreq
       enddo
 
       e2d = e2d + WFreq(ifreq)*val
+
+!  for Q_AB in localized orbitals
+   if(SAPT%Visual.and.ILoc.eq.1) then
+
+      allocate(CAB(A%NDimX,B%NDimX))
+      call dgemm('N','T',A%NDimX,B%NDimX,NCholesky,1d0,CTildeA,A%NDimX,CTildeB,B%NDimX,0d0,CAB,A%NDimX)
+
+      allocate(QAux1(dimOA,NBas,B%NDimX))
+      do i=1,dimOA
+       do is=1,dimOB
+         do ir=1,NBas
+            if(posB(ir,is)/=0) then
+               irs = posB(ir,is)
+               do ip=1,NBas
+                 QAux1(i,ip,irs)=0.0
+                  do iq=1,dimOA
+                     if(posA(ip,iq)/=0) then
+                        ipq = posA(ip,iq)
+                        QAux1(i,ip,irs)= QAux1(i,ip,irs)+ ALOC(i,iq)*CAB(ipq,irs)
+                     endif
+                  enddo
+               enddo
+            endif
+         enddo
+       enddo
+      enddo
+
+      deallocate(CAB)
+      allocate(QAuxC(dimOA,NBas,dimOB,NBas))
+     
+      do j=1,dimOB
+       do i=1,dimOA
+         do ip=1,NBas
+               do ir=1,NBas
+                 QAuxC(i,ip,j,ir)=0.0
+                  do is=1,dimOB
+                     if(posB(ir,is)/=0) then
+                        irs = posB(ir,is)
+                        QAuxC(i,ip,j,ir)= QAuxC(i,ip,j,ir)+ BLOC(j,is)*QAux1(i,ip,irs)
+                     endif
+                  enddo
+               enddo
+         enddo
+       enddo
+      enddo
+    
+      allocate(DAB(A%NDimX,B%NDimX))
+      call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,A%DChol,NCholesky,B%DChol,NCholesky,0d0,DAB,A%NDimX)
+ 
+      do i=1,dimOA
+       do is=1,dimOB
+         do ir=1,NBas
+            if(posB(ir,is)/=0) then
+               irs = posB(ir,is)
+               do ip=1,NBas
+                 QAux1(i,ip,irs)=0.0
+                  do iq=1,dimOA
+                     if(posA(ip,iq)/=0) then
+                        ipq = posA(ip,iq)
+                        QAux1(i,ip,irs)= QAux1(i,ip,irs)+ ALOC(i,iq)*DAB(ipq,irs)
+                     endif
+                  enddo
+               enddo
+            endif
+         enddo
+       enddo
+      enddo 
+      deallocate(DAB)
+
+      allocate(QAuxD(dimOA,NBas,dimOB,NBas))
+
+      do j=1,dimOB
+       do i=1,dimOA
+         do ip=1,NBas
+               do ir=1,NBas
+                 QAuxD(i,ip,j,ir)=0.0
+                  do is=1,dimOB
+                     if(posB(ir,is)/=0) then
+                        irs = posB(ir,is)
+                        QAuxD(i,ip,j,ir)= QAuxD(i,ip,j,ir)+ BLOC(j,is)*QAux1(i,ip,irs)
+                     endif
+                  enddo
+               enddo
+         enddo
+       enddo
+      enddo
+      deallocate(QAux1)
+
+      do j=1,dimOB
+         do ir=1,NBas
+               do i=1,dimOA
+                  do ip=1,NBas
+                        Qmat(i,j) = Qmat(i,j) + WFreq(ifreq)*QAuxC(i,ip,j,ir)*QAuxD(i,ip,j,ir)
+                  enddo
+               enddo
+         enddo
+      enddo
+     deallocate(QAuxC,QAuxD)
+
+   endif
+
+   if(SAPT%Visual.and.ILoc.eq.0) then
+
+      call dgemm('T','N',A%NDimX,B%NDimX,NCholesky,1d0,A%DChol,NCholesky,B%DChol,NCholesky,0d0,DAB,A%NDimX)
+      call dgemm('N','T',A%NDimX,B%NDimX,NCholesky,1d0,CTildeA,A%NDimX,CTildeB,B%NDimX,0d0,CAB,A%NDimX)
+      do is=1,dimOB
+         do ir=1,NBas
+            if(posB(ir,is)/=0) then
+               irs = posB(ir,is)
+               do iq=1,dimOA
+                  do ip=1,NBas
+                     if(posA(ip,iq)/=0) then
+                        ipq = posA(ip,iq)
+                        Qmat(iq,is) = Qmat(iq,is) + WFreq(ifreq)*CAB(ipq,irs)*DAB(ipq,irs)
+                     endif
+                  enddo
+               enddo
+            endif
+         enddo
+      enddo
+
+   endif
+
    !endif
 
    !! uncoupled
@@ -1777,7 +2162,32 @@ enddo
    call print_en('E2disp(CAlpha)',e2d,.false.)
 !endif
 
-call clock('E2disp(CAlpha)',Tcpu,Twall)
+! test Visualize
+if (SAPT%Visual) then
+
+   Qmat = -32d0/Pi * Qmat
+   e2dv = 0
+   do ir=1,dimOB
+      do ip=1,dimOA
+         !print*, 'Qmat(p,r)',ip,ir,Qmat(ip,ir)
+         e2dv = e2dv + Qmat(ip,ir)
+      enddo
+   enddo
+
+   !e2dv = -32d0/Pi*e2dv*1d3
+   !call print_en('E2disp(Visual)',e2dv,.false.)
+   e2dv = e2dv*1d3
+   call print_en('E2disp(Visual)',e2dv,.false.)
+   if(abs(e2d-e2dv).gt.1.d-8) write(6,*)'!!! warning: wrong disp_en from Q_AB !!!',e2dv-e2d
+
+   allocate(SAPT%Qmat(NBas,NBas),SAPT%ALOC(NBas,NBas),SAPT%BLOC(NBas,NBas))
+   SAPT%Qmat = Qmat
+   SAPT%ALOC = transpose(ALOAO)
+   SAPT%BLOC = transpose(BLOAO)
+   
+endif
+
+call gclock('E2disp(CAlpha)',Tcpu,Twall)
 
 deallocate(WFreq,XFreq)
 deallocate(A2A,A1A)

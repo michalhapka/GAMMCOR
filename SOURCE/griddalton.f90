@@ -24,6 +24,31 @@ open(newunit=igrid,file=gridfile,access='sequential',&
 
 end subroutine daltongrid0
 
+subroutine dalton_grid_coord(NGrid,RR,gridfile)
+implicit none
+integer,intent(in) :: NGrid
+character(*),intent(in)      :: gridfile
+double precision,intent(out) :: RR(3,NGrid)
+
+integer :: igrid
+integer :: i
+double precision :: val,COR(3)
+
+open(newunit=igrid,file=gridfile,access='sequential',&
+     form='unformatted',status='old')
+
+rewind(igrid)
+read(igrid)
+read(igrid)
+read(igrid)
+do i=1,NGrid
+   read(igrid) val,COR
+   RR(1:3,i) = COR
+enddo
+close(igrid)
+
+end subroutine dalton_grid_coord
+
 subroutine daltongrid_gga(OrbGrid,OrbXGrid,OrbYGrid,OrbZGrid,WGrid,NGrid,gridfile,NBasis)
 implicit none
 
