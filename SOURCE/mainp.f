@@ -82,6 +82,7 @@ C     FILL COMMONS AND CONSTANTS
       BasisSet= Flags%BasisSetPath // Flags%BasisSet
 C
       NCoreOrb = System%NCoreOrb
+      NStronglyOccOrb = System%NStronglyOccOrb
 C
       Title   = Flags%JobTitle
 C

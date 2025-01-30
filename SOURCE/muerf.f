@@ -111,7 +111,7 @@ C     save to disk
 
       Call FirstOrderSREne(ETwoSR,NBasis)
       Write(6,'(/,X,"1st-order SR energy for",I4," active orbitals")') 
-     $ NAcCAS+NInAcCAS-NCoreOrb
+     $ NAcCAS+NInAcCAS-NStronglyOccOrb
       Write(6,'(X," <Ref|H^SR|Ref> = ",F10.6)') ETwoSR
 
 c     print*, 'ABPLUS-my =',norm2(ABPLUS)
@@ -1132,7 +1132,7 @@ c
 c     INDEX STRONGLY OCCUPIED (SO) ORBITALS
 c     (includes inactive)
       Ind = 1
-      Do I=1,NCoreOrb
+      Do I=1,NStronglyOccOrb
       Ind(I) = 2
       EndDo
 C     Auxiliary matrices
