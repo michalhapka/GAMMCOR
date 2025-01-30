@@ -2122,8 +2122,12 @@ C
      &                        'AOTWOSORT')
 C
           ElseIf (ICholeskyBIN==1) Then
-          Call FockGen_CholR(FockF,CholeskyVecs%R(1:NCholesky,1:NInte1),
+          Allocate(MatFF(NCholesky,NInte1))
+        MatFF(1:NCholesky,1:NInte1)=CholeskyVecs%R(1:NCholesky,1:NInte1)
+C         Call FockGen_CholR(FockF,CholeskyVecs%R(1:NCholesky,1:NInte1),
+          Call FockGen_CholR(FockF,MatFF,
      &                       GammaAB,XKin,NInte1,NCholesky,NBasis)
+          Deallocate(MatFF)
 
 C          block
 CC         try to construct Fock in MO in CholeskyBIN
